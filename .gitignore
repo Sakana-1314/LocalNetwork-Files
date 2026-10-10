@@ -1,0 +1,16 @@
+# server
+/server/bin/
+/server/data/
+/server/config.yaml
+/server/internal/webui/dist/*
+!/server/internal/webui/dist/.gitkeep
+
+# web
+/web/node_modules/
+/web/dist/
+*.local
+
+# misc
+.DS_Store
+.idea/
+.vscode/
