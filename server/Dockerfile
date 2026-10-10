@@ -36,7 +36,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 # ---------- runtime ----------
 FROM debian:trixie-slim
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg samba \
+ && apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg libheif-examples samba \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /out/lnfiles /usr/local/bin/lnfiles
 COPY server/deploy/config.docker.yaml /etc/lnfiles/config.yaml

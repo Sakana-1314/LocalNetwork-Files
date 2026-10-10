@@ -117,6 +117,7 @@ flowchart TB
 | Go（版本见 `server/go.mod` 的 `go` 指令） | 编译后端 |
 | Node.js 20.19+ / 22.12+、pnpm 10 | 构建前端（Vite 8） |
 | ffmpeg、ffprobe（可选） | 视频预览图、实时转码、音频 / 字幕转换；缺失时这些功能自动禁用 |
+| libheif / libvips（可选） | ffmpeg 7 以下无法解码 HEIC/HEIF（如 Ubuntu 24.04 自带的 6.1），装了 `heif-convert`（`libheif-examples`）或 `vipsthumbnail` 后可为 iPhone 照片生成预览图 |
 | Samba（可选，仅 Linux） | SMB 服务 |
 
 ### 编译与运行

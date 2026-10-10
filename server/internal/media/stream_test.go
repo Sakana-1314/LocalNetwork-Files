@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -66,7 +67,7 @@ func TestEmbeddedSubtitles(t *testing.T) {
 		t.Fatal(err)
 	}
 	vtt := readFile(t, out)
-	if !strings.HasPrefix(vtt, "WEBVTT") || !strings.Contains(vtt, "你好 world") || !strings.Contains(vtt, "00:05.000 --> 00:07.000") {
+	if !strings.HasPrefix(vtt, "WEBVTT") || !strings.Contains(vtt, "你好 world") || !subTimingRe.MatchString(vtt) {
 		t.Fatalf("vtt:\n%s", vtt)
 	}
 	if _, err := env.svc.EmbeddedSubtitle(context.Background(), p, stat(t, p), 3); err == nil {
@@ -155,3 +156,6 @@ func TestSidecarSubtitles(t *testing.T) {
 		t.Fatal("IsSubtitleFile")
 	}
 }
+
+// ffmpeg 6 shifts extracted cues by the container start offset (a few ms); newer versions don't.
+var subTimingRe = regexp.MustCompile(`00:05\.00\d --> 00:07\.00\d`)

@@ -110,10 +110,20 @@ func (s *Service) generateThumb(ctx context.Context, real string, fi os.FileInfo
 				return nil
 			}
 		}
-		if !s.hasFFmpeg {
-			return ErrNoThumb
+		err := ErrNoThumb
+		if s.hasFFmpeg {
+			if err = s.ffmpegThumb(ctx, real, 0, size, out, false); err == nil {
+				return nil
+			}
 		}
-		return s.ffmpegThumb(ctx, real, 0, size, out, false)
+		switch vfs.Ext(fi.Name()) {
+		case "heic", "heif", "avif":
+			// ffmpeg < 7 cannot decode HEIF (e.g. Ubuntu 24.04 ships 6.1); try dedicated tools.
+			if herr := heifThumb(ctx, real, size, out); herr == nil {
+				return nil
+			}
+		}
+		return err
 	case vfs.KindVideo:
 		mi, err := s.Probe(ctx, real, fi.ModTime(), fi.Size())
 		if err != nil || mi.Video == nil {
@@ -223,4 +233,34 @@ func lastLine(b []byte) string {
 		}
 	}
 	return s
+}
+
+// heifThumb converts HEIF/AVIF images with whichever external tool is
+// installed (libheif's heif-convert, libvips' vipsthumbnail, or macOS sips)
+// and then thumbnails the intermediate JPEG.
+func heifThumb(ctx context.Context, real string, size int, out string) error {
+	dir, err := os.MkdirTemp(filepath.Dir(out), ".heif-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	tmp := filepath.Join(dir, "img.jpg")
+	sz := strconv.Itoa(size)
+	tools := [][]string{
+		{"vipsthumbnail", real, "-s", sz, "-o", tmp + "[Q=90]"},
+		{"heif-convert", "-q", "90", real, tmp},
+		{"sips", "-s", "format", "jpeg", "-Z", sz, real, "--out", tmp},
+	}
+	for _, args := range tools {
+		if _, err := exec.LookPath(args[0]); err != nil {
+			continue
+		}
+		if exec.CommandContext(ctx, args[0], args[1:]...).Run() != nil {
+			continue
+		}
+		if _, err := os.Stat(tmp); err == nil {
+			return imageThumb(tmp, size, out)
+		}
+	}
+	return ErrNoThumb
 }
