@@ -1,0 +1,250 @@
+// Package cache manages the on-disk caches (preview images and transcoded
+// HLS segments): layout, access tracking and lifecycle (TTL since last access
+// plus a size cap enforced with LRU eviction).
+//
+// Access time is tracked through the entry's mtime, which is bumped (with
+// throttling) whenever the entry is served. This survives restarts and needs
+// no extra bookkeeping.
+package cache
+
+import (
+	"io/fs"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+)
+
+type Bucket string
+
+const (
+	Thumb     Bucket = "thumb"     // files: thumbnails, extracted subtitles
+	Transcode Bucket = "transcode" // directories: one per transcode session
+)
+
+var buckets = []Bucket{Thumb, Transcode}
+
+type Manager struct {
+	dir   string
+	store *store.Store
+
+	// IsActive reports whether a transcode session directory is in use and must not be evicted.
+	IsActive func(name string) bool
+	// OnEvict is called after a transcode session directory was removed.
+	OnEvict func(name string)
+
+	mu          sync.Mutex
+	lastCleanup time.Time
+	stop        chan struct{}
+	kick        chan struct{}
+}
+
+func New(dir string, st *store.Store) (*Manager, error) {
+	for _, b := range buckets {
+		if err := os.MkdirAll(filepath.Join(dir, string(b)), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	return &Manager{dir: dir, store: st, stop: make(chan struct{}), kick: make(chan struct{}, 1)}, nil
+}
+
+func (m *Manager) Dir() string               { return m.dir }
+func (m *Manager) BucketDir(b Bucket) string { return filepath.Join(m.dir, string(b)) }
+
+// ThumbPath returns the file path for a thumbnail-bucket key (sharded by prefix).
+func (m *Manager) ThumbPath(key, ext string) string {
+	return filepath.Join(m.dir, string(Thumb), key[:2], key+ext)
+}
+
+// TranscodeDir returns the directory of a transcode session.
+func (m *Manager) TranscodeDir(id string) string {
+	return filepath.Join(m.dir, string(Transcode), id)
+}
+
+// Touch marks an entry as recently used.
+func Touch(p string) {
+	fi, err := os.Stat(p)
+	if err != nil || time.Since(fi.ModTime()) < time.Minute {
+		return
+	}
+	now := time.Now()
+	os.Chtimes(p, now, now)
+}
+
+// Start runs the periodic cleanup loop.
+func (m *Manager) Start() {
+	go func() {
+		for {
+			interval := time.Duration(m.store.Settings().Cache.CleanupIntervalMinutes) * time.Minute
+			select {
+			case <-m.stop:
+				return
+			case <-m.kick:
+			case <-time.After(interval):
+			}
+			m.Cleanup(nil, true)
+		}
+	}()
+}
+
+// Reschedule re-reads the interval (call after settings change).
+func (m *Manager) Reschedule() {
+	select {
+	case m.kick <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) Stop() { close(m.stop) }
+
+type entry struct {
+	path    string
+	name    string
+	size    int64
+	files   int
+	lastUse time.Time
+}
+
+func (m *Manager) scan(b Bucket) ([]entry, int64) {
+	root := m.BucketDir(b)
+	var out []entry
+	var total int64
+	switch b {
+	case Thumb:
+		filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
+			if err != nil || de.IsDir() {
+				return nil
+			}
+			fi, err := de.Info()
+			if err != nil {
+				return nil
+			}
+			out = append(out, entry{path: p, name: de.Name(), size: fi.Size(), files: 1, lastUse: fi.ModTime()})
+			total += fi.Size()
+			return nil
+		})
+	case Transcode:
+		des, _ := os.ReadDir(root)
+		for _, de := range des {
+			if !de.IsDir() {
+				continue
+			}
+			p := filepath.Join(root, de.Name())
+			e := entry{path: p, name: de.Name()}
+			if fi, err := de.Info(); err == nil {
+				e.lastUse = fi.ModTime()
+			}
+			filepath.WalkDir(p, func(fp string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					if fi, err := d.Info(); err == nil {
+						e.size += fi.Size()
+						e.files++
+					}
+				}
+				return nil
+			})
+			out = append(out, e)
+			total += e.size
+		}
+	}
+	return out, total
+}
+
+type BucketStats struct {
+	Files    int   `json:"files"`
+	Bytes    int64 `json:"bytes"`
+	MaxBytes int64 `json:"max_bytes"`
+	TTLHours int   `json:"ttl_hours"`
+}
+
+func (m *Manager) limits(b Bucket) (ttl time.Duration, max int64) {
+	c := m.store.Settings().Cache
+	if b == Thumb {
+		return time.Duration(c.ThumbTTLHours) * time.Hour, int64(c.ThumbMaxMB) << 20
+	}
+	return time.Duration(c.TranscodeTTLHours) * time.Hour, int64(c.TranscodeMaxMB) << 20
+}
+
+func (m *Manager) Stats() (map[Bucket]BucketStats, *time.Time) {
+	out := map[Bucket]BucketStats{}
+	for _, b := range buckets {
+		es, total := m.scan(b)
+		files := 0
+		for _, e := range es {
+			files += e.files
+		}
+		ttl, max := m.limits(b)
+		out[b] = BucketStats{Files: files, Bytes: total, MaxBytes: max, TTLHours: int(ttl / time.Hour)}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.lastCleanup.IsZero() {
+		return out, nil
+	}
+	t := m.lastCleanup
+	return out, &t
+}
+
+type CleanResult struct {
+	RemovedFiles int   `json:"removed_files"`
+	RemovedBytes int64 `json:"removed_bytes"`
+}
+
+// Cleanup enforces TTL and size limits on the given buckets (all when nil).
+// With expiredOnly=false every (inactive) entry is removed.
+func (m *Manager) Cleanup(only []Bucket, expiredOnly bool) CleanResult {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if only == nil {
+		only = buckets
+	}
+	var res CleanResult
+	for _, b := range only {
+		ttl, max := m.limits(b)
+		es, total := m.scan(b)
+		sort.Slice(es, func(i, j int) bool { return es[i].lastUse.Before(es[j].lastUse) })
+		cutoff := time.Now().Add(-ttl)
+		for _, e := range es {
+			if b == Transcode && m.IsActive != nil && m.IsActive(e.name) {
+				continue
+			}
+			expired := e.lastUse.Before(cutoff)
+			over := total > max
+			if expiredOnly && !expired && !over {
+				continue
+			}
+			if err := os.RemoveAll(e.path); err != nil {
+				slog.Warn("cache evict failed", "path", e.path, "err", err)
+				continue
+			}
+			total -= e.size
+			res.RemovedBytes += e.size
+			res.RemovedFiles += e.files
+			if b == Transcode && m.OnEvict != nil {
+				m.OnEvict(e.name)
+			}
+		}
+		if b == Thumb {
+			removeEmptyDirs(m.BucketDir(b))
+		}
+	}
+	m.lastCleanup = time.Now()
+	if res.RemovedFiles > 0 {
+		slog.Info("cache cleanup", "removed_files", res.RemovedFiles, "removed_bytes", res.RemovedBytes)
+	}
+	return res
+}
+
+func removeEmptyDirs(root string) {
+	des, _ := os.ReadDir(root)
+	for _, de := range des {
+		if de.IsDir() && !strings.HasPrefix(de.Name(), ".") {
+			os.Remove(filepath.Join(root, de.Name())) // fails when not empty, which is fine
+		}
+	}
+}
