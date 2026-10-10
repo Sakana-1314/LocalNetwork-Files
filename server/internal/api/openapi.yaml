@@ -134,6 +134,17 @@ paths:
       responses:
         "200": { description: 文件内容 }
         "206": { description: 部分内容 }
+  /fs/raw/{name}:
+    get:
+      tags: [files]
+      summary: 同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: download, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: 文件内容 }
+        "206": { description: 部分内容 }
   /fs/file:
     put:
       tags: [files]

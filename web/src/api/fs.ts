@@ -63,7 +63,9 @@ export const fsApi = {
 
   /** 原始文件 URL（不含令牌），用于 fetch。 */
   rawPath(path: string, download = false): string {
-    return buildUrl('/fs/raw', { path, download: download || undefined })
+    // 末尾带上文件名，浏览器的 PDF 查看器 / 另存为会显示真实文件名而不是 "raw"
+    const name = path.split('/').pop() || 'file'
+    return buildUrl('/fs/raw/' + encodeURIComponent(name), { path, download: download || undefined })
   },
   /** 原始文件 URL（含 access_token），用于 <img>/<video>/<iframe>/<a>。 */
   rawUrl(path: string, download = false): string {

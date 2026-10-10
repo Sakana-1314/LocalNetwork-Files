@@ -79,6 +79,9 @@ func Register(r *gin.Engine, d Deps) {
 	g.GET("/fs/stat", a.fsStat)
 	g.GET("/fs/raw", a.fsRaw)
 	g.HEAD("/fs/raw", a.fsRaw)
+	// Same as /fs/raw; the trailing name is ignored and only makes browsers show the real file name.
+	g.GET("/fs/raw/:name", a.fsRaw)
+	g.HEAD("/fs/raw/:name", a.fsRaw)
 	g.GET("/fs/text", a.fsText)
 	g.PUT("/fs/file", a.fsPut)
 	g.POST("/fs/mkdir", a.fsMkdir)
