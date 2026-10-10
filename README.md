@@ -62,8 +62,8 @@ make run                              # 或 ./bin/lnfiles -config config.yaml
 
 ### 镜像体积
 
-基础镜像基于 **Alpine**。按依赖闭包估算约 **215 MiB**（未压缩；从 ghcr.io 拉取约 85 MiB）；
-CI 的 `verify` 任务会打印实际体积。这是权衡的结果：
+基础镜像基于 **Alpine**，实测镜像 **211 MiB**（未压缩，amd64；从 ghcr.io 拉取约 85 MiB）。
+这是权衡的结果：
 
 - Debian 官方 `ffmpeg` **硬性依赖** SDL2 → Mesa → LLVM 整条图形链（三个包压缩后共约 42 MiB，无法剥离）：
   仅 apt 依赖层就约 165 MiB（压缩）。

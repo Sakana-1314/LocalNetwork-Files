@@ -152,7 +152,7 @@ jobs:
             echo ""
             echo "linux/amd64: **${mb} MiB**（未压缩；推送到 ghcr.io 的压缩后约 85 MiB）"
           } >> "$GITHUB_STEP_SUMMARY"
-          # 体积回归护栏：Alpine 版本约 215 MiB 未压缩，超过 400 MiB 说明基础镜像或
+          # 体积回归护栏：Alpine 版本实测约 211 MiB，超过 400 MiB 说明基础镜像或
           # 依赖被换回了重量级实现（例如 Debian 的 ffmpeg 会带入 Mesa/LLVM，约 610 MiB）。
           if [ "$mb" -gt 400 ]; then
             echo "::error::镜像体积 ${mb} MiB 超出 400 MiB 预算"
