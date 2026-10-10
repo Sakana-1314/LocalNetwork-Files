@@ -1207,6 +1207,13 @@ func TestRoutingAndSpec(t *testing.T) {
 	expect(t, e.do("GET", "/api/v1/nope", e.admin, nil), 404)
 	expect(t, e.do("DELETE", "/api/v1/fs/list", e.admin, nil), 404)
 
+	// Windows' WebDAV client probes OPTIONS / before mapping /dav/.
+	rec = e.do("OPTIONS", "/", "", nil)
+	expect(t, rec, 200)
+	if rec.Header().Get("DAV") == "" {
+		t.Fatal("OPTIONS / must advertise DAV")
+	}
+
 	for _, p := range []string{"/files/abc", "/", "/settings/tokens"} {
 		rec = e.do("GET", p, "", nil)
 		expect(t, rec, 200)

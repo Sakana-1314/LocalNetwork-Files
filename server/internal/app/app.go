@@ -166,6 +166,15 @@ func (a *App) buildHandler() http.Handler {
 		ui.ServeHTTP(c.Writer, c.Request)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Windows' WebDAV client probes OPTIONS at the server root before mapping
+		// http://host:port/dav/ as a drive; advertise DAV support there.
+		if req.Method == http.MethodOptions && req.URL.Path == "/" && a.store.Settings().Services.WebDAVEnabled {
+			w.Header().Set("DAV", "1, 2")
+			w.Header().Set("MS-Author-Via", "DAV")
+			w.Header().Set("Allow", "OPTIONS, GET, HEAD, PROPFIND")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if req.URL.Path == webdav.Prefix || strings.HasPrefix(req.URL.Path, webdav.Prefix+"/") {
 			a.dav.ServeHTTP(w, req)
 			return
