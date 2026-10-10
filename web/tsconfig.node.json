@@ -1,0 +1,10 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["vite.config.ts"]
+}

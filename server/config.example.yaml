@@ -1,0 +1,59 @@
+# LocalNetwork Files 配置示例
+#
+# 复制为 config.yaml 后按需修改：cp config.example.yaml config.yaml
+# 启动时通过 -config 指定路径（默认读取当前目录下的 config.yaml，文件不存在时全部使用默认值）。
+#
+# 本文件只包含「启动时」需要确定的静态配置。以下运行时选项保存在数据库中，
+# 请登录 Web 管理界面「系统设置」修改，修改后立即生效、无需重启：
+#   - 缓存：预览图 / 转码缓存的保留时长（TTL）、容量上限、清理间隔
+#   - 转码：视频编码器（libx264 / h264_videotoolbox / h264_nvenc / h264_qsv / h264_vaapi）、
+#           预设、最大并发会话数、分片时长
+#   - 搜索：定时重建索引间隔、文件系统监听
+#   - 服务：WebDAV / S3 / SMB 的开关、S3 端口与区域、SMB 端口与工作组
+
+# HTTP 监听地址（Web 界面、REST API、WebDAV 共用此端口）。
+# 可被环境变量 LNF_LISTEN 覆盖。
+listen: ":8080"
+
+# 数据目录：SQLite 数据库、签名密钥、S3 分片上传临时文件、Samba 状态等。
+# 相对路径以启动时的工作目录为准。可被环境变量 LNF_DATA_DIR 覆盖。
+data_dir: "./data"
+
+# 缓存目录：预览图与 HLS 转码分片。留空则使用 <data_dir>/cache。
+# 建议放在空间充足的磁盘上，容量上限在管理界面中设置。
+cache_dir: ""
+
+# ffmpeg / ffprobe 可执行文件（名称或绝对路径）。
+# 找不到时视频预览图与实时转码会被禁用，其它功能不受影响。
+ffmpeg: "ffmpeg"
+ffprobe: "ffprobe"
+
+# 网页登录会话的有效期（Go duration 格式，如 24h、168h、720h）。
+session_ttl: 168h
+
+# 初始管理员账户：仅在数据库中还没有任何用户时创建一次。
+# 首次登录后请立即在「设置 → 账户」中修改密码；之后修改这里不会再生效。
+admin:
+  username: "admin"
+  password: "admin123"
+
+# SMB 共享（由本程序托管一个独立的 Samba smbd 进程，仅支持 Linux）。
+# 是否启用、端口和工作组在管理界面中设置；这里是运行环境相关的选项。
+smb:
+  # Samba 的 smbd 与 smbpasswd 程序（名称或绝对路径）。
+  # 注意 macOS 自带的 /usr/sbin/smbd 不是 Samba，无法使用。
+  smbd: "smbd"
+  smbpasswd: "smbpasswd"
+  # Samba 只能认证系统中存在的账户。开启后会为每个用户自动创建
+  # 无登录权限（nologin、无家目录）的系统账户，需要以 root 运行。
+  # 关闭时需要管理员自行创建同名系统账户。
+  create_system_users: false
+  # 系统账户名前缀，避免与已有系统用户冲突，例如 "lnf_" 会把用户 alice 映射为 lnf_alice。
+  # 账户名会被转换为小写，且需满足 ^[a-z_][a-z0-9_.-]{0,31}$。
+  user_prefix: ""
+  # 让 Samba 以该系统用户的身份读写文件，使通过 SMB 创建的文件属主与
+  # Web/WebDAV/S3 上传的文件一致（通常填写运行本程序的系统用户）。留空则以登录账户身份访问。
+  force_user: ""
+
+# 日志级别：debug / info / warn / error。
+log_level: info
