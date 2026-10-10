@@ -20,9 +20,11 @@
 
 ## 快速开始（Docker，推荐）
 
-镜像已发布在 GitHub Container Registry：
+镜像已发布在 GitHub Container Registry（公开，无需登录即可拉取），支持 linux/amd64 与 linux/arm64：
 
 ```bash
+docker pull ghcr.io/sakana-1314/localnetwork-files:latest
+
 docker run -d --name lnfiles \
   -p 8080:8080 -p 9000:9000 -p 445:445 \
   -v lnfiles-data:/data \
@@ -62,7 +64,13 @@ make run                              # 或 ./bin/lnfiles -config config.yaml
 
 ### 镜像体积
 
-基础镜像基于 **Alpine**，实测镜像 **211 MiB**（未压缩，amd64；从 ghcr.io 拉取约 85 MiB）。
+基础镜像基于 **Alpine**。已发布镜像的实测体积：
+
+| 平台 | 未压缩 | 从 ghcr.io 拉取（压缩） |
+| --- | --- | --- |
+| linux/amd64 | 211 MiB | 80.0 MiB |
+| linux/arm64 | — | 77.6 MiB |
+
 这是权衡的结果：
 
 - Debian 官方 `ffmpeg` **硬性依赖** SDL2 → Mesa → LLVM 整条图形链（三个包压缩后共约 42 MiB，无法剥离）：
