@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/unicode"
 
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
@@ -77,41 +82,74 @@ func (s *Service) EmbeddedSubtitle(ctx context.Context, real string, fi os.FileI
 		return "", fmt.Errorf("字幕轨道 %d 不存在", index)
 	}
 	switch mi.Subtitles[index].Codec {
-	case "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub":
+	case "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub", "dvb_teletext", "arib_caption":
 		return "", ErrUnsupportedSubtitle
 	}
 	key := cacheKey("sub", real, fi.ModTime().UnixNano(), fi.Size(), index)
-	return s.convertSubtitle(ctx, key, []string{"-i", real, "-map", "0:s:" + strconv.Itoa(index)})
+	return s.convertSubtitle(ctx, key, func(string) ([]string, error) {
+		return []string{"-i", real, "-map", "0:s:" + strconv.Itoa(index)}, nil
+	})
 }
 
-// ExternalSubtitle converts a subtitle file to WebVTT (cached). Non UTF-8 input is
-// decoded as GB18030, the most common legacy encoding for Chinese subtitles.
+// ExternalSubtitle converts a subtitle file to WebVTT (cached). UTF-16 (with
+// BOM) is converted in-process; other non UTF-8 input is decoded as GB18030,
+// the most common legacy encoding for Chinese subtitles (a superset of GBK).
 func (s *Service) ExternalSubtitle(ctx context.Context, real string, fi os.FileInfo) (string, error) {
 	if vfs.Ext(fi.Name()) == "vtt" {
 		return real, nil
 	}
-	head := make([]byte, 64<<10)
-	f, err := os.Open(real)
-	if err != nil {
-		return "", err
-	}
-	n, _ := io.ReadFull(f, head)
-	f.Close()
-	head = head[:n]
-	// Avoid flagging a multi-byte rune cut at the buffer end as invalid.
-	for i := 0; i < 3 && len(head) > 0 && !utf8.Valid(head); i++ {
-		head = head[:len(head)-1]
-	}
-	args := []string{}
-	if !utf8.Valid(head) {
-		args = append(args, "-sub_charenc", "GB18030")
-	}
-	args = append(args, "-i", real)
 	key := cacheKey("extsub", real, fi.ModTime().UnixNano(), fi.Size())
-	return s.convertSubtitle(ctx, key, args)
+	return s.convertSubtitle(ctx, key, func(tmpBase string) ([]string, error) {
+		f, err := os.Open(real)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(io.LimitReader(f, maxSubtitleBytes+1))
+		f.Close()
+		if err != nil {
+			return nil, err
+		}
+		if len(data) > maxSubtitleBytes {
+			return nil, errors.New("字幕文件过大")
+		}
+		conv, changed, err := subtitleToUTF8(data)
+		if err != nil {
+			return nil, fmt.Errorf("字幕编码转换失败: %w", err)
+		}
+		if !changed {
+			return []string{"-i", real}, nil
+		}
+		src := tmpBase + ".src." + vfs.Ext(fi.Name())
+		if err := os.WriteFile(src, conv, 0o644); err != nil {
+			return nil, err
+		}
+		return []string{"-i", src}, nil
+	})
 }
 
-func (s *Service) convertSubtitle(ctx context.Context, key string, input []string) (string, error) {
+const maxSubtitleBytes = 32 << 20
+
+// subtitleToUTF8 returns data as UTF-8 and whether it had to be converted.
+func subtitleToUTF8(data []byte) ([]byte, bool, error) {
+	var dec *encoding.Decoder
+	switch {
+	case bytes.HasPrefix(data, []byte{0xFF, 0xFE}):
+		dec = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder()
+	case bytes.HasPrefix(data, []byte{0xFE, 0xFF}):
+		dec = unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder()
+	case utf8.Valid(data):
+		return data, false, nil
+	default:
+		dec = simplifiedchinese.GB18030.NewDecoder()
+	}
+	out, err := dec.Bytes(data)
+	return out, true, err
+}
+
+// convertSubtitle converts to WebVTT once per key. input returns the ffmpeg
+// input arguments; it may create helper files named tmpBase+"*", which are
+// removed afterwards.
+func (s *Service) convertSubtitle(ctx context.Context, key string, input func(tmpBase string) ([]string, error)) (string, error) {
 	if !s.hasFFmpeg {
 		return "", ErrNoFFmpeg
 	}
@@ -127,13 +165,30 @@ func (s *Service) convertSubtitle(ctx context.Context, key string, input []strin
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 		defer cancel()
 		tmp := out + ".tmp.vtt"
-		args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}, input...)
+		tmpBase := out + ".tmp"
+		defer func() {
+			olds, _ := filepath.Glob(tmpBase + ".src.*")
+			for _, o := range olds {
+				os.Remove(o)
+			}
+		}()
+		in, err := input(tmpBase)
+		if err != nil {
+			return nil, err
+		}
+		args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}, in...)
 		args = append(args, "-f", "webvtt", tmp)
 		if b, err := exec.CommandContext(cctx, s.ffmpeg, args...).CombinedOutput(); err != nil {
 			os.Remove(tmp)
 			return nil, fmt.Errorf("字幕转换失败: %s", lastLine(b))
 		}
-		return nil, os.Rename(tmp, out)
+		if err := os.Rename(tmp, out); err != nil {
+			return nil, err
+		}
+		if st, err := os.Stat(out); err == nil {
+			s.cache.Added(cache.Thumb, st.Size())
+		}
+		return nil, nil
 	})
 	if err != nil {
 		return "", err

@@ -103,7 +103,12 @@ router.beforeEach(async (to) => {
 router.afterEach((to, _from, failure) => {
   if (failure) feedback.loadingBar?.error()
   else feedback.loadingBar?.finish()
-  document.title = to.meta.title ? `${to.meta.title} · ${APP_NAME}` : APP_NAME
+  let title = to.meta.title
+  if (to.name === 'files') {
+    const segs = Array.isArray(to.params.path) ? to.params.path : []
+    title = segs[segs.length - 1] || '全部目录'
+  }
+  document.title = title ? `${title} · ${APP_NAME}` : APP_NAME
 })
 
 router.onError(() => feedback.loadingBar?.error())

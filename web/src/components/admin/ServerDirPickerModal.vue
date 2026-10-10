@@ -52,13 +52,13 @@ function confirm(): void {
 
 <template>
   <n-modal v-model:show="show" preset="card" title="选择服务器目录" style="width: 560px; max-width: calc(100vw - 24px)">
-    <n-space :wrap="false" style="margin-bottom: 10px">
+    <div class="bar">
       <n-button :disabled="isRoot || loading" @click="browse(parent)">
         <template #icon><n-icon :component="ArrowUpOutline" /></template>
         上一级
       </n-button>
       <n-input v-model:value="manual" placeholder="输入绝对路径后回车" class="mono" @keyup.enter="browse(manual)" />
-    </n-space>
+    </div>
     <div class="list">
       <n-spin :show="loading">
         <n-empty v-if="!loading && !dirs.length" description="没有子目录" style="padding: 40px 0" />
@@ -79,6 +79,15 @@ function confirm(): void {
 </template>
 
 <style scoped>
+.bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.bar .n-input {
+  flex: 1;
+  min-width: 0;
+}
 .list {
   height: 340px;
   max-height: 50vh;

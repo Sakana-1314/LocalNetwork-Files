@@ -64,7 +64,7 @@ const curl = computed(() => {
               <td>{{ p.in }}</td>
               <td class="t">
                 {{ paramType(p) }}
-                <div v-if="p.schema?.enum" class="sub">{{ p.schema.enum.join(' | ') }}</div>
+                <div v-if="deref(doc, p.schema)?.enum" class="sub">{{ deref(doc, p.schema)?.enum?.join(' | ') }}</div>
               </td>
               <td>{{ p.required ? '是' : '否' }}</td>
               <td>

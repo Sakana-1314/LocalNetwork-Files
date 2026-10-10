@@ -33,8 +33,9 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      '/api': { target: backend, changeOrigin: false },
-      '/dav': { target: backend, changeOrigin: false },
+      // 使用正则，避免把前端路由 /api-docs 也转发到后端
+      '^/api/': { target: backend, changeOrigin: false },
+      '^/dav(/|$)': { target: backend, changeOrigin: false },
     },
   },
 })

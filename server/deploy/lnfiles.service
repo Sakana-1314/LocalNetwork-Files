@@ -1,0 +1,34 @@
+# systemd unit for LocalNetwork Files.
+#
+#   install -Dm755 bin/lnfiles /usr/local/bin/lnfiles
+#   install -Dm640 config.example.yaml /etc/lnfiles/config.yaml   # then edit
+#   install -Dm644 deploy/lnfiles.service /etc/systemd/system/lnfiles.service
+#   systemctl daemon-reload && systemctl enable --now lnfiles
+#
+# The service runs as root because the managed Samba smbd (SMB service) and the
+# creation of SMB system accounts need it. If you do not use SMB you can run it
+# as an unprivileged user: uncomment User=/Group= below, make sure that user
+# can read/write the shared directories, and keep data_dir writable by it.
+
+[Unit]
+Description=LocalNetwork Files (LAN file manager)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+#User=lnfiles
+#Group=lnfiles
+ExecStart=/usr/local/bin/lnfiles -config /etc/lnfiles/config.yaml
+WorkingDirectory=/var/lib/lnfiles
+StateDirectory=lnfiles
+Environment=LNF_DATA_DIR=/var/lib/lnfiles
+Restart=on-failure
+RestartSec=3
+# smbd is a child process; stop it together with the server.
+KillMode=mixed
+TimeoutStopSec=20
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

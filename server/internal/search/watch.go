@@ -30,6 +30,10 @@ type watcher struct {
 func (x *Indexer) syncWatcher() {
 	want := x.store.Settings().Search.Watch && watchSupported
 	x.mu.Lock()
+	if x.stopped {
+		x.mu.Unlock()
+		return
+	}
 	w := x.watcher
 	if !want {
 		x.watcher = nil

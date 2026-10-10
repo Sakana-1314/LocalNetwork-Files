@@ -24,7 +24,10 @@ type basicEntry struct {
 	expires time.Time
 }
 
-const basicCacheTTL = 5 * time.Minute
+const (
+	basicCacheTTL = 5 * time.Minute
+	basicCacheMax = 1024
+)
 
 func NewBasic(svc *Service) *Basic {
 	return &Basic{svc: svc, cache: map[[32]byte]basicEntry{}}
@@ -60,7 +63,9 @@ func (b *Basic) Check(user, pass string) (*Principal, error) {
 	b.mu.Unlock()
 	if hit && time.Now().Before(e.expires) {
 		u, err := b.svc.store.GetUser(e.userID)
-		if err == nil && !u.Disabled && u.PasswordHash == e.pwHash {
+		// The entry is only valid while the account still has the same name,
+		// password hash and is enabled.
+		if err == nil && !u.Disabled && u.PasswordHash == e.pwHash && u.Username == user {
 			return &Principal{User: u, Via: "password"}, nil
 		}
 	}
@@ -69,12 +74,15 @@ func (b *Basic) Check(user, pass string) (*Principal, error) {
 		return nil, err
 	}
 	b.mu.Lock()
-	if len(b.cache) > 1024 {
+	if len(b.cache) >= basicCacheMax {
 		now := time.Now()
 		for k, v := range b.cache {
 			if now.After(v.expires) {
 				delete(b.cache, k)
 			}
+		}
+		if len(b.cache) >= basicCacheMax {
+			clear(b.cache) // still full of live entries: start over rather than grow unbounded
 		}
 	}
 	b.cache[key] = basicEntry{userID: u.ID, pwHash: u.PasswordHash, expires: time.Now().Add(basicCacheTTL)}

@@ -116,7 +116,11 @@ function seekWhenReady(v: HTMLVideoElement, t: number): void {
   v.addEventListener('loadedmetadata', h, { once: true })
 }
 
-async function apply(startAt = 0): Promise<void> {
+// 转码会话可能因缓存淘汰或服务重启而失效（404），此时自动重建一次
+let sessionRecreates = 0
+
+async function apply(startAt = 0, recreating = false): Promise<void> {
+  if (!recreating) sessionRecreates = 0
   const seq = ++applySeq
   const v = videoRef.value
   if (!v) return
@@ -158,6 +162,11 @@ async function apply(startAt = 0): Promise<void> {
       let netRetries = 0
       inst.on(Hls.Events.ERROR, (_evt, data) => {
         if (!data.fatal) return
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.response?.code === 404 && sessionRecreates < 1) {
+          sessionRecreates++
+          void apply(v.currentTime || startAt, true)
+          return
+        }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR && netRetries < 3) {
           netRetries++
           inst.startLoad()

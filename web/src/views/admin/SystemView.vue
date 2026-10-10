@@ -374,12 +374,11 @@ onMounted(async () => {
                 </template>
                 清理所有已过期的预览图与转码分片？
               </n-popconfirm>
-              <n-space :size="8" :wrap="false">
+              <div class="two-col">
                 <n-button
                   secondary
                   type="warning"
                   :loading="cleaning === 'thumb'"
-                  style="flex: 1"
                   @click="confirmClean('thumb', '清空预览图缓存？', { kind: 'thumb', expired_only: false })"
                 >
                   清空预览图
@@ -388,12 +387,11 @@ onMounted(async () => {
                   secondary
                   type="error"
                   :loading="cleaning === 'transcode'"
-                  style="flex: 1"
                   @click="confirmClean('transcode', '清空转码缓存？', { kind: 'transcode', expired_only: false })"
                 >
                   清空转码缓存
                 </n-button>
-              </n-space>
+              </div>
             </n-space>
           </n-card>
         </n-space>
@@ -465,5 +463,10 @@ onMounted(async () => {
 }
 .muted {
   opacity: 0.6;
+}
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 </style>

@@ -2,6 +2,7 @@ package api
 
 import (
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"path"
@@ -146,7 +147,10 @@ type batchResult struct {
 
 func (b *batchResult) add(p string, err error) {
 	if err != nil {
-		b.Failed = append(b.Failed, batchFailure{p, err.Error()})
+		if statusOf(err) >= 500 {
+			slog.Error("batch operation failed", "path", p, "err", err)
+		}
+		b.Failed = append(b.Failed, batchFailure{p, publicMessage(err)})
 	} else {
 		b.Succeeded = append(b.Succeeded, p)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -34,6 +35,9 @@ type Store struct {
 	mu       sync.RWMutex
 	settings Settings
 	subs     []func(Event)
+	// saveMu keeps the persisted and in-memory settings in the same order
+	// when several saves race.
+	saveMu sync.Mutex
 }
 
 func Open(dataDir string) (*Store, error) {
@@ -107,7 +111,7 @@ func (s *Store) GetUser(id uint) (*User, error) {
 
 func (s *Store) GetUserByName(name string) (*User, error) {
 	var u User
-	if err := s.db.Preload("Mounts", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).Where("username = ?", name).First(&u).Error; err != nil {
+	if err := s.db.Preload("Mounts", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).Where("username = ? COLLATE NOCASE", name).First(&u).Error; err != nil {
 		return nil, notFound(err)
 	}
 	return &u, nil
@@ -119,14 +123,15 @@ func ValidateMounts(ms []Mount) error {
 	for i := range ms {
 		m := &ms[i]
 		m.Name = strings.TrimSpace(m.Name)
-		if m.Name == "" || m.Name == "." || m.Name == ".." || strings.ContainsAny(m.Name, `/\`) {
+		if m.Name == "" || m.Name == "." || m.Name == ".." || strings.ContainsAny(m.Name, "/\\\x00") ||
+			utf8.RuneCountInString(m.Name) > 128 {
 			return fmt.Errorf("无效的目录名称 %q", m.Name)
 		}
 		if seen[strings.ToLower(m.Name)] {
 			return fmt.Errorf("目录名称重复: %s", m.Name)
 		}
 		seen[strings.ToLower(m.Name)] = true
-		if !filepath.IsAbs(m.Path) {
+		if !filepath.IsAbs(m.Path) || strings.ContainsRune(m.Path, 0) {
 			return fmt.Errorf("目录 %s 的路径必须是绝对路径", m.Name)
 		}
 		m.Path = filepath.Clean(m.Path)
@@ -304,12 +309,15 @@ func (s *Store) Settings() Settings {
 func (s *Store) SaveSettings(st Settings) (Settings, error) {
 	st.Normalize()
 	b, _ := json.Marshal(st)
+	s.saveMu.Lock()
 	if err := s.db.Save(&KV{Key: settingsKey, Value: string(b)}).Error; err != nil {
+		s.saveMu.Unlock()
 		return st, err
 	}
 	s.mu.Lock()
 	s.settings = st
 	s.mu.Unlock()
+	s.saveMu.Unlock()
 	s.publish(EventSettingsChanged)
 	return st, nil
 }

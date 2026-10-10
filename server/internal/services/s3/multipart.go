@@ -27,6 +27,7 @@ type uploadMeta struct {
 	Bucket  string    `json:"bucket"`
 	Key     string    `json:"key"`
 	Created time.Time `json:"created"`
+	Mtime   string    `json:"mtime,omitempty"` // x-amz-meta-mtime given at initiation
 }
 
 func validUploadID(id string) bool {
@@ -75,7 +76,8 @@ func (s *Server) createUpload(q *request) {
 		writeErr(q.w, q.r, err)
 		return
 	}
-	meta, _ := json.Marshal(uploadMeta{UserID: q.p.User.ID, Bucket: q.bucket, Key: q.key, Created: time.Now()})
+	meta, _ := json.Marshal(uploadMeta{UserID: q.p.User.ID, Bucket: q.bucket, Key: q.key, Created: time.Now(),
+		Mtime: q.r.Header.Get(mtimeHeader)})
 	if err := os.WriteFile(s.uploadPath(id, "meta.json"), meta, 0o600); err != nil {
 		writeErr(q.w, q.r, err)
 		return
@@ -126,7 +128,7 @@ func (s *Server) uploadPart(q *request) {
 }
 
 func (s *Server) completeUpload(q *request) {
-	id, _, err := s.loadUpload(q)
+	id, meta, err := s.loadUpload(q)
 	if err != nil {
 		writeErr(q.w, q.r, err)
 		return
@@ -171,6 +173,7 @@ func (s *Server) completeUpload(q *request) {
 		writeErr(q.w, q.r, err)
 		return
 	}
+	applyMtime(q, vp, meta.Mtime)
 	for _, f := range files {
 		f.Close()
 	}

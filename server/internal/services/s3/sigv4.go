@@ -36,6 +36,8 @@ type sigParams struct {
 	amzDate       time.Time
 	payloadHash   string
 	presigned     bool
+	v2            bool   // legacy Signature Version 2
+	v2Expires     string // presigned V2 "Expires" value
 }
 
 var errMissingAuth = errors.New("missing authentication")
@@ -45,9 +47,15 @@ func parseSigV4(r *http.Request) (*sigParams, error) {
 	if q.Get("X-Amz-Algorithm") != "" {
 		return parsePresigned(r, q)
 	}
+	if q.Get("AWSAccessKeyId") != "" && q.Get("Signature") != "" {
+		return parsePresignedV2(q)
+	}
 	h := r.Header.Get("Authorization")
 	if h == "" {
 		return nil, errMissingAuth
+	}
+	if strings.HasPrefix(h, "AWS ") {
+		return parseSigV2Header(r, h)
 	}
 	if !strings.HasPrefix(h, algorithm+" ") {
 		return nil, fmt.Errorf("unsupported authorization scheme")

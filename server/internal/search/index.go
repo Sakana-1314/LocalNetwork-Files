@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
@@ -40,8 +41,21 @@ type item struct {
 	dir     int32 // index into rootIndex.dirs
 	isDir   bool
 	deleted bool
+	kind    uint8 // index into kinds
 	size    int64
 	mtime   int64
+}
+
+// kinds enumerates vfs kinds so items can store their kind in one byte.
+var kinds = []string{vfs.KindOther, vfs.KindDir, vfs.KindImage, vfs.KindVideo, vfs.KindAudio, vfs.KindText, vfs.KindPDF, vfs.KindArchive}
+
+func kindIndex(k string) uint8 {
+	for i, x := range kinds {
+		if x == k {
+			return uint8(i)
+		}
+	}
+	return 0
 }
 
 // rootIndex indexes one top-level directory.
@@ -87,6 +101,7 @@ func (ri *rootIndex) dirID(rel string) int32 {
 func (ri *rootIndex) add(relDir string, fi fs.FileInfo) {
 	name := fi.Name()
 	it := item{name: name, lower: lowerRunes(name), dir: ri.dirID(relDir), isDir: fi.IsDir(), mtime: fi.ModTime().Unix()}
+	it.kind = kindIndex(vfs.KindOf(name, it.isDir))
 	if !it.isDir {
 		it.size = fi.Size()
 	}
@@ -215,17 +230,30 @@ type Indexer struct {
 	lastBuilt time.Time
 	buildDur  time.Duration
 
+	// walkMu serializes full walks (Rebuild, SyncRoots) so that they cannot
+	// overwrite each other's result with a stale set of roots.
+	walkMu sync.Mutex
+	// walking is >0 while a walk is in progress; changes applied meanwhile
+	// are replayed on the fresh indexes once they are swapped in.
+	walking int
+
 	pendingMu sync.Mutex
 	pending   map[string]struct{}
+	replay    []string
 
-	watcher *watcher
-	kick    chan struct{}
-	stop    chan struct{}
+	watcher  *watcher
+	kick     chan struct{}
+	stop     chan struct{}
+	stopOnce sync.Once
+	stopped  bool
+
+	// flushEvery is the debounce interval of incremental updates.
+	flushEvery time.Duration
 }
 
 func New(st *store.Store) *Indexer {
 	return &Indexer{store: st, indexes: map[string]*rootIndex{}, pending: map[string]struct{}{},
-		kick: make(chan struct{}, 1), stop: make(chan struct{})}
+		kick: make(chan struct{}, 1), stop: make(chan struct{}), flushEvery: 1500 * time.Millisecond}
 }
 
 // Start builds the index in the background and keeps it fresh.
@@ -252,12 +280,17 @@ func (x *Indexer) Start() {
 }
 
 func (x *Indexer) Stop() {
-	close(x.stop)
-	x.mu.Lock()
-	if x.watcher != nil {
-		x.watcher.close()
-	}
-	x.mu.Unlock()
+	x.stopOnce.Do(func() {
+		close(x.stop)
+		x.mu.Lock()
+		x.stopped = true
+		w := x.watcher
+		x.watcher = nil
+		x.mu.Unlock()
+		if w != nil {
+			w.close()
+		}
+	})
 }
 
 // SettingsChanged re-arms the periodic timer and toggles watching.
@@ -284,14 +317,31 @@ func (x *Indexer) topRoots() []string {
 			}
 		}
 	}
-	sort.Strings(real)
+	return collapse(real)
+}
+
+// collapse sorts paths and drops those equal to or nested inside another.
+// Comparing only with the previous element is not enough: "/a-b" sorts
+// between "/a" and "/a/c".
+func collapse(paths []string) []string {
+	// Sorting by length first guarantees ancestors come before descendants.
+	sort.Slice(paths, func(i, j int) bool {
+		if len(paths[i]) != len(paths[j]) {
+			return len(paths[i]) < len(paths[j])
+		}
+		return paths[i] < paths[j]
+	})
 	var out []string
-	for _, p := range real {
-		if len(out) > 0 && (p == out[len(out)-1] || isWithin(out[len(out)-1], p)) {
-			continue
+outer:
+	for _, p := range paths {
+		for _, o := range out {
+			if isWithin(o, p) {
+				continue outer
+			}
 		}
 		out = append(out, p)
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -309,6 +359,9 @@ func (x *Indexer) Rebuild() {
 	}
 	x.building = true
 	x.mu.Unlock()
+	x.walkMu.Lock()
+	defer x.walkMu.Unlock()
+	x.beginWalk()
 
 	began := time.Now()
 	roots := x.topRoots()
@@ -326,6 +379,7 @@ func (x *Indexer) Rebuild() {
 	x.lastBuilt = time.Now()
 	x.buildDur = time.Since(began)
 	x.mu.Unlock()
+	x.endWalk()
 	slog.Info("search index built", "roots", len(roots), "entries", total, "took", x.buildDur.Round(time.Millisecond))
 	x.syncWatcher()
 }
@@ -333,6 +387,8 @@ func (x *Indexer) Rebuild() {
 // SyncRoots indexes newly authorized directories and drops revoked ones
 // without re-walking roots that did not change.
 func (x *Indexer) SyncRoots() {
+	x.walkMu.Lock()
+	defer x.walkMu.Unlock()
 	want := x.topRoots()
 	x.mu.RLock()
 	same := len(want) == len(x.indexes)
@@ -345,6 +401,7 @@ func (x *Indexer) SyncRoots() {
 	if same {
 		return
 	}
+	x.beginWalk()
 	fresh := map[string]*rootIndex{}
 	for _, r := range want {
 		x.mu.RLock()
@@ -359,6 +416,7 @@ func (x *Indexer) SyncRoots() {
 	x.mu.Lock()
 	x.indexes = fresh
 	x.mu.Unlock()
+	x.endWalk()
 	slog.Info("search roots updated", "roots", len(fresh))
 	x.syncWatcher()
 }
@@ -373,8 +431,28 @@ func (x *Indexer) Changed(real string) {
 	x.pendingMu.Unlock()
 }
 
+func (x *Indexer) beginWalk() {
+	x.mu.Lock()
+	x.walking++
+	x.mu.Unlock()
+}
+
+// endWalk re-queues changes applied to the old indexes while walking, since
+// the walk may have visited those directories before they changed.
+func (x *Indexer) endWalk() {
+	x.mu.Lock()
+	x.walking--
+	x.mu.Unlock()
+	x.pendingMu.Lock()
+	for _, p := range x.replay {
+		x.pending[p] = struct{}{}
+	}
+	x.replay = nil
+	x.pendingMu.Unlock()
+}
+
 func (x *Indexer) flushLoop() {
-	t := time.NewTicker(1500 * time.Millisecond)
+	t := time.NewTicker(x.flushEvery)
 	defer t.Stop()
 	for {
 		select {
@@ -382,28 +460,25 @@ func (x *Indexer) flushLoop() {
 			return
 		case <-t.C:
 		}
-		x.pendingMu.Lock()
-		paths := make([]string, 0, len(x.pending))
-		for p := range x.pending {
-			paths = append(paths, p)
-		}
-		x.pending = map[string]struct{}{}
-		x.pendingMu.Unlock()
-		if len(paths) == 0 {
-			continue
-		}
-		// Collapse paths that are inside another changed path.
-		sort.Strings(paths)
-		var tops []string
-		for _, p := range paths {
-			if len(tops) > 0 && isWithin(tops[len(tops)-1], p) {
-				continue
-			}
-			tops = append(tops, p)
-		}
-		for _, p := range tops {
-			x.apply(p)
-		}
+		x.flush()
+	}
+}
+
+// flush applies all pending change notifications.
+func (x *Indexer) flush() {
+	x.pendingMu.Lock()
+	paths := make([]string, 0, len(x.pending))
+	for p := range x.pending {
+		paths = append(paths, p)
+	}
+	x.pending = map[string]struct{}{}
+	x.pendingMu.Unlock()
+	if len(paths) == 0 {
+		return
+	}
+	// Collapse paths that are inside another changed path.
+	for _, p := range collapse(paths) {
+		x.apply(p)
 	}
 }
 
@@ -417,7 +492,13 @@ func (x *Indexer) apply(real string) {
 		}
 	}
 	w := x.watcher
+	walking := x.walking > 0
 	x.mu.RUnlock()
+	if walking {
+		x.pendingMu.Lock()
+		x.replay = append(x.replay, real)
+		x.pendingMu.Unlock()
+	}
 	if target == nil {
 		return
 	}
@@ -478,6 +559,9 @@ type scope struct {
 	vprefix string // virtual path of the scope root
 	strip   string // rel path inside ri of the mount root (to build virtual paths)
 	mount   *vfs.Root
+	// dirK[i][dirID] is how many runes of pattern i the directory's virtual
+	// path consumes as a subsequence; only built for path patterns.
+	dirK [][]int32
 }
 
 type hit struct {
@@ -490,15 +574,10 @@ type hit struct {
 
 type hitHeap []hit
 
-func (h hitHeap) Len() int { return len(h) }
-func (h hitHeap) Less(i, j int) bool {
-	if h[i].score != h[j].score {
-		return h[i].score < h[j].score
-	}
-	return h[i].nameLen > h[j].nameLen
-}
-func (h hitHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
-func (h *hitHeap) Push(v any)   { *h = append(*h, v.(hit)) }
+func (h hitHeap) Len() int           { return len(h) }
+func (h hitHeap) Less(i, j int) bool { return better(h[j], h[i]) } // min-heap: worst hit on top
+func (h hitHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *hitHeap) Push(v any)        { *h = append(*h, v.(hit)) }
 func (h *hitHeap) Pop() any {
 	old := *h
 	v := old[len(old)-1]
@@ -514,8 +593,16 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 	if len(pats) == 0 {
 		return resp
 	}
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 {
 		limit = 100
+	}
+	limit = min(limit, 500)
+	kindFilter := -1
+	if kind != "" {
+		kindFilter = int(kindIndex(kind))
+		if kinds[kindFilter] != kind {
+			return resp // unknown kind matches nothing
+		}
 	}
 
 	x.mu.RLock()
@@ -536,6 +623,9 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 			sc.ri.mu.RLock()
 			locked[sc.ri] = true
 		}
+		if hasPathPattern(pats) {
+			sc.buildDirK(pats)
+		}
 		n := len(sc.ri.items)
 		chunk := max(n/workers+1, 4096)
 		for f := 0; f < n; f += chunk {
@@ -547,6 +637,7 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 			ri.mu.RUnlock()
 		}
 	}()
+	workers = max(1, min(workers, len(jobs)))
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -558,13 +649,18 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 			defer wg.Done()
 			local := &hitHeap{}
 			count := 0
+			m := newMatcher(pats)
 			dirOK := map[int32]bool{}
 			for j := range jobCh {
 				clear(dirOK)
+				m.reset(j.sc)
 				ri := j.sc.ri
 				for i := j.from; i < j.to; i++ {
 					it := &ri.items[i]
 					if it.deleted {
+						continue
+					}
+					if kindFilter >= 0 && int(it.kind) != kindFilter {
 						continue
 					}
 					if j.sc.prefix != "" {
@@ -578,10 +674,7 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 							continue
 						}
 					}
-					if kind != "" && vfs.KindOf(it.name, it.isDir) != kind {
-						continue
-					}
-					score, ok := scoreItem(ri, it, pats)
+					score, ok := m.score(it)
 					if !ok {
 						continue
 					}
@@ -589,7 +682,7 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 					h := hit{score: score, ri: ri, idx: i, sc: j.sc, nameLen: len(it.name)}
 					if local.Len() < limit {
 						heap.Push(local, h)
-					} else if (*local)[0].score < score {
+					} else if better(h, (*local)[0]) {
 						(*local)[0] = h
 						heap.Fix(local, 0)
 					}
@@ -600,7 +693,7 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 			for _, h := range *local {
 				if global.Len() < limit {
 					heap.Push(global, h)
-				} else if (*global)[0].score < h.score {
+				} else if better(h, (*global)[0]) {
 					(*global)[0] = h
 					heap.Fix(global, 0)
 				}
@@ -615,27 +708,74 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 	wg.Wait()
 
 	hits := *global
-	sort.Slice(hits, func(i, j int) bool {
-		if hits[i].score != hits[j].score {
-			return hits[i].score > hits[j].score
-		}
-		return hits[i].nameLen < hits[j].nameLen
-	})
+	sort.Slice(hits, func(i, j int) bool { return better(hits[i], hits[j]) })
 	for _, h := range hits {
 		it := &h.ri.items[h.idx]
-		rel := h.ri.rel(it)
-		vrel := strings.TrimPrefix(strings.TrimPrefix(rel, h.sc.strip), "/")
-		vp := "/" + h.sc.mount.Name + "/" + vrel
+		vp := h.sc.virtualDir(h.ri.dirs[it.dir]) + it.name
 		pos := matchPositions(it, pats)
 		e := vfs.Entry{
 			Name: it.name, Path: vp, IsDir: it.isDir, Size: it.size, ModTime: time.Unix(it.mtime, 0),
-			Mime: vfs.MimeOf(it.name, it.isDir), Kind: vfs.KindOf(it.name, it.isDir), Writable: h.sc.mount.Writable,
+			Mime: vfs.MimeOf(it.name, it.isDir), Kind: kinds[it.kind], Writable: h.sc.mount.Writable,
 			Thumb: vfs.Thumbable(it.name, it.isDir, vfs.FFmpegAvailable),
 		}
 		resp.Results = append(resp.Results, Result{Entry: e, Score: h.score, Matches: pos})
 	}
 	resp.TookMS = float64(time.Since(began).Microseconds()) / 1000
 	return resp
+}
+
+// better orders hits: higher score first, then shorter names, then path order
+// so that results are deterministic.
+func better(a, b hit) bool {
+	if a.score != b.score {
+		return a.score > b.score
+	}
+	if a.nameLen != b.nameLen {
+		return a.nameLen < b.nameLen
+	}
+	if a.ri != b.ri {
+		return a.ri.root < b.ri.root
+	}
+	return a.idx < b.idx
+}
+
+// virtualDir maps a directory (relative to the index root) to the virtual
+// path of that directory inside the mount, with a trailing slash.
+func (sc *scope) virtualDir(d string) string {
+	vrel := strings.TrimPrefix(strings.TrimPrefix(d, sc.strip), "/")
+	if vrel == "" {
+		return "/" + sc.mount.Name + "/"
+	}
+	return "/" + sc.mount.Name + "/" + vrel + "/"
+}
+
+func hasPathPattern(pats []pattern) bool {
+	for _, p := range pats {
+		if p.path {
+			return true
+		}
+	}
+	return false
+}
+
+// buildDirK precomputes, for every directory in scope, how far each path
+// pattern gets through the directory's lower-cased virtual path, so that
+// per-item work is reduced to matching the remainder against the name.
+// Caller holds sc.ri.mu for reading.
+func (sc *scope) buildDirK(pats []pattern) {
+	sc.dirK = make([][]int32, len(pats))
+	for i, p := range pats {
+		if !p.path {
+			continue
+		}
+		ks := make([]int32, len(sc.ri.dirs))
+		for id, d := range sc.ri.dirs {
+			if sc.strip == "" || d == sc.strip || strings.HasPrefix(d, sc.strip+"/") {
+				ks[id] = int32(consume(lowerRunes(sc.virtualDir(d)), p.runes, 0))
+			}
+		}
+		sc.dirK[i] = ks
+	}
 }
 
 // scopes maps the user's mounts (optionally narrowed to the virtual dir `within`)
@@ -672,32 +812,67 @@ func (x *Indexer) scopes(fsys *vfs.FS, within string) []scope {
 	return out
 }
 
-func scoreItem(ri *rootIndex, it *item, pats []pattern) (int, bool) {
+// matcher scores items against a query, reusing scratch buffers. One per worker.
+type matcher struct {
+	pats        []pattern
+	sc          *scope
+	orig, lower []rune
+}
+
+func newMatcher(pats []pattern) *matcher { return &matcher{pats: pats} }
+
+func (m *matcher) reset(sc *scope) { m.sc = sc }
+
+func (m *matcher) score(it *item) (int, bool) {
 	total := 0
-	var nameOrig, nameLower []rune
-	for _, p := range pats {
-		target := it.lower
+	decoded := false
+	for pi, p := range m.pats {
 		if p.path {
-			target = lowerRunes(ri.rel(it))
-		}
-		if quickReject(target, p.runes) {
-			return 0, false
-		}
-		if p.path {
-			// Path patterns only filter; reward them lightly.
+			// Path patterns match the virtual path ("/mount/dir/name") and only filter.
+			k := int(m.sc.dirK[pi][it.dir])
+			if k < len(p.runes) && consume(it.lower, p.runes, k) < len(p.runes) {
+				return 0, false
+			}
 			total += len(p.runes) * 2
 			continue
 		}
-		if nameOrig == nil {
-			nameOrig, nameLower = []rune(it.name), []rune(it.lower)
+		if quickReject(it.lower, p.runes) {
+			return 0, false
 		}
-		s, _, ok := matchOne(nameOrig, nameLower, p.runes, false)
+		if !decoded {
+			m.orig = appendRunes(m.orig[:0], it.name)
+			m.lower = appendRunes(m.lower[:0], it.lower)
+			decoded = true
+		}
+		s, _, ok := matchOne(m.orig, m.lower, p.runes, false)
 		if !ok {
 			return 0, false
 		}
 		total += s
 	}
 	return total, true
+}
+
+func appendRunes(dst []rune, s string) []rune {
+	for _, r := range s {
+		dst = append(dst, r)
+	}
+	return dst
+}
+
+// consume advances k over p while p[k:] appears in s as a subsequence and
+// returns the number of pattern runes matched so far.
+func consume(s string, p []rune, k int) int {
+	i := 0
+	for k < len(p) {
+		j := strings.IndexRune(s[i:], p[k])
+		if j < 0 {
+			return k
+		}
+		i += j + utf8.RuneLen(p[k])
+		k++
+	}
+	return k
 }
 
 func matchPositions(it *item, pats []pattern) []int {

@@ -41,8 +41,18 @@ type Manager struct {
 	mu          sync.Mutex
 	lastCleanup time.Time
 	stop        chan struct{}
+	stopOnce    sync.Once
 	kick        chan struct{}
+
+	// Approximate bucket sizes between scans, used to trigger an early cleanup
+	// when a bucket outgrows its cap (see Added).
+	sizeMu    sync.Mutex
+	size      map[Bucket]int64
+	lastEarly time.Time
 }
+
+// earlyCleanupEvery rate-limits cleanups triggered by Added.
+var earlyCleanupEvery = time.Minute
 
 func New(dir string, st *store.Store) (*Manager, error) {
 	for _, b := range buckets {
@@ -50,7 +60,11 @@ func New(dir string, st *store.Store) (*Manager, error) {
 			return nil, err
 		}
 	}
-	return &Manager{dir: dir, store: st, stop: make(chan struct{}), kick: make(chan struct{}, 1)}, nil
+	m := &Manager{dir: dir, store: st, stop: make(chan struct{}), kick: make(chan struct{}, 1), size: map[Bucket]int64{}}
+	for _, b := range buckets {
+		_, m.size[b] = m.scan(b)
+	}
+	return m, nil
 }
 
 func (m *Manager) Dir() string               { return m.dir }
@@ -100,7 +114,25 @@ func (m *Manager) Reschedule() {
 	}
 }
 
-func (m *Manager) Stop() { close(m.stop) }
+func (m *Manager) Stop() { m.stopOnce.Do(func() { close(m.stop) }) }
+
+// Added records n bytes newly written to bucket b. When the bucket's
+// estimated size exceeds its cap, a cleanup is scheduled right away (at most
+// once per earlyCleanupEvery) instead of waiting for the next interval.
+func (m *Manager) Added(b Bucket, n int64) {
+	_, max := m.limits(b)
+	m.sizeMu.Lock()
+	m.size[b] += n
+	trigger := m.size[b] > max && time.Since(m.lastEarly) >= earlyCleanupEvery
+	if trigger {
+		m.lastEarly = time.Now()
+	}
+	m.sizeMu.Unlock()
+	if trigger {
+		slog.Debug("cache over cap, scheduling cleanup", "bucket", b)
+		m.Reschedule()
+	}
+}
 
 type entry struct {
 	path    string
@@ -213,6 +245,9 @@ func (m *Manager) Cleanup(only []Bucket, expiredOnly bool) CleanResult {
 			if b == Transcode && m.IsActive != nil && m.IsActive(e.name) {
 				continue
 			}
+			if b == Thumb && isTemp(e.name) && time.Since(e.lastUse) < time.Hour {
+				continue // being written right now
+			}
 			expired := e.lastUse.Before(cutoff)
 			over := total > max
 			if expiredOnly && !expired && !over {
@@ -232,12 +267,20 @@ func (m *Manager) Cleanup(only []Bucket, expiredOnly bool) CleanResult {
 		if b == Thumb {
 			removeEmptyDirs(m.BucketDir(b))
 		}
+		m.sizeMu.Lock()
+		m.size[b] = total
+		m.sizeMu.Unlock()
 	}
 	m.lastCleanup = time.Now()
 	if res.RemovedFiles > 0 {
 		slog.Info("cache cleanup", "removed_files", res.RemovedFiles, "removed_bytes", res.RemovedBytes)
 	}
 	return res
+}
+
+// isTemp reports names of files that are still being written (see media's writeAtomic/ffmpeg outputs).
+func isTemp(name string) bool {
+	return strings.HasPrefix(name, ".tmp-") || strings.Contains(name, ".tmp.")
 }
 
 func removeEmptyDirs(root string) {

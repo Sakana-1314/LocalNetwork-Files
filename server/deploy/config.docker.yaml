@@ -1,0 +1,19 @@
+# 容器内使用的配置（打包进镜像的 /etc/lnfiles/config.yaml）。
+# 如需修改，可挂载自己的文件覆盖：-v ./config.yaml:/etc/lnfiles/config.yaml:ro
+listen: ":8080"
+data_dir: /data
+ffmpeg: ffmpeg
+ffprobe: ffprobe
+session_ttl: 168h
+admin:
+  username: admin
+  password: admin123
+smb:
+  smbd: smbd
+  smbpasswd: smbpasswd
+  # 容器内自动为每个用户创建 nologin 系统账户（容器以 root 运行）。
+  create_system_users: true
+  user_prefix: ""
+  # 文件以 root 身份写入，与 Web/WebDAV/S3 上传的文件属主一致。
+  force_user: root
+log_level: info

@@ -91,7 +91,7 @@ const smbDefaultPort = computed(() => smbPort.value === 445)
 const smbShares = computed(() => mounts.value.map((n) => smb.value?.shares?.[n] || n))
 const smbSnippets = computed(() => {
   const hst = host.value
-  const u = username.value
+  const u = smb.value?.account || username.value
   const port = smbPort.value
   const m = smbShares.value[0] ?? firstMount.value
   return {

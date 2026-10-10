@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -30,6 +31,15 @@ func (a *API) mediaThumb(c *gin.Context) {
 	http.ServeFile(c.Writer, c.Request, p)
 }
 
+// probeError maps an unexpected ffprobe failure (the file is not a parsable
+// media file) to 415 instead of a 500 server error.
+func probeError(c *gin.Context, err error) error {
+	if statusOf(err) == http.StatusInternalServerError && c.Request.Context().Err() == nil {
+		return &httpError{http.StatusUnsupportedMediaType, "无法识别的媒体文件"}
+	}
+	return err
+}
+
 func (a *API) mediaInfo(c *gin.Context) {
 	vp := vfs.CleanPath(c.Query("path"))
 	loc, fi, err := a.fs(c).LocalFile(vp)
@@ -39,7 +49,7 @@ func (a *API) mediaInfo(c *gin.Context) {
 	}
 	mi, err := a.Media.Probe(c.Request.Context(), loc.Real, fi.ModTime(), fi.Size())
 	if err != nil {
-		fail(c, err)
+		fail(c, probeError(c, err))
 		return
 	}
 	out := *mi
@@ -72,7 +82,7 @@ func (a *API) mediaTranscode(c *gin.Context) {
 	u := principal(c).User
 	se, err := a.Media.CreateSession(c.Request.Context(), u.ID, u.Username, loc.Real, vp, fi, req.Quality, req.AudioTrack)
 	if err != nil {
-		fail(c, err)
+		fail(c, probeError(c, err))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -134,7 +144,11 @@ func (a *API) mediaAudio(c *gin.Context) {
 		fail(c, media.ErrNoFFmpeg)
 		return
 	}
-	start, _ := strconv.ParseFloat(c.DefaultQuery("start", "0"), 64)
+	start, err := strconv.ParseFloat(c.DefaultQuery("start", "0"), 64)
+	if err != nil || math.IsNaN(start) || math.IsInf(start, 0) || start < 0 {
+		fail(c, badRequest("start 无效"))
+		return
+	}
 	c.Header("Content-Type", "audio/mpeg")
 	c.Header("Cache-Control", "no-store")
 	c.Status(http.StatusOK)

@@ -35,6 +35,7 @@ type ServiceStatus struct {
 	Region  string            `json:"region,omitempty"`
 	Error   string            `json:"error,omitempty"`
 	Shares  map[string]string `json:"shares,omitempty"`
+	Account string            `json:"account,omitempty"`
 }
 
 // Services is implemented by the application to expose protocol service state.
@@ -167,19 +168,28 @@ func statusOf(err error) int {
 	return http.StatusInternalServerError
 }
 
-func fail(c *gin.Context, err error) {
-	st := statusOf(err)
-	msg := err.Error()
+// publicMessage is the error text shown to clients. Unexpected (5xx) errors can
+// carry local paths or other internals (e.g. *fs.PathError), so they are
+// replaced by a generic message and only logged.
+func publicMessage(err error) string {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		msg = "记录不存在"
+		return "记录不存在"
 	case errors.Is(err, store.ErrConflict):
-		msg = "名称已被使用"
+		return "名称已被使用"
 	}
+	if st := statusOf(err); st >= 500 && st != http.StatusNotImplemented {
+		return "服务器内部错误"
+	}
+	return err.Error()
+}
+
+func fail(c *gin.Context, err error) {
+	st := statusOf(err)
 	if st >= 500 {
 		slog.Error("request failed", "method", c.Request.Method, "path", c.Request.URL.Path, "err", err)
 	}
-	c.AbortWithStatusJSON(st, gin.H{"error": msg})
+	c.AbortWithStatusJSON(st, gin.H{"error": publicMessage(err)})
 }
 
 func bind(c *gin.Context, v any) bool {
@@ -228,6 +238,12 @@ func (l *loginLimiter) recent(ip string) []time.Time {
 func (l *loginLimiter) fail(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.fails) > 1024 {
+		// Drop stale entries so the map can't grow without bound.
+		for k := range l.fails {
+			l.recent(k)
+		}
+	}
 	l.fails[ip] = append(l.recent(ip), time.Now())
 }
 

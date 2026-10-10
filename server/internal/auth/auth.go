@@ -96,8 +96,11 @@ func loadOrCreateSecret(path string) ([]byte, error) {
 	return b, nil
 }
 
+// hashCost is the bcrypt cost for new password hashes (lowered in tests).
+var hashCost = bcrypt.DefaultCost
+
 func HashPassword(pw string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	b, err := bcrypt.GenerateFromPassword([]byte(pw), hashCost)
 	return string(b), err
 }
 

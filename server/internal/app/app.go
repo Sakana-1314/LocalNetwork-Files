@@ -71,6 +71,7 @@ func New(cfg *config.Config, version string) (*App, error) {
 	a.search = search.New(st)
 	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return st.Settings().Services.WebDAVEnabled })
 	a.s3 = s3.New(au, a.newFS, func() string { return st.Settings().Services.S3Region }, cfg.DataDir)
+	a.s3.BindHost, _ = splitPort(cfg.Listen)
 	a.smb = smb.New(cfg.SMB, cfg.DataDir, st)
 	au.OnPassword = a.smb.SyncPassword
 
@@ -124,8 +125,20 @@ func (a *App) Status(userID uint) map[string]api.ServiceStatus {
 	}
 	if s.SMBEnabled {
 		st.Shares = a.smb.SharesFor(userID)
+		if u, err := a.store.GetUser(userID); err == nil {
+			st.Account = a.smb.Account(u.Username)
+		}
 	}
 	out["smb"] = st
+	// Start errors may reveal local paths and binaries; only admins see them.
+	if u, err := a.store.GetUser(userID); err != nil || !u.IsAdmin() {
+		for k, v := range out {
+			if v.Error != "" {
+				v.Error = "服务异常，请联系管理员"
+				out[k] = v
+			}
+		}
+	}
 	return out
 }
 
@@ -148,6 +161,8 @@ func (a *App) buildHandler() http.Handler {
 			c.JSON(http.StatusNotFound, gin.H{"error": "接口不存在"})
 			return
 		}
+		// gin presets 404 for NoRoute; client-side routes must load the SPA with 200.
+		c.Status(http.StatusOK)
 		ui.ServeHTTP(c.Writer, c.Request)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

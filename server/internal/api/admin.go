@@ -121,6 +121,34 @@ func (in *userInput) validate(creating bool) error {
 	return nil
 }
 
+// usernameTaken reports whether another user already has name, ignoring case:
+// Samba accounts are lower-cased and Basic auth compares case-insensitively,
+// so "Admin" and "admin" must not coexist.
+func (a *API) usernameTaken(name string, exclude uint) (bool, error) {
+	users, err := a.Store.ListUsers()
+	if err != nil {
+		return false, err
+	}
+	for _, u := range users {
+		if u.ID != exclude && strings.EqualFold(u.Username, name) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *API) checkUsername(c *gin.Context, name string, exclude uint) bool {
+	taken, err := a.usernameTaken(name, exclude)
+	if err == nil && taken {
+		err = store.ErrConflict
+	}
+	if err != nil {
+		fail(c, err)
+		return false
+	}
+	return true
+}
+
 func (a *API) adminListUsers(c *gin.Context) {
 	users, err := a.Store.ListUsers()
 	if err != nil {
@@ -141,6 +169,9 @@ func (a *API) adminCreateUser(c *gin.Context) {
 	}
 	if err := in.validate(true); err != nil {
 		fail(c, err)
+		return
+	}
+	if !a.checkUsername(c, in.Username, 0) {
 		return
 	}
 	h, err := auth.HashPassword(in.Password)
@@ -187,6 +218,9 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 	}
 	if err := in.validate(false); err != nil {
 		fail(c, err)
+		return
+	}
+	if !a.checkUsername(c, in.Username, u.ID) {
 		return
 	}
 	if u.IsAdmin() && (in.Role != store.RoleAdmin || in.Disabled) && a.countActiveAdmins(u.ID) == 0 {

@@ -65,25 +65,37 @@ func (s *Service) Thumbnail(ctx context.Context, real string, fi os.FileInfo, si
 		return "", ErrNoThumb
 	}
 	_, err, _ := s.sf.Do("thumb:"+key, func() (any, error) {
+		// Detached from the first caller: concurrent requests share this work.
+		gctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
+		defer cancel()
 		select {
 		case s.thumbSem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		case <-gctx.Done():
+			return nil, gctx.Err()
 		}
 		defer func() { <-s.thumbSem }()
+		if _, err := os.Stat(out); err == nil {
+			return nil, nil // produced by a previous flight while we queued
+		}
 		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 			return nil, err
 		}
-		gctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
-		defer cancel()
 		err := s.generateThumb(gctx, real, fi, size, out)
-		if errors.Is(err, ErrNoThumb) {
+		if err == nil {
+			if st, e := os.Stat(out); e == nil {
+				s.cache.Added(cache.Thumb, st.Size())
+			}
+		} else if errors.Is(err, ErrNoThumb) && gctx.Err() == nil {
 			// Remember permanent failures so we don't retry on every request.
+			// Timeouts/cancellations are transient and not remembered.
 			os.WriteFile(failMark, nil, 0o644)
 		}
 		return nil, err
 	})
 	if err != nil {
+		if errors.Is(err, ErrNoThumb) {
+			return "", ErrNoThumb
+		}
 		return "", err
 	}
 	return out, nil
@@ -128,7 +140,23 @@ func (s *Service) generateThumb(ctx context.Context, real string, fi os.FileInfo
 	return ErrNoThumb
 }
 
+// maxDecodePixels bounds the memory used to decode one image in-process
+// (~4 bytes/pixel); larger images go through ffmpeg.
+const maxDecodePixels = 64 << 20
+
 func imageThumb(real string, size int, out string) error {
+	f, err := os.Open(real)
+	if err != nil {
+		return err
+	}
+	cfg, _, err := image.DecodeConfig(f)
+	f.Close()
+	if err != nil {
+		return err
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxDecodePixels {
+		return fmt.Errorf("image too large to decode: %dx%d", cfg.Width, cfg.Height)
+	}
 	img, err := imaging.Open(real, imaging.AutoOrientation(true))
 	if err != nil {
 		return err

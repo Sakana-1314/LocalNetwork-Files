@@ -210,6 +210,8 @@ export interface ServiceStatus {
   error?: string
   /** 仅 SMB：当前用户的挂载名 → SMB 共享名 */
   shares?: Record<string, string>
+  /** 仅 SMB：当前用户的 SMB 登录名（可能带前缀、小写） */
+  account?: string
 }
 
 export interface SystemInfo {

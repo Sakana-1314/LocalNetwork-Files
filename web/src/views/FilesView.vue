@@ -417,14 +417,16 @@ function handleBatch(r: BatchResult, label: string, retryOverwrite?: (failed: st
       h('p', { style: 'margin:0 0 6px' }, `${label}成功 ${r.succeeded.length} 项，失败 ${r.failed.length} 项：`),
       h('ul', { style: 'margin:0;padding-left:18px;max-height:240px;overflow:auto;word-break:break-all' }, lines),
     ])
-  if (retryOverwrite) {
+  // 仅当失败原因看起来是“目标已存在”时才提供覆盖重试
+  const conflict = r.failed.filter((f) => /exist|已存在|冲突|conflict/i.test(f.error))
+  if (retryOverwrite && conflict.length) {
     dialog.warning({
       title: `部分文件${label}失败`,
       content,
       positiveText: '覆盖目标并重试',
       negativeText: '关闭',
       onPositiveClick: () => {
-        void retryOverwrite(r.failed.map((f) => f.path))
+        void retryOverwrite(conflict.map((f) => f.path))
       },
     })
   } else {

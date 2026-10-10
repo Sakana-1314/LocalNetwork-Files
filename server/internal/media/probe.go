@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -62,6 +63,10 @@ type VideoStream struct {
 	Width  int     `json:"width"`
 	Height int     `json:"height"`
 	FPS    float64 `json:"fps"`
+
+	index   int    // absolute stream index (for -map 0:<index>)
+	pixFmt  string // e.g. yuv420p, yuv420p10le
+	profile string // e.g. High, High 10, Main 10
 }
 
 type AudioStream struct {
@@ -70,6 +75,8 @@ type AudioStream struct {
 	Channels int    `json:"channels"`
 	Language string `json:"language"`
 	Title    string `json:"title"`
+
+	startTime float64 // stream start (source timeline, seconds)
 }
 
 type SubtitleStream struct {
@@ -90,16 +97,24 @@ type MediaInfo struct {
 	Subtitles  []SubtitleStream `json:"subtitles"`
 	// HasCover is true for audio files with embedded artwork (attached_pic).
 	HasCover bool `json:"-"`
+
+	startTime float64 // container start time (source timeline, seconds)
 }
 
 type ffprobeOut struct {
 	Format struct {
 		FormatName string `json:"format_name"`
+		StartTime  string `json:"start_time"`
 		Duration   string `json:"duration"`
 		BitRate    string `json:"bit_rate"`
 	} `json:"format"`
 	Streams []struct {
+		Index        int               `json:"index"`
 		CodecType    string            `json:"codec_type"`
+		Profile      string            `json:"profile"`
+		PixFmt       string            `json:"pix_fmt"`
+		Duration     string            `json:"duration"`
+		StartTime    string            `json:"start_time"`
 		CodecName    string            `json:"codec_name"`
 		Width        int               `json:"width"`
 		Height       int               `json:"height"`
@@ -137,6 +152,7 @@ func (s *Service) Probe(ctx context.Context, real string, mtime time.Time, size 
 		}
 		mi := &MediaInfo{Format: po.Format.FormatName, Audio: []AudioStream{}, Subtitles: []SubtitleStream{}}
 		mi.Duration, _ = strconv.ParseFloat(po.Format.Duration, 64)
+		mi.startTime, _ = strconv.ParseFloat(po.Format.StartTime, 64)
 		mi.BitRate, _ = strconv.ParseInt(po.Format.BitRate, 10, 64)
 		for _, st := range po.Streams {
 			switch st.CodecType {
@@ -146,14 +162,27 @@ func (s *Service) Probe(ctx context.Context, real string, mtime time.Time, size 
 					continue
 				}
 				if mi.Video == nil {
-					mi.Video = &VideoStream{Codec: st.CodecName, Width: st.Width, Height: st.Height, FPS: parseRate(st.AvgFrameRate)}
+					mi.Video = &VideoStream{Codec: st.CodecName, Width: st.Width, Height: st.Height, FPS: parseRate(st.AvgFrameRate),
+						index: st.Index, pixFmt: st.PixFmt, profile: st.Profile}
 				}
 			case "audio":
+				ast, err := strconv.ParseFloat(st.StartTime, 64)
+				if err != nil {
+					ast = math.NaN()
+				}
 				mi.Audio = append(mi.Audio, AudioStream{Index: len(mi.Audio), Codec: st.CodecName, Channels: st.Channels,
-					Language: st.Tags["language"], Title: st.Tags["title"]})
+					Language: st.Tags["language"], Title: st.Tags["title"], startTime: ast})
 			case "subtitle":
 				mi.Subtitles = append(mi.Subtitles, SubtitleStream{Index: len(mi.Subtitles), Codec: st.CodecName,
 					Language: st.Tags["language"], Title: st.Tags["title"]})
+			}
+		}
+		if mi.Duration <= 0 {
+			// Some containers (raw streams, broken indexes) only report per-stream durations.
+			for _, st := range po.Streams {
+				if d, err := strconv.ParseFloat(st.Duration, 64); err == nil && d > mi.Duration {
+					mi.Duration = d
+				}
 			}
 		}
 		mi.DirectPlay = directPlayable(mi)
@@ -190,31 +219,63 @@ func parseRate(r string) float64 {
 	return float64(int(n/d*100+0.5)) / 100
 }
 
-// directPlayable approximates what mainstream browsers decode natively.
+// directPlayable approximates what mainstream browsers (Chrome, Firefox,
+// Safari) all decode natively through a plain <video>/<audio> element.
 func directPlayable(mi *MediaInfo) bool {
-	container := false
+	var mp4, matroska, other bool
 	for _, f := range strings.Split(mi.Format, ",") {
 		switch f {
-		case "mp4", "mov", "m4a", "webm", "mp3", "ogg", "flac", "wav", "aac":
-			container = true
+		case "mp4", "mov", "m4a":
+			mp4 = true
+		case "matroska", "webm":
+			// ffprobe reports "matroska,webm" for both .mkv and .webm; only
+			// WebM-legal codecs (checked below) make it playable.
+			matroska = true
+		case "mp3", "ogg", "flac", "wav", "aac":
+			other = true
 		}
 	}
-	if !container {
+	if !mp4 && !matroska && !other {
 		return false
 	}
 	if mi.Video != nil {
 		switch mi.Video.Codec {
-		case "h264", "vp8", "vp9", "av1":
+		case "h264":
+			// 10-bit / 4:2:2 / 4:4:4 H.264 is not decodable by browsers.
+			if matroska || !browserPixFmt(mi.Video.pixFmt) || strings.Contains(mi.Video.profile, "10") ||
+				strings.Contains(mi.Video.profile, "4:4") {
+				return false
+			}
+		case "vp8", "vp9", "av1":
+			if mi.Video.codecPixFmtTooDeep() {
+				return false
+			}
 		default:
 			return false
 		}
 	}
 	if len(mi.Audio) > 0 {
 		switch mi.Audio[0].Codec {
-		case "aac", "mp3", "opus", "vorbis", "flac", "pcm_s16le", "pcm_f32le":
+		case "aac", "mp3":
+			if matroska {
+				return false
+			}
+		case "opus", "vorbis":
+			// Safari plays Opus/Vorbis in WebM/Ogg but not in MP4; treat as playable.
+		case "flac", "pcm_s16le", "pcm_f32le":
+			if matroska {
+				return false
+			}
 		default:
 			return false
 		}
 	}
 	return true
+}
+
+func browserPixFmt(f string) bool { return f == "" || f == "yuv420p" || f == "yuvj420p" }
+
+// codecPixFmtTooDeep reports pixel formats browsers won't decode for VP9/AV1 (4:4:4, 12-bit).
+func (v *VideoStream) codecPixFmtTooDeep() bool {
+	return strings.Contains(v.pixFmt, "444") || strings.Contains(v.pixFmt, "12")
 }

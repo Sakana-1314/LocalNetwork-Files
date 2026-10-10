@@ -32,6 +32,69 @@ func etag(p string, size int64, mtime time.Time) string {
 	return `"` + hex.EncodeToString(sum[:]) + `-1"`
 }
 
+// mtimeHeader is the user metadata rclone (and s3fs-style tools) use to carry
+// the original modification time as "<unix seconds>.<nanoseconds>".
+const mtimeHeader = "X-Amz-Meta-Mtime"
+
+func formatMtime(t time.Time) string { return fmt.Sprintf("%d.%09d", t.Unix(), t.Nanosecond()) }
+
+func parseMtime(v string) (time.Time, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return time.Time{}, false
+	}
+	sec, frac, _ := strings.Cut(v, ".")
+	n, err := strconv.ParseInt(sec, 10, 64)
+	if err != nil || n < 0 {
+		return time.Time{}, false
+	}
+	if frac == "" && n > 1e12 { // milliseconds
+		return time.UnixMilli(n), true
+	}
+	var ns int64
+	if frac != "" {
+		frac = (frac + "000000000")[:9]
+		if ns, err = strconv.ParseInt(frac, 10, 64); err != nil {
+			return time.Time{}, false
+		}
+	}
+	return time.Unix(n, ns), true
+}
+
+// applyMtime sets the file's modification time from client metadata, so tools
+// that compare modification times (rclone sync) don't re-upload unchanged files.
+func applyMtime(q *request, vp, v string) {
+	t, ok := parseMtime(v)
+	if !ok {
+		return
+	}
+	if l, err := q.fs.Locate(vp); err == nil && l.Root != nil && l.Root.Writable && l.Rel != "" {
+		os.Chtimes(l.Real, time.Now(), t)
+	}
+}
+
+// pruneEmptyParents removes directories left empty by deleting key, up to
+// (not including) the bucket root, matching S3 where prefixes vanish with
+// their last object. os.Remove only succeeds on empty directories.
+func pruneEmptyParents(q *request, key string) {
+	dir := key
+	for {
+		i := strings.LastIndex(strings.TrimSuffix(dir, "/"), "/")
+		if i < 0 {
+			return
+		}
+		dir = dir[:i]
+		l, err := q.fs.Locate(vpath(q.bucket, dir))
+		if err != nil || l.Root == nil || l.Rel == "" || !l.Root.Writable {
+			return
+		}
+		if os.Remove(l.Real) != nil {
+			return
+		}
+		q.fs.Changed(l)
+	}
+}
+
 // ---------- buckets ----------
 
 func (s *Server) listBuckets(q *request) {
@@ -65,7 +128,10 @@ type listEntry struct {
 	mtime    time.Time
 }
 
-func (s *Server) collect(q *request, prefix, delimiter string) ([]listEntry, error) {
+// collect gathers the candidate entries for a listing. With delimiter "/" only
+// one directory is read; otherwise the subtree below the prefix is walked,
+// skipping directories whose keys all sort at or before marker.
+func (s *Server) collect(q *request, prefix, delimiter, marker string) ([]listEntry, error) {
 	dirPart := ""
 	if i := strings.LastIndex(prefix, "/"); i >= 0 {
 		dirPart = prefix[:i+1]
@@ -104,11 +170,26 @@ func (s *Server) collect(q *request, prefix, delimiter string) ([]listEntry, err
 			}
 			return nil
 		}
-		if strings.HasPrefix(de.Name(), vfs.TempPrefix) || de.IsDir() || de.Type()&fs.ModeSymlink != 0 {
+		if strings.HasPrefix(de.Name(), vfs.TempPrefix) || de.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 		rel, _ := filepath.Rel(rootLoc.Real, p)
 		k := filepath.ToSlash(rel)
+		if de.IsDir() {
+			if p == loc.Real {
+				return nil
+			}
+			// Every key below has the form "k/...": skip the subtree when it cannot
+			// match the prefix or lies entirely at/before the marker.
+			dk := k + "/"
+			if !strings.HasPrefix(dk, prefix) && !strings.HasPrefix(prefix, dk) {
+				return fs.SkipDir
+			}
+			if marker != "" && dk < marker && !strings.HasPrefix(marker, dk) {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if !strings.HasPrefix(k, prefix) {
 			return nil
 		}
@@ -164,7 +245,7 @@ func (s *Server) listObjects(q *request) {
 		}
 	}
 
-	all, err := s.collect(q, prefix, delimiter)
+	all, err := s.collect(q, prefix, delimiter, marker)
 	if err != nil {
 		writeErr(q.w, q.r, err)
 		return
@@ -190,7 +271,7 @@ func (s *Server) listObjects(q *request) {
 			continue
 		}
 		if count >= maxKeys {
-			truncated = true
+			truncated = maxKeys > 0
 			break
 		}
 		count++
@@ -222,8 +303,8 @@ func (s *Server) listObjects(q *request) {
 			EncodingType          string `xml:",omitempty"`
 			Contents              []xmlObject
 			CommonPrefixes        []xmlPrefix
-		}{NS: s3NS, Name: q.bucket, Prefix: encodeKey(q, prefix), Delimiter: delimiter, MaxKeys: maxKeys, KeyCount: count,
-			IsTruncated: truncated, ContinuationToken: qs.Get("continuation-token"), StartAfter: qs.Get("start-after"),
+		}{NS: s3NS, Name: q.bucket, Prefix: encodeKey(q, prefix), Delimiter: encodeKey(q, delimiter), MaxKeys: maxKeys, KeyCount: count,
+			IsTruncated: truncated, ContinuationToken: qs.Get("continuation-token"), StartAfter: encodeKey(q, qs.Get("start-after")),
 			EncodingType: encType, Contents: contents, CommonPrefixes: prefixes}
 		if truncated {
 			res.NextContinuationToken = base64.RawURLEncoding.EncodeToString([]byte(last))
@@ -244,7 +325,7 @@ func (s *Server) listObjects(q *request) {
 		EncodingType   string `xml:",omitempty"`
 		Contents       []xmlObject
 		CommonPrefixes []xmlPrefix
-	}{NS: s3NS, Name: q.bucket, Prefix: encodeKey(q, prefix), Marker: marker, Delimiter: delimiter, MaxKeys: maxKeys,
+	}{NS: s3NS, Name: q.bucket, Prefix: encodeKey(q, prefix), Marker: encodeKey(q, marker), Delimiter: encodeKey(q, delimiter), MaxKeys: maxKeys,
 		IsTruncated: truncated, EncodingType: encType, Contents: contents, CommonPrefixes: prefixes}
 	if truncated {
 		res.NextMarker = encodeKey(q, last)
@@ -279,6 +360,7 @@ func (s *Server) getObject(q *request) {
 	h.Set("ETag", etag(vp, fi.Size(), fi.ModTime()))
 	h.Set("Content-Type", vfs.MimeOf(fi.Name(), false))
 	h.Set("Accept-Ranges", "bytes")
+	h.Set(mtimeHeader, formatMtime(fi.ModTime()))
 	if v := q.r.URL.Query().Get("response-content-type"); v != "" {
 		h.Set("Content-Type", v)
 	}
@@ -312,6 +394,7 @@ func (s *Server) putObject(q *request) {
 		writeErr(q.w, q.r, err)
 		return
 	}
+	applyMtime(q, vp, q.r.Header.Get(mtimeHeader))
 	q.w.Header().Set("ETag", `"`+hex.EncodeToString(h.Sum(nil))+`"`)
 	q.w.WriteHeader(http.StatusOK)
 }
@@ -324,7 +407,7 @@ func parseCopySource(v string) (string, string, error) {
 	}
 	dec = strings.TrimPrefix(dec, "/")
 	b, k, ok := strings.Cut(dec, "/")
-	if !ok || b == "" || k == "" {
+	if !ok || b == "" || k == "" || !validKey(k) {
 		return "", "", errors.New("invalid copy source")
 	}
 	return b, k, nil
@@ -334,6 +417,10 @@ func (s *Server) copyObject(q *request) {
 	sb, sk, err := parseCopySource(q.r.Header.Get("X-Amz-Copy-Source"))
 	if err != nil {
 		writeErr(q.w, q.r, errInvalidArgument)
+		return
+	}
+	if q.fs.Root(sb) == nil {
+		writeErr(q.w, q.r, errNoSuchBucket)
 		return
 	}
 	src, dst := vpath(sb, sk), vpath(q.bucket, q.key)
@@ -346,6 +433,10 @@ func (s *Server) copyObject(q *request) {
 			writeErr(q.w, q.r, err)
 			return
 		}
+	}
+	if strings.EqualFold(q.r.Header.Get("X-Amz-Metadata-Directive"), "REPLACE") {
+		// rclone sets modification times with a self-copy that replaces metadata.
+		applyMtime(q, dst, q.r.Header.Get(mtimeHeader))
 	}
 	e, err := q.fs.Stat(dst)
 	if err != nil {
@@ -379,7 +470,11 @@ func (s *Server) removeKey(q *request, key string) error {
 			return err
 		}
 	}
-	return q.fs.Remove(vp)
+	if err := q.fs.Remove(vp); err != nil {
+		return err
+	}
+	pruneEmptyParents(q, key)
+	return nil
 }
 
 func (s *Server) deleteObject(q *request) {

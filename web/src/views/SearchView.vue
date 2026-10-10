@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NEmpty, NIcon, NInput, NSkeleton, NTabPane, NTabs, NTag, useThemeVars } from 'naive-ui'
+import { NAlert, NEmpty, NIcon, NInput, NSkeleton, NTab, NTabs, NTag, useThemeVars } from 'naive-ui'
 import { CloseCircle, FolderOpenOutline, SearchOutline } from '@vicons/ionicons5'
 import type { Kind, SearchResponse, SearchResult } from '@/api/types'
 import { fsApi } from '@/api/fs'
@@ -135,7 +135,7 @@ const summary = computed(() => {
 
     <div class="filters">
       <n-tabs v-model:value="kind" type="segment" size="small" class="kind-tabs">
-        <n-tab-pane v-for="t in tabs" :key="t.key" :name="t.key" :tab="t.label" />
+        <n-tab v-for="t in tabs" :key="t.key" :name="t.key">{{ t.label }}</n-tab>
       </n-tabs>
       <n-tag v-if="scope !== '/'" closable round @close="scope = '/'">
         <template #icon><n-icon :component="FolderOpenOutline" /></template>

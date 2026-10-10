@@ -108,28 +108,38 @@ func matchOne(orig, lower []rune, p []rune, wantPos bool) (int, []int, bool) {
 	if m > n {
 		return 0, nil, false
 	}
-	// Exact substring: score directly.
-	if idx := indexRunes(lower, p); idx >= 0 {
-		score := m*scoreMatch + (m-1)*bonusConsecutive + bonusSubstring
-		prev := clsSep
-		if idx > 0 {
-			prev = classOf(orig[idx-1])
-		}
-		score += boundaryBonus(prev, classOf(orig[idx])) * 2
-		if idx == 0 {
-			score += bonusPrefix + bonusFirstChar
-			if m == n {
-				score += bonusExact
+	// Exact substring: score the best occurrence (a later one may sit on a
+	// word boundary, e.g. "port" in "export_port").
+	if idx := indexRunes(lower, p, 0); idx >= 0 {
+		best, bestIdx := -1, idx
+		for ; idx >= 0; idx = indexRunes(lower, p, idx+1) {
+			// The base is at least what any scattered match of the same
+			// pattern can reach (every char on a boundary and consecutive),
+			// so a contiguous hit always outranks a subsequence hit.
+			score := m*(scoreMatch+bonusBoundary+bonusConsecutive) + bonusSubstring
+			prev := clsSep
+			if idx > 0 {
+				prev = classOf(orig[idx-1])
+			}
+			score += boundaryBonus(prev, classOf(orig[idx])) * 2
+			if idx == 0 {
+				score += bonusPrefix + bonusFirstChar
+				if m == n {
+					score += bonusExact
+				}
+			}
+			if score > best {
+				best, bestIdx = score, idx
 			}
 		}
 		var pos []int
 		if wantPos {
 			pos = make([]int, m)
 			for i := range pos {
-				pos[i] = idx + i
+				pos[i] = bestIdx + i
 			}
 		}
-		return score, pos, true
+		return best, pos, true
 	}
 	// Forward pass: first end position of a greedy subsequence match.
 	pi, end := 0, -1
@@ -193,9 +203,9 @@ func matchOne(orig, lower []rune, p []rune, wantPos bool) (int, []int, bool) {
 	return score, pos, pi == m
 }
 
-func indexRunes(s, sub []rune) int {
+func indexRunes(s, sub []rune, from int) int {
 outer:
-	for i := 0; i+len(sub) <= len(s); i++ {
+	for i := from; i+len(sub) <= len(s); i++ {
 		for j := range sub {
 			if s[i+j] != sub[j] {
 				continue outer

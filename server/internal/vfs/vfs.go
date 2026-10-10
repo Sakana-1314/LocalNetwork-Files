@@ -133,7 +133,7 @@ func contained(root, real string) error {
 const maxLinkDepth = 40
 
 func containedDepth(root, real string, depth int) error {
-	if depth > maxLinkDepth {
+	if depth > maxLinkDepth || !within(root, real) {
 		return ErrPermission
 	}
 	p := real
@@ -601,17 +601,15 @@ func (f *FS) Copy(src, dst string, overwrite bool) error {
 		return err
 	}
 	// Copy what the source resolves to (Locate guarantees it stays inside its root).
-	src := l.Real
-	if rp, err := filepath.EvalSymlinks(src); err == nil {
-		src = rp
-	} else {
+	srcReal, err := filepath.EvalSymlinks(l.Real)
+	if err != nil {
 		return mapErr(err)
 	}
 	dstR := resolved(d.Real)
-	if d.Real == l.Real || within(l.Real, d.Real) || within(src, dstR) {
+	if d.Real == l.Real || within(l.Real, d.Real) || within(srcReal, dstR) {
 		return fmt.Errorf("%w: 不能复制到自身或其子目录中", ErrInvalid)
 	}
-	if within(d.Real, l.Real) || within(dstR, src) {
+	if within(d.Real, l.Real) || within(dstR, srcReal) {
 		return fmt.Errorf("%w: 不能覆盖包含源的目录", ErrInvalid)
 	}
 	if _, err := os.Lstat(d.Real); err == nil {
@@ -625,7 +623,7 @@ func (f *FS) Copy(src, dst string, overwrite bool) error {
 	if err := os.MkdirAll(filepath.Dir(d.Real), 0o755); err != nil {
 		return mapErr(err)
 	}
-	if err := copyTree(src, d.Real); err != nil {
+	if err := copyTree(srcReal, d.Real); err != nil {
 		os.RemoveAll(d.Real)
 		return err
 	}

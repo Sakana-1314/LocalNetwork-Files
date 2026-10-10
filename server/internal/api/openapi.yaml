@@ -55,6 +55,7 @@ paths:
     post:
       tags: [auth]
       summary: 退出登录（清除 Cookie）
+      security: []
       responses:
         "204": { description: OK }
   /auth/me:
@@ -757,11 +758,12 @@ components:
         port: { type: integer }
         path: { type: string, description: WebDAV 路径前缀，如 /dav }
         region: { type: string, description: S3 区域 }
-        error: { type: string }
+        error: { type: string, description: 服务启动错误（仅管理员可见） }
         shares:
           type: object
           additionalProperties: { type: string }
           description: 仅 SMB：当前用户的挂载名 → SMB 共享名（同名目录指向不同路径时共享名会带用户名后缀）
+        account: { type: string, description: 仅 SMB：当前用户的 SMB 登录名（配置了用户名前缀时与网页用户名不同） }
     Settings:
       type: object
       properties:
