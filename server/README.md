@@ -48,6 +48,6 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 
 ## 部署文件
 
-- `Dockerfile`：多阶段构建（node → golang → debian-slim + ffmpeg + samba），构建上下文为仓库根目录：`docker build -f server/Dockerfile .`；忽略规则在 `Dockerfile.dockerignore`。
+- `Dockerfile`：多阶段构建（node:alpine → golang:alpine 交叉编译 → alpine + ffmpeg + Samba），构建上下文为仓库根目录：`docker build -f server/Dockerfile .`；忽略规则在 `Dockerfile.dockerignore`。基础镜像选 Alpine 是为了避开 Debian 版 ffmpeg 带入的 Mesa/LLVM 依赖链（代价是 Alpine 的 ffmpeg 不含 NVENC）；由 `.github/workflows/docker.yml` 构建并推送到 ghcr.io。
 - `deploy/config.docker.yaml`：镜像内置配置。
 - `deploy/lnfiles.service`：systemd unit。

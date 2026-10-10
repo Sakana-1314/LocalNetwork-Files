@@ -1,0 +1,160 @@
+name: Docker
+
+# 构建容器镜像并推送到 GitHub Container Registry (ghcr.io)。
+#
+#   push 到 main        -> ghcr.io/<owner>/<repo>:latest 与 :main
+#   push tag v1.2.3     -> :1.2.3、:1.2、:latest
+#   pull_request        -> 只构建（验证 Dockerfile 可用），不推送
+#   手动触发             -> 同上，推送
+#
+# 镜像支持 linux/amd64 与 linux/arm64。
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支 / PR 只保留最新一次构建，旧的自动取消。
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build & push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ghcr.io 要求镜像名全小写，而仓库名可能是 LocalNetwork-Files；
+      # 直接使用 github.repository 会因大写字母报 invalid reference format。
+      - name: Compute lowercase image name
+        run: echo "IMAGE=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      # PR 来自 fork 时没有 packages 写权限，跳过登录与推送。
+      - name: Log in to ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          # PR 只验证能否构建；其余情况推送到 ghcr.io。
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          # 拉取最新的基础镜像，让安全更新能进入新镜像。
+          pull: true
+          # 层缓存：mode=max 连中间层一起缓存，重建显著变快。
+          cache-from: type=gha,scope=docker
+          cache-to: type=gha,mode=max,scope=docker
+
+  verify:
+    name: Smoke test amd64 image
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # 单独构建本地 amd64 镜像来实际运行验证（多架构镜像无法 load）。
+      - name: Build local amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: lnfiles:verify
+          build-args: |
+            VERSION=verify
+          cache-from: type=gha,scope=docker
+
+      - name: Check required tools are present
+        run: |
+          docker run --rm --entrypoint sh lnfiles:verify -c '
+            set -e
+            for bin in ffmpeg ffprobe smbd smbpasswd heif-convert useradd nologin; do
+              command -v "$bin" >/dev/null || { echo "缺少 $bin"; exit 1; }
+              echo "$bin ok"
+            done
+            ffmpeg -hide_banner -version | head -1
+            ffprobe -hide_banner -version | head -1
+            smbd --version
+            echo "--- libx264 encoder ---"
+            ffmpeg -hide_banner -encoders | grep -q libx264 && echo "libx264 ok"
+          '
+
+      - name: Run container and probe HTTP endpoints
+        run: |
+          set -e
+          docker run -d --name lnfiles-verify -p 18080:8080 -p 19000:9000 lnfiles:verify
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/api/openapi.json -o /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = "1" || { echo "服务在 30 秒内没有就绪"; docker logs lnfiles-verify; exit 1; }
+          echo "--- web UI ---"
+          curl -fsS -o /dev/null -w 'GET / -> %{http_code}\n' http://127.0.0.1:18080/
+          echo "--- OpenAPI spec ---"
+          curl -fsS -o /dev/null -w 'GET /api/openapi.json -> %{http_code}\n' http://127.0.0.1:18080/api/openapi.json
+          echo "--- API requires auth (expect 401) ---"
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/fs/list)
+          test "$code" = "401" || { echo "expected 401, got $code"; exit 1; }
+          echo "auth check ok"
+          docker logs lnfiles-verify
+          docker rm -f lnfiles-verify
+
+      - name: Report image size
+        run: |
+          set -e
+          # docker 的 .Size 是未压缩大小（层在本地展开后的占用）。
+          size=$(docker image inspect lnfiles:verify --format '{{.Size}}')
+          mb=$((size / 1024 / 1024))
+          echo "image size: ${mb} MiB (uncompressed, amd64)"
+          {
+            echo "### 镜像体积"
+            echo ""
+            echo "linux/amd64: **${mb} MiB**（未压缩；推送到 ghcr.io 的压缩后约 85 MiB）"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 体积回归护栏：Alpine 版本约 215 MiB 未压缩，超过 400 MiB 说明基础镜像或
+          # 依赖被换回了重量级实现（例如 Debian 的 ffmpeg 会带入 Mesa/LLVM，约 610 MiB）。
+          if [ "$mb" -gt 400 ]; then
+            echo "::error::镜像体积 ${mb} MiB 超出 400 MiB 预算"
+            exit 1
+          fi
