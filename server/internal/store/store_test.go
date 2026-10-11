@@ -330,7 +330,7 @@ func TestSettingsNormalize(t *testing.T) {
 	}
 	var z Settings
 	z.Normalize()
-	if z.Cache != d.Cache || z.Transcode != d.Transcode || z.Services.S3Port != 9000 || z.Services.S3Region != "us-east-1" ||
+	if z.Cache != d.Cache || z.Transcode != d.Transcode || z.Services.S3Port != 9000 ||
 		z.Services.SMBWorkgroup != "WORKGROUP" || z.Search.ReindexIntervalMinutes != 0 {
 		t.Fatalf("zero normalized: %+v", z)
 	}

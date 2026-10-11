@@ -32,7 +32,6 @@ type ServiceSettings struct {
 	WebDAVEnabled bool   `json:"webdav_enabled"`
 	S3Enabled     bool   `json:"s3_enabled"`
 	S3Port        int    `json:"s3_port"`
-	S3Region      string `json:"s3_region"`
 	SMBEnabled    bool   `json:"smb_enabled"`
 	SMBPort       int    `json:"smb_port"`
 	SMBWorkgroup  string `json:"smb_workgroup"`
@@ -58,7 +57,6 @@ func DefaultSettings() Settings {
 			WebDAVEnabled: true,
 			S3Enabled:     true,
 			S3Port:        9000,
-			S3Region:      "us-east-1",
 			SMBEnabled:    false,
 			SMBPort:       445,
 			SMBWorkgroup:  "WORKGROUP",
@@ -93,9 +91,6 @@ func (s *Settings) Normalize() {
 	clamp(&s.Search.ReindexIntervalMinutes, 0, 7*24*60, d.Search.ReindexIntervalMinutes)
 	clamp(&s.Services.S3Port, 1, 65535, d.Services.S3Port)
 	clamp(&s.Services.SMBPort, 1, 65535, d.Services.SMBPort)
-	if s.Services.S3Region == "" {
-		s.Services.S3Region = d.Services.S3Region
-	}
 	if s.Services.SMBWorkgroup == "" {
 		s.Services.SMBWorkgroup = d.Services.SMBWorkgroup
 	}

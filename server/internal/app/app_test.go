@@ -1059,9 +1059,13 @@ func TestAdminSettingsCacheSearch(t *testing.T) {
 	s = decode[obj](t, rec)
 	tr, sv := s["transcode"].(obj), s["services"].(obj)
 	if tr["preset"] != "veryfast" || tr["max_sessions"] != float64(2) || tr["encoder"] != "h264_nvenc" ||
-		sv["s3_port"] != float64(9000) || sv["s3_region"] != "us-east-1" || sv["s3_enabled"] != false ||
+		sv["s3_port"] != float64(9000) || sv["s3_enabled"] != false ||
 		s["cache"].(obj)["thumb_ttl_hours"] != float64(48) {
 		t.Fatalf("normalized settings: %v", s)
+	}
+	// S3 区域已下线：请求里带 s3_region 会被忽略，响应里也不再出现该字段。
+	if _, ok := sv["s3_region"]; ok {
+		t.Fatalf("settings must not expose s3_region: %v", sv)
 	}
 	if got := decode[obj](t, e.do("GET", "/api/v1/admin/settings", e.admin, nil)); fmt.Sprint(got) != fmt.Sprint(s) {
 		t.Fatalf("settings not persisted: %v vs %v", got, s)
@@ -1173,9 +1177,11 @@ func TestSystemInfo(t *testing.T) {
 	if info.Services["webdav"]["path"] != "/dav" || info.Services["webdav"]["enabled"] != true {
 		t.Fatalf("webdav: %v", info.Services["webdav"])
 	}
-	if info.Services["s3"]["region"] != "us-east-1" || info.Services["s3"]["enabled"] != false ||
-		info.Services["s3"]["port"] != float64(9000) {
+	if info.Services["s3"]["enabled"] != false || info.Services["s3"]["port"] != float64(9000) {
 		t.Fatalf("s3: %v", info.Services["s3"])
+	}
+	if _, ok := info.Services["s3"]["region"]; ok {
+		t.Fatalf("system info must not expose an s3 region: %v", info.Services["s3"])
 	}
 	if info.Services["smb"]["enabled"] != false || info.Services["smb"]["port"] != float64(445) {
 		t.Fatalf("smb: %v", info.Services["smb"])

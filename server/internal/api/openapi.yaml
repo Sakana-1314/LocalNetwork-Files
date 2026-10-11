@@ -768,7 +768,6 @@ components:
         running: { type: boolean }
         port: { type: integer }
         path: { type: string, description: WebDAV 路径前缀，如 /dav }
-        region: { type: string, description: S3 区域 }
         error: { type: string, description: 服务启动错误（仅管理员可见） }
         shares:
           type: object
@@ -804,7 +803,6 @@ components:
             webdav_enabled: { type: boolean }
             s3_enabled: { type: boolean }
             s3_port: { type: integer }
-            s3_region: { type: string }
             smb_enabled: { type: boolean }
             smb_port: { type: integer }
             smb_workgroup: { type: string }

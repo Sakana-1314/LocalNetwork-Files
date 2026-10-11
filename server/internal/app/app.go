@@ -70,7 +70,7 @@ func New(cfg *config.Config, version string) (*App, error) {
 	}
 	a.search = search.New(st)
 	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return st.Settings().Services.WebDAVEnabled })
-	a.s3 = s3.New(au, a.newFS, func() string { return st.Settings().Services.S3Region }, cfg.DataDir)
+	a.s3 = s3.New(au, a.newFS, cfg.DataDir)
 	a.s3.BindHost, _ = splitPort(cfg.Listen)
 	a.smb = smb.New(cfg.SMB, cfg.DataDir, st)
 	au.OnPassword = a.smb.SyncPassword
@@ -107,7 +107,7 @@ func (a *App) Status(userID uint) map[string]api.ServiceStatus {
 	_, port := splitPort(a.cfg.Listen)
 	out["webdav"] = api.ServiceStatus{Enabled: s.WebDAVEnabled, Running: s.WebDAVEnabled, Port: port, Path: webdav.Prefix}
 	running, s3port, err := a.s3.Status()
-	st := api.ServiceStatus{Enabled: s.S3Enabled, Running: running, Port: s.S3Port, Region: s.S3Region}
+	st := api.ServiceStatus{Enabled: s.S3Enabled, Running: running, Port: s.S3Port}
 	if running {
 		st.Port = s3port
 	}

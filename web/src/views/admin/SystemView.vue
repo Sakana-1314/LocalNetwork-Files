@@ -56,7 +56,6 @@ function defaults(s: Partial<Settings> | null | undefined): Settings {
       webdav_enabled: false,
       s3_enabled: false,
       s3_port: 9000,
-      s3_region: 'us-east-1',
       smb_enabled: false,
       smb_port: 445,
       smb_workgroup: 'WORKGROUP',
@@ -249,9 +248,6 @@ onMounted(async () => {
               <n-grid-item />
               <n-form-item-gi label="S3 端口">
                 <n-input-number v-model:value="settings.services.s3_port" :min="1" :max="65535" :show-button="false" style="width: 100%" />
-              </n-form-item-gi>
-              <n-form-item-gi label="S3 区域">
-                <n-input v-model:value="settings.services.s3_region" placeholder="us-east-1" />
               </n-form-item-gi>
             </n-grid>
 
