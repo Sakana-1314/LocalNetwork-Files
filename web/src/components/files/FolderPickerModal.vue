@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
-import { NButton, NEmpty, NIcon, NModal, NSpace, NSpin, NTag, NTree, type TreeOption } from 'naive-ui'
+import { NButton, NEmpty, NIcon, NModal, NSpace, NSpin, NTag, NTree, useThemeVars, type TreeOption } from 'naive-ui'
 import { Folder, ServerOutline } from '@vicons/ionicons5'
 import { fsApi } from '@/api/fs'
 import { isAncestor } from '@/utils/path'
@@ -18,6 +18,7 @@ const props = withDefaults(
 )
 const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ confirm: [path: string] }>()
+const vars = useThemeVars()
 
 interface DirNode extends TreeOption {
   key: string
@@ -103,7 +104,7 @@ const hint = computed(() => {
 
 function renderPrefix({ option }: { option: TreeOption }) {
   const n = option as DirNode
-  return h(NIcon, { color: n.depth === 0 ? '#18a058' : '#f2b230', size: 18 }, { default: () => h(n.depth === 0 ? ServerOutline : Folder) })
+  return h(NIcon, { color: n.depth === 0 ? vars.value.primaryColor : '#f2b230', size: 18 }, { default: () => h(n.depth === 0 ? ServerOutline : Folder) })
 }
 
 function renderSuffix({ option }: { option: TreeOption }) {
