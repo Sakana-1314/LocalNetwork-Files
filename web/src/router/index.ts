@@ -45,7 +45,7 @@ const routes: RouteRecordRaw[] = [
         path: 'api-docs',
         name: 'api-docs',
         component: () => import('@/views/ApiDocsView.vue'),
-        meta: { title: 'API 文档' },
+        meta: { title: 'API 文档', fullHeight: true },
       },
       {
         path: 'admin/users',
