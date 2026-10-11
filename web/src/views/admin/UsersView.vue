@@ -9,13 +9,13 @@ import {
   NEmpty,
   NForm,
   NFormItem,
+  NFormItemGi,
+  NGrid,
   NIcon,
   NInput,
   NPopconfirm,
-  NRadioButton,
-  NRadioGroup,
+  NSelect,
   NSpace,
-  NSwitch,
   NTag,
   NTooltip,
   useMessage,
@@ -55,6 +55,19 @@ const drawerOpen = ref(false)
 const editing = ref<User | null>(null)
 const saving = ref(false)
 const formRef = ref<FormInst | null>(null)
+
+const ROLE_OPTIONS = [
+  { label: '普通用户', value: 'user' as Role },
+  { label: '管理员', value: 'admin' as Role },
+]
+const STATUS_OPTIONS = [
+  { label: '正常', value: 'active' },
+  { label: '已禁用', value: 'disabled' },
+]
+const PERMISSION_OPTIONS = [
+  { label: '读写', value: 'rw' },
+  { label: '只读', value: 'ro' },
+]
 
 interface FormModel {
   username: string
@@ -307,17 +320,19 @@ const columns = computed<DataTableColumns<User>>(() => {
               :input-props="{ autocomplete: 'new-password' }"
             />
           </n-form-item>
-          <n-space :size="32">
-            <n-form-item label="角色">
-              <n-radio-group v-model:value="form.role">
-                <n-radio-button value="user">普通用户</n-radio-button>
-                <n-radio-button value="admin">管理员</n-radio-button>
-              </n-radio-group>
-            </n-form-item>
-            <n-form-item label="禁用账户">
-              <n-switch v-model:value="form.disabled" :disabled="editing?.id === auth.user?.id" />
-            </n-form-item>
-          </n-space>
+          <n-grid cols="1 s:2" responsive="screen" :x-gap="16" :y-gap="2">
+            <n-form-item-gi label="角色">
+              <n-select v-model:value="form.role" :options="ROLE_OPTIONS" />
+            </n-form-item-gi>
+            <n-form-item-gi label="账户状态">
+              <n-select
+                :value="form.disabled ? 'disabled' : 'active'"
+                :options="STATUS_OPTIONS"
+                :disabled="editing?.id === auth.user?.id"
+                @update:value="(v: string) => (form.disabled = v === 'disabled')"
+              />
+            </n-form-item-gi>
+          </n-grid>
 
           <div class="mounts-head">
             <span class="label">授权目录</span>
@@ -339,10 +354,12 @@ const columns = computed<DataTableColumns<User>>(() => {
               </template>
             </n-input>
             <div class="m-actions">
-              <n-switch v-model:value="m.writable" size="small">
-                <template #checked>可写</template>
-                <template #unchecked>只读</template>
-              </n-switch>
+              <n-select
+                class="m-perm"
+                :value="m.writable ? 'rw' : 'ro'"
+                :options="PERMISSION_OPTIONS"
+                @update:value="(v: string) => (m.writable = v === 'rw')"
+              />
               <n-button quaternary circle size="small" type="error" @click="removeMount(i)">
                 <template #icon><n-icon :component="TrashOutline" /></template>
               </n-button>
@@ -397,6 +414,9 @@ const columns = computed<DataTableColumns<User>>(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.m-perm {
+  width: 96px;
 }
 @media (max-width: 560px) {
   .mount-row {
