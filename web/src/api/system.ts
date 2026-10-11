@@ -17,8 +17,4 @@ export const systemApi = {
       },
     }
   },
-  /** 公开接口：OpenAPI 文档（JSON），不在 /api/v1 之下 */
-  openapi(): Promise<unknown> {
-    return http.get<unknown>('/api/openapi.json', { silent: true })
-  },
 }
