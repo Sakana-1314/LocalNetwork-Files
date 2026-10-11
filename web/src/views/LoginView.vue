@@ -93,7 +93,7 @@ async function submit(): Promise<void> {
   justify-content: center;
   padding: 24px 16px;
   background:
-    radial-gradient(900px 500px at 10% -10%, rgba(24, 160, 88, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 10% -10%, rgba(32, 128, 240, 0.18), transparent 60%),
     radial-gradient(800px 500px at 110% 110%, rgba(32, 128, 240, 0.15), transparent 60%);
 }
 .theme-btn {

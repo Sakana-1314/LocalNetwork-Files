@@ -12,6 +12,7 @@ import {
   DocumentAttachOutline,
 } from '@vicons/ionicons5'
 import type { Entry, Kind } from '@/api/types'
+import { BRAND } from '@/theme'
 import { extName } from './path'
 
 export interface KindMeta {
@@ -38,7 +39,7 @@ const CODE_EXT = new Set([
 ])
 
 export function entryIcon(entry: Pick<Entry, 'kind' | 'name' | 'path'>, isMount = false): KindMeta {
-  if (isMount) return { ...KIND_META.dir, icon: ServerOutline, color: '#18a058' }
+  if (isMount) return { ...KIND_META.dir, icon: ServerOutline, color: BRAND.light.primary }
   if (entry.kind === 'text' && CODE_EXT.has(extName(entry.name))) {
     return { ...KIND_META.text, icon: CodeSlashOutline, color: '#0ea5e9' }
   }

@@ -94,7 +94,7 @@ const shown = computed(() => {
               <template v-if="item.status === 'uploading'">
                 {{ percent(item) }}%<template v-if="item.speed > 0"> · {{ formatSize(item.speed) }}/s</template>
               </template>
-              <n-icon v-else-if="item.status === 'done'" :component="CheckmarkCircle" color="#18a058" size="16" />
+              <n-icon v-else-if="item.status === 'done'" :component="CheckmarkCircle" :color="vars.successColor" size="16" />
               <n-tooltip v-else-if="item.status === 'error'">
                 <template #trigger>
                   <span class="err"><n-icon :component="AlertCircleOutline" size="14" /> 失败</span>

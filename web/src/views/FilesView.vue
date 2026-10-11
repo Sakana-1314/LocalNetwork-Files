@@ -13,6 +13,7 @@ import {
   NTooltip,
   useDialog,
   useMessage,
+  useThemeVars,
   type DropdownOption,
 } from 'naive-ui'
 import {
@@ -66,6 +67,7 @@ const message = useMessage()
 const dialog = useDialog()
 const isMobile = useIsMobile()
 const copy = useCopy()
+const vars = useThemeVars()
 
 // ---------- 路径与加载 ----------
 const currentPath = computed(() => {
@@ -657,6 +659,7 @@ const emptyText = computed(() => {
 <template>
   <div
     class="files-view"
+    :style="{ '--brand-primary': vars.primaryColor }"
     @dragenter="onDragEnter"
     @dragover="onDragOver"
     @dragleave="onDragLeave"
@@ -956,9 +959,9 @@ const emptyText = computed(() => {
   position: absolute;
   inset: 8px;
   z-index: 20;
-  border: 2px dashed #18a058;
+  border: 2px dashed var(--brand-primary);
   border-radius: 12px;
-  background: rgba(24, 160, 88, 0.08);
+  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -975,7 +978,7 @@ const emptyText = computed(() => {
   align-items: center;
   gap: 8px;
   font-size: 15px;
-  color: #18a058;
+  color: var(--brand-primary);
 }
 .drop-mask.disabled .drop-box {
   color: #d03050;

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NEmpty, NIcon, NInput, NModal, NSpace, NSpin } from 'naive-ui'
+import { NButton, NEmpty, NIcon, NInput, NModal, NSpace, NSpin, useThemeVars } from 'naive-ui'
 import { ArrowUpOutline, Folder, HardwareChipOutline } from '@vicons/ionicons5'
 import { adminApi } from '@/api/admin'
 
 const props = defineProps<{ initialPath?: string }>()
 const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ confirm: [path: string] }>()
+const vars = useThemeVars()
 
 const path = ref('')
 const parent = ref('')
@@ -63,7 +64,7 @@ function confirm(): void {
       <n-spin :show="loading">
         <n-empty v-if="!loading && !dirs.length" description="没有子目录" style="padding: 40px 0" />
         <div v-for="d in dirs" :key="d" class="dir" :title="d" @click="browse(d)">
-          <n-icon :component="isRoot ? HardwareChipOutline : Folder" :color="isRoot ? '#18a058' : '#f2b230'" size="18" />
+          <n-icon :component="isRoot ? HardwareChipOutline : Folder" :color="isRoot ? vars.primaryColor : '#f2b230'" size="18" />
           <span>{{ isRoot ? d : label(d) }}</span>
         </div>
       </n-spin>

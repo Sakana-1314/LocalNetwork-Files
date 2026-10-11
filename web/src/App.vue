@@ -11,9 +11,9 @@ import {
   dateZhCN,
   useOsTheme,
   zhCN,
-  type GlobalThemeOverrides,
 } from 'naive-ui'
 import { usePrefsStore } from '@/stores/prefs'
+import { themeOverrides } from '@/theme'
 import FeedbackBridge from '@/components/common/FeedbackBridge.vue'
 
 const prefs = usePrefsStore()
@@ -21,15 +21,7 @@ const osTheme = useOsTheme()
 
 const isDark = computed(() => (prefs.theme === 'auto' ? osTheme.value === 'dark' : prefs.theme === 'dark'))
 const theme = computed(() => (isDark.value ? darkTheme : null))
-
-const overrides = computed<GlobalThemeOverrides>(() => ({
-  common: {
-    borderRadius: '6px',
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-    ...(isDark.value ? { bodyColor: '#141417' } : { bodyColor: '#f5f6f8' }),
-  },
-}))
+const overrides = computed(() => themeOverrides(isDark.value))
 </script>
 
 <template>
