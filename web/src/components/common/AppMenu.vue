@@ -31,15 +31,10 @@ const options = computed<MenuOption[]>(() => {
     { label: 'API 文档', key: 'api-docs', icon: icon(BookOutline) },
   ]
   if (auth.isAdmin) {
-    base.push({
-      type: 'group',
-      label: '管理',
-      key: 'admin',
-      children: [
-        { label: '用户管理', key: 'admin-users', icon: icon(PeopleOutline) },
-        { label: '系统设置', key: 'admin-system', icon: icon(OptionsOutline) },
-      ],
-    })
+    base.push(
+      { label: '用户管理', key: 'admin-users', icon: icon(PeopleOutline) },
+      { label: '系统设置', key: 'admin-system', icon: icon(OptionsOutline) },
+    )
   }
   return base
 })
