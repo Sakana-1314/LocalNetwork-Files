@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NAvatar,
   NButton,
   NDrawer,
   NDrawerContent,
   NDropdown,
   NIcon,
-  NInput,
   NLayout,
   NLayoutContent,
   NLayoutHeader,
@@ -18,16 +16,16 @@ import {
 } from 'naive-ui'
 import {
   ContrastOutline,
-  KeyOutline,
   LogOutOutline,
   MenuOutline,
   MoonOutline,
+  PersonCircleOutline,
   SearchOutline,
   SunnyOutline,
 } from '@vicons/ionicons5'
 import AppLogo from '@/components/common/AppLogo.vue'
 import AppMenu from '@/components/common/AppMenu.vue'
-import ChangePasswordModal from '@/components/common/ChangePasswordModal.vue'
+import AccountModal from '@/components/common/AccountModal.vue'
 import UploadQueuePanel from '@/components/files/UploadQueuePanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePrefsStore } from '@/stores/prefs'
@@ -40,8 +38,7 @@ const prefs = usePrefsStore()
 const isMobile = useIsMobile()
 
 const drawerOpen = ref(false)
-const pwdOpen = ref(false)
-const searchText = ref('')
+const accountOpen = ref(false)
 
 watch(
   () => route.fullPath,
@@ -50,13 +47,6 @@ watch(
 watch(isMobile, (m) => {
   if (!m) drawerOpen.value = false
 })
-watch(
-  () => route.query.q,
-  (q) => {
-    if (route.name === 'search') searchText.value = typeof q === 'string' ? q : ''
-  },
-  { immediate: true },
-)
 
 const title = computed(() => route.meta.title ?? '')
 
@@ -65,7 +55,7 @@ const themeLabel = computed(() =>
   prefs.theme === 'auto' ? '主题：跟随系统' : prefs.theme === 'dark' ? '主题：深色' : '主题：浅色',
 )
 
-const renderIcon = (c: typeof KeyOutline) => () => h(NIcon, null, { default: () => h(c) })
+const renderIcon = (c: Component) => () => h(NIcon, null, { default: () => h(c) })
 
 const userOptions = computed<DropdownOption[]>(() => [
   {
@@ -78,24 +68,21 @@ const userOptions = computed<DropdownOption[]>(() => [
       ]),
   },
   { key: 'd1', type: 'divider' },
-  { key: 'password', label: '修改密码', icon: renderIcon(KeyOutline) },
+  { key: 'account', label: '账号设置', icon: renderIcon(PersonCircleOutline) },
   { key: 'logout', label: '退出登录', icon: renderIcon(LogOutOutline) },
 ])
 
 async function onUserSelect(key: string): Promise<void> {
-  if (key === 'password') pwdOpen.value = true
+  if (key === 'account') accountOpen.value = true
   else if (key === 'logout') {
     await auth.logout()
     await router.replace({ name: 'login' })
   }
 }
 
-function doSearch(): void {
-  const q = searchText.value.trim()
-  void router.push({ name: 'search', query: q ? { q } : {} })
+function goSearch(): void {
+  void router.push({ name: 'search' })
 }
-
-const avatarText = computed(() => (auth.user?.username ?? '?').slice(0, 1).toUpperCase())
 </script>
 
 <template>
@@ -130,18 +117,11 @@ const avatarText = computed(() => (auth.user?.username ?? '?').slice(0, 1).toUpp
         </n-button>
         <h1 class="header-title text-ellipsis">{{ title }}</h1>
         <div class="header-spacer" />
-        <n-input
-          v-if="!isMobile"
-          v-model:value="searchText"
-          class="header-search"
-          placeholder="搜索文件… (Enter)"
-          clearable
-          round
-          @keyup.enter="doSearch"
-        >
-          <template #prefix><n-icon :component="SearchOutline" /></template>
-        </n-input>
-        <n-button v-else quaternary circle @click="router.push({ name: 'search' })">
+        <n-button v-if="!isMobile" class="header-search" quaternary @click="goSearch">
+          <template #icon><n-icon :component="SearchOutline" /></template>
+          <span class="header-search-text">搜索</span>
+        </n-button>
+        <n-button v-else quaternary circle @click="goSearch">
           <template #icon><n-icon :component="SearchOutline" /></template>
         </n-button>
         <n-tooltip>
@@ -154,7 +134,7 @@ const avatarText = computed(() => (auth.user?.username ?? '?').slice(0, 1).toUpp
         </n-tooltip>
         <n-dropdown trigger="click" :options="userOptions" placement="bottom-end" @select="onUserSelect">
           <n-button quaternary class="user-btn">
-            <n-avatar round :size="26" class="avatar">{{ avatarText }}</n-avatar>
+            <template #icon><n-icon :component="PersonCircleOutline" /></template>
             <span v-if="!isMobile" class="user-name">{{ auth.user?.username }}</span>
           </n-button>
         </n-dropdown>
@@ -170,7 +150,7 @@ const avatarText = computed(() => (auth.user?.username ?? '?').slice(0, 1).toUpp
       </n-layout-content>
     </n-layout>
 
-    <change-password-modal v-model:show="pwdOpen" />
+    <account-modal v-model:show="accountOpen" />
     <upload-queue-panel />
   </n-layout>
 </template>
@@ -193,19 +173,17 @@ const avatarText = computed(() => (auth.user?.username ?? '?').slice(0, 1).toUpp
   flex: 1;
 }
 .header-search {
-  width: 260px;
-  margin-right: 4px;
+  width: 120px;
+  justify-content: flex-start;
+}
+.header-search-text {
+  opacity: 0.65;
 }
 .user-btn {
-  padding: 0 6px;
-}
-.avatar {
-  background: #18a058;
-  color: #fff;
-  font-weight: 600;
+  padding: 0 8px;
 }
 .user-name {
-  margin-left: 8px;
+  margin-left: 1px;
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
