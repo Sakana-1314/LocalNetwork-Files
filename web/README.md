@@ -2,6 +2,8 @@
 
 Vite + Vue 3（`<script setup lang="ts">`）+ TypeScript（strict）+ Vue Router + Pinia + Naive UI。
 接口契约见 `../server/internal/api/openapi.yaml`（Base URL `/api/v1`）。
+「API 文档」页以 iframe 内嵌 Apifox 在线文档（默认 `https://local-files.apifox.cn/`，可用 `VITE_APIFOX_DOC_URL` 覆盖）；
+改动规范后用 `../server/scripts/sync-apifox.sh` 同步。
 
 ## 命令
 
@@ -22,10 +24,11 @@ src/
                 以及按 tag 划分的 auth / fs / media / tokens / system / admin 模块
   stores/       Pinia：auth（会话）、prefs（主题/视图偏好，localStorage）、uploads（上传队列，XHR 进度、并发 3）
   router/       路由与守卫（未登录跳转 /login?redirect=…，管理员路由校验，页面标题）
-  layouts/      MainLayout：可折叠侧栏（窄屏为抽屉）、顶栏搜索、主题切换、用户菜单
-  views/        Files / Search / Mount / Settings(+tabs) / ApiDocs / admin(Users, System) / Login / NotFound
+  layouts/      MainLayout：可折叠侧栏（窄屏为抽屉）、短搜索入口（点击进搜索页）、主题切换、用户菜单（账号设置 / 退出）
+  views/        Files / Search / Mount / Settings(+tabs: 外观 / 访问令牌 / S3 密钥) / ApiDocs(内嵌 Apifox) /
+                admin(Users, System) / Login / NotFound
   components/
-    common/     图标、高亮、复制块、输入弹窗、修改密码、FeedbackBridge（在 setup 外使用 message/dialog）
+    common/     图标、高亮、复制块、输入弹窗、账号设置（含修改密码）、FeedbackBridge（在 setup 外使用 message/dialog）
     files/      列表/网格视图、面包屑、文件夹选择器、上传队列面板、排序
     preview/    预览浮层（← → Esc）及 图片/视频(HLS)/音频/文本(可编辑)/PDF/其他 预览器
     admin/      服务器目录选择器

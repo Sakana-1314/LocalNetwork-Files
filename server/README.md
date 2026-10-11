@@ -38,7 +38,8 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 ## 开发说明
 
 - **新增文件操作必须走 `vfs`**，不要在 API / 协议层直接拼接磁盘路径，否则会绕过权限检查。
-- 新增 / 修改接口时同步更新 `internal/api/openapi.yaml`，前端 API 文档页与类型都以它为准。
+- 新增 / 修改接口时同步更新 `internal/api/openapi.yaml`，前端类型与 Apifox 在线文档都以它为准；
+  改完用 `APIFOX_TOKEN=xxx ./server/scripts/sync-apifox.sh` 推送（「API 文档」页面内嵌 Apifox）。
 - 新增运行时选项：加到 `store.Settings` 并在 `Normalize` 中给出默认值与范围；需要立即生效的在 `app` 的 `EventSettingsChanged` 处理中应用。
 - 静态配置项：加到 `config.Config` 并在 `config.example.yaml` 中写明（中文注释）。
 - 依赖 ffmpeg 的测试在找不到 ffmpeg 时应跳过；CI 会安装 ffmpeg。
