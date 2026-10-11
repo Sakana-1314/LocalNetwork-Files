@@ -10,6 +10,13 @@
 /web/dist/
 *.local
 
+# secrets / local env
+.env
+server/scripts/.env
+
+# 本地资料（机密、测试服务器、生产服务器），不得进 git
+notes/
+
 # misc
 .DS_Store
 .idea/
