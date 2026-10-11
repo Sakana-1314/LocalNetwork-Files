@@ -13,7 +13,7 @@
   支持原画 / 1080p / 720p / 480p 与硬件编码。
 - **预览图与缓存治理**：自动生成多尺寸缩略图；预览图与转码分片分别设保留时长与容量上限（LRU 淘汰）。
 - **用户与权限**：管理员按目录授权并设置**只读 / 可读写**，所有协议共用同一套检查。
-- **访问令牌**：带 `read` / `write` 范围与有效期的 API 令牌（`lnf_` 前缀），界面内置交互式 API 文档。
+- **访问令牌**：带 `read` / `write` 范围与有效期的 API 令牌（`lnf_` 前缀）；「API 文档」页面内嵌 Apifox 在线文档。
 - **协议与挂载**：WebDAV（`/dav`）、S3 兼容接口（每个授权目录一个 bucket）、SMB（托管 Samba）。
 - **模糊搜索**：常驻内存的文件名索引，fzf 风格子序列匹配打分，只返回当前用户有权访问的文件。
 - 深色模式，桌面与移动端自适应。
@@ -115,7 +115,7 @@ Pull Request **只构建不推送**；也支持手动触发。
 缓存时长与容量、转码编码器 / 预设 / 并发 / 分片时长、搜索重建间隔、WebDAV / S3 / SMB 开关与端口等
 运行时选项在管理界面「系统设置」中修改，立即生效。
 
-**首次登录**：用 `admin` / `admin123` 登录 → 立即在「设置 → 账户」改密码 → 在「用户管理」创建用户并授权目录
+**首次登录**：用 `admin` / `admin123` 登录 → 立即在右上角「账号设置」改密码 → 在「用户管理」创建用户并授权目录
 （管理员自己也需要授权目录才能看到文件）。
 
 ## 挂载
@@ -133,7 +133,7 @@ Pull Request **只构建不推送**；也支持手动触发。
   需要 Linux + Samba 并以 root 运行；macOS 自带 smbd 不是 Samba，不支持 Windows。每个授权目录是一个共享。
   Samba 只能认证系统账户，可开启 `smb.create_system_users` 自动创建，或用 `smb.user_prefix` 避免冲突。
   **开启 SMB 后用户需重新登录一次**，密码才会同步到 Samba。
-- **S3**：端点 `http://<服务器>:9000`（端口可改），区域默认 `us-east-1`，path-style。
+- **S3**：端点 `http://<服务器>:9000`（端口可改），path-style；**区域不需要设置，客户端填任意值都会被忽略**。
   在「设置 → S3 密钥」创建密钥，**每个授权目录是一个 bucket**（建议只用小写字母、数字和 `-`）。
   支持 ListBuckets、ListObjects(V1/V2)、Get/Head/Put/Copy/Delete Object、批量删除、分片上传。
   ```bash
@@ -144,7 +144,17 @@ Pull Request **只构建不推送**；也支持手动触发。
 
 ## OpenAPI
 
-规范在 `GET /api/openapi.json`（源文件 `server/internal/api/openapi.yaml`），界面「API 文档」可交互浏览。
+规范在 `GET /api/openapi.json`（源文件 `server/internal/api/openapi.yaml`），界面「API 文档」以 iframe 内嵌
+Apifox 在线文档 <https://local-files.apifox.cn>。改动 `openapi.yaml` 后同步到 Apifox：
+
+```bash
+APIFOX_TOKEN=afxp_xxxxxxxx ./server/scripts/sync-apifox.sh   # 项目 ID 默认 8912512，可用 APIFOX_PROJECT_ID 覆盖
+```
+
+令牌是 Apifox 的**系统级访问令牌**，只经环境变量传入，不要写进仓库；CI 里用仓库 Secret `APIFOX_TOKEN`
+手动触发 `.github/workflows/apifox-sync.yml` 即可。规范里的 `servers` 是相对路径 `/api/v1`，
+在 Apifox 的「环境」里配置 Base URL（如 `http://192.168.1.10:8080`）后再调试。
+
 认证用 `Authorization: Bearer <token>`；无法设置请求头的场景（`<video>`、HLS）可用 `access_token=` 查询参数。
 缺少 `write` 范围的令牌只能只读操作。虚拟路径 `/` 下一级是授权目录名。
 
