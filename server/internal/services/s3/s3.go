@@ -2,7 +2,8 @@
 // filesystem: every authorized directory is exposed as a bucket. Supported:
 // ListBuckets, Head/GetBucketLocation/Versioning, ListObjects (v1/v2),
 // Get/Head/Put/Copy/Delete object, DeleteObjects and multipart uploads.
-// Authentication uses AWS SigV4 with the user's S3 access keys.
+// Authentication uses AWS SigV4 with the user's S3 access keys. The region is
+// taken from each request's credential and may be any value.
 package s3
 
 import (
@@ -26,13 +27,17 @@ import (
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
 )
 
+// defaultRegion is reported by GetBucketLocation. The region in a request's
+// SigV4 credential is whatever the client configured and is not validated;
+// any value is accepted.
+const defaultRegion = "us-east-1"
+
 type Server struct {
 	// BindHost is the interface to listen on ("" = all), normally the HTTP listen host.
 	BindHost string
 
 	auth      *auth.Service
 	newFS     func(p *auth.Principal) *vfs.FS
-	region    func() string
 	uploadDir string
 
 	mu      sync.Mutex
@@ -41,8 +46,8 @@ type Server struct {
 	lastErr error
 }
 
-func New(a *auth.Service, newFS func(p *auth.Principal) *vfs.FS, region func() string, dataDir string) *Server {
-	return &Server{auth: a, newFS: newFS, region: region, uploadDir: filepath.Join(dataDir, "s3-multipart")}
+func New(a *auth.Service, newFS func(p *auth.Principal) *vfs.FS, dataDir string) *Server {
+	return &Server{auth: a, newFS: newFS, uploadDir: filepath.Join(dataDir, "s3-multipart")}
 }
 
 // Status reports whether the listener is up and the last start error.
@@ -266,7 +271,7 @@ func (s *Server) route(q *request) {
 			writeXML(q.w, struct {
 				XMLName xml.Name `xml:"http://s3.amazonaws.com/doc/2006-03-01/ LocationConstraint"`
 				Value   string   `xml:",chardata"`
-			}{Value: s.region()})
+			}{Value: defaultRegion})
 		case r.Method == http.MethodGet && qs.Has("versioning"):
 			writeXML(q.w, struct {
 				XMLName xml.Name `xml:"http://s3.amazonaws.com/doc/2006-03-01/ VersioningConfiguration"`

@@ -105,13 +105,13 @@ const smbSnippets = computed(() => {
 // ---------- S3 ----------
 const s3 = computed<ServiceStatus | null>(() => info.value?.services.s3 ?? null)
 const s3Endpoint = computed(() => `http://${host.value}:${s3.value?.port || 9000}`)
-const s3Region = computed(() => s3.value?.region || 'us-east-1')
+const s3Region = 'us-east-1'
 const s3Snippets = computed(() => {
   const ep = s3Endpoint.value
-  const region = s3Region.value
+  const region = s3Region
   const m = firstMount.value
   return {
-    summary: `Endpoint:   ${ep}\nRegion:     ${region}\n寻址方式:   Path-style（force_path_style = true）\nBuckets:    ${mounts.value.join(', ')}`,
+    summary: `Endpoint:   ${ep}\nRegion:     ${region}（任意值均可，服务端忽略）\n寻址方式:   Path-style（force_path_style = true）\nBuckets:    ${mounts.value.join(', ')}`,
     awsConfig: `aws configure set aws_access_key_id <ACCESS_KEY> --profile lnfiles\naws configure set aws_secret_access_key <SECRET_KEY> --profile lnfiles\naws configure set region ${region} --profile lnfiles\naws configure set s3.addressing_style path --profile lnfiles`,
     awsUse: `aws --profile lnfiles --endpoint-url ${ep} s3 ls\naws --profile lnfiles --endpoint-url ${ep} s3 ls s3://${m}/\naws --profile lnfiles --endpoint-url ${ep} s3 cp ./photo.jpg s3://${m}/photo.jpg`,
     rcloneConf: `[lnfiles-s3]\ntype = s3\nprovider = Other\naccess_key_id = <ACCESS_KEY>\nsecret_access_key = <SECRET_KEY>\nendpoint = ${ep}\nregion = ${region}\nforce_path_style = true`,
@@ -133,7 +133,7 @@ const services = computed(() => {
     { key: 'http', name: 'Web / HTTP', icon: GlobeOutline, status: { enabled: true, running: true, port: i.http_port } as ServiceStatus, desc: '浏览器访问与 REST API' },
     { key: 'webdav', name: 'WebDAV', icon: CloudOutline, status: i.services.webdav, desc: `路径 ${i.services.webdav.path || '/dav'}（与 HTTP 同端口）` },
     { key: 'smb', name: 'SMB', icon: DesktopOutline, status: i.services.smb, desc: i.services.smb.port && i.services.smb.port !== 445 ? '非标准端口' : 'Windows / macOS 共享' },
-    { key: 's3', name: 'S3', icon: ServerOutline, status: i.services.s3, desc: `区域 ${i.services.s3.region || '-'}` },
+    { key: 's3', name: 'S3', icon: ServerOutline, status: i.services.s3, desc: 'S3 兼容接口（区域任意）' },
   ]
 })
 </script>

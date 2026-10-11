@@ -98,7 +98,7 @@ func newEnv(t *testing.T) *env {
 	e.otherAK, e.otherSK = k.AccessKey, sk
 
 	newFS := func(p *auth.Principal) *vfs.FS { return vfs.New(p.User.Mounts, p.ReadOnly, nil) }
-	h := s3svc.New(au, newFS, func() string { return "us-east-1" }, data)
+	h := s3svc.New(au, newFS, data)
 	e.srv = httptest.NewServer(h)
 	t.Cleanup(e.srv.Close)
 	e.tls = httptest.NewTLSServer(h)
@@ -186,6 +186,7 @@ func TestSDKBasics(t *testing.T) {
 	if _, err := c.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String("nope")}); err == nil {
 		t.Fatal("HeadBucket nope succeeded")
 	}
+	// The region is fixed server-side and clients may sign with any region.
 	loc := must(c.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: aws.String("rw")}))
 	if loc.LocationConstraint != "us-east-1" {
 		t.Fatalf("location = %q", loc.LocationConstraint)

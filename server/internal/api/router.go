@@ -32,7 +32,6 @@ type ServiceStatus struct {
 	Running bool              `json:"running"`
 	Port    int               `json:"port,omitempty"`
 	Path    string            `json:"path,omitempty"`
-	Region  string            `json:"region,omitempty"`
 	Error   string            `json:"error,omitempty"`
 	Shares  map[string]string `json:"shares,omitempty"`
 	Account string            `json:"account,omitempty"`

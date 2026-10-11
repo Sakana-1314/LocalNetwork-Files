@@ -205,8 +205,6 @@ export interface ServiceStatus {
   port: number
   /** WebDAV 路径前缀，如 /dav */
   path?: string
-  /** S3 区域 */
-  region?: string
   error?: string
   /** 仅 SMB：当前用户的挂载名 → SMB 共享名 */
   shares?: Record<string, string>
@@ -252,7 +250,6 @@ export interface Settings {
     webdav_enabled: boolean
     s3_enabled: boolean
     s3_port: number
-    s3_region: string
     smb_enabled: boolean
     smb_port: number
     smb_workgroup: string
