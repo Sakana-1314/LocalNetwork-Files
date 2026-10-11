@@ -13,8 +13,10 @@ const props = withDefaults(
     initialPath?: string
     /** 不允许选择的路径（例如被移动的目录本身及其子目录） */
     exclude?: string[]
+    /** 是否要求目标目录可写（复制/移动为 true，搜索范围等只读场景为 false） */
+    requireWritable?: boolean
   }>(),
-  { title: '选择目标文件夹', confirmText: '确定', initialPath: '/', exclude: () => [] },
+  { title: '选择目标文件夹', confirmText: '确定', initialPath: '/', exclude: () => [], requireWritable: true },
 )
 const show = defineModel<boolean>('show', { default: false })
 const emit = defineEmits<{ confirm: [path: string] }>()
@@ -91,14 +93,15 @@ function isExcluded(path: string): boolean {
 
 const canConfirm = computed(() => {
   const k = selectedKey.value
-  return !!k && writableMap.get(k) === true && !isExcluded(k)
+  if (!k || isExcluded(k)) return false
+  return props.requireWritable ? writableMap.get(k) === true : true
 })
 
 const hint = computed(() => {
   const k = selectedKey.value
   if (!k) return '请选择一个目标文件夹'
   if (isExcluded(k)) return '不能选择被操作的文件夹本身或其子文件夹'
-  if (!writableMap.get(k)) return '该文件夹为只读，无法写入'
+  if (props.requireWritable && !writableMap.get(k)) return '该文件夹为只读，无法写入'
   return k
 })
 
@@ -109,7 +112,8 @@ function renderPrefix({ option }: { option: TreeOption }) {
 
 function renderSuffix({ option }: { option: TreeOption }) {
   const n = option as DirNode
-  return n.writable ? null : h(NTag, { size: 'tiny', bordered: false }, { default: () => '只读' })
+  if (!props.requireWritable || n.writable) return null
+  return h(NTag, { size: 'tiny', bordered: false }, { default: () => '只读' })
 }
 
 function confirm(): void {

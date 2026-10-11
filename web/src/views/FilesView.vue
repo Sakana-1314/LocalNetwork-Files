@@ -7,7 +7,6 @@ import {
   NDropdown,
   NEmpty,
   NIcon,
-  NInput,
   NResult,
   NSpin,
   NTooltip,
@@ -25,7 +24,6 @@ import {
   CopyOutline,
   CreateOutline,
   DownloadOutline,
-  FilterOutline,
   FolderOpenOutline,
   FolderOutline,
   GridOutline,
@@ -122,7 +120,6 @@ async function load(opts: { keepSelection?: boolean; silent?: boolean } = {}): P
 watch(
   currentPath,
   (p) => {
-    filterText.value = ''
     selected.value = []
     anchor = null
     document.title = `${baseName(p) || '全部目录'} · LocalNetwork Files`
@@ -148,14 +145,9 @@ watch(
   },
 )
 
-// ---------- 排序、过滤、视图 ----------
+// ---------- 排序、视图 ----------
 const sort = ref<SortState>({ key: 'name', order: 'ascend' })
-const filterText = ref('')
-const filtered = computed(() => {
-  const q = filterText.value.trim().toLowerCase()
-  const list = q ? entries.value.filter((e) => e.name.toLowerCase().includes(q)) : entries.value
-  return sortEntries(list, sort.value)
-})
+const sorted = computed(() => sortEntries(entries.value, sort.value))
 
 const sortLabels: Record<SortKey, string> = { name: '名称', size: '大小', mod_time: '修改时间' }
 const sortOptions = computed<DropdownOption[]>(() =>
@@ -188,13 +180,13 @@ const selected = ref<string[]>([])
 let anchor: string | null = null
 const selectedEntries = computed(() => {
   const set = new Set(selected.value)
-  return filtered.value.filter((e) => set.has(e.path))
+  return sorted.value.filter((e) => set.has(e.path))
 })
 const single = computed(() => (selectedEntries.value.length === 1 ? selectedEntries.value[0] : undefined))
 const selectionWritable = computed(() => selectedEntries.value.length > 0 && selectedEntries.value.every((e) => e.writable))
 
 function onSelect(entry: Entry, ev: MouseEvent): void {
-  const list = filtered.value
+  const list = sorted.value
   if (ev.shiftKey && anchor) {
     const a = list.findIndex((e) => e.path === anchor)
     const b = list.findIndex((e) => e.path === entry.path)
@@ -216,7 +208,7 @@ function onSelect(entry: Entry, ev: MouseEvent): void {
 }
 
 function selectAll(): void {
-  selected.value = filtered.value.map((e) => e.path)
+  selected.value = sorted.value.map((e) => e.path)
 }
 function clearSelection(): void {
   selected.value = []
@@ -233,7 +225,7 @@ function open(entry: Entry): void {
     return
   }
   if (isPreviewable(entry)) {
-    const list = filtered.value.filter(isPreviewable)
+    const list = sorted.value.filter(isPreviewable)
     previewItems.value = list
     previewIndex.value = Math.max(0, list.findIndex((e) => e.path === entry.path))
   } else {
@@ -492,7 +484,7 @@ const ctxOptions = computed<DropdownOption[]>(() => {
       { key: 'upload', label: '上传文件', icon: icon(CloudUploadOutline), disabled: !dirWritable.value },
       { key: 'upload-dir', label: '上传文件夹', icon: icon(FolderOutline), disabled: !dirWritable.value },
       { type: 'divider', key: 'd0' },
-      { key: 'select-all', label: '全选', icon: icon(CheckmarkDoneOutline), disabled: !filtered.value.length },
+      { key: 'select-all', label: '全选', icon: icon(CheckmarkDoneOutline), disabled: !sorted.value.length },
       { key: 'refresh', label: '刷新', icon: icon(RefreshOutline) },
     ]
   }
@@ -650,7 +642,6 @@ function onPreviewSaved(saved: Entry): void {
 }
 
 const emptyText = computed(() => {
-  if (filterText.value) return `没有名称包含“${filterText.value}”的项目`
   if (isRoot.value) return '管理员尚未为你分配任何目录'
   return dirWritable.value ? '文件夹为空，拖放文件到此处即可上传' : '文件夹为空'
 })
@@ -670,15 +661,6 @@ const emptyText = computed(() => {
     <div class="nav-row">
       <path-breadcrumb class="crumbs" :path="currentPath" @navigate="navigate" />
       <div class="nav-tools">
-        <n-input
-          v-model:value="filterText"
-          size="small"
-          clearable
-          placeholder="筛选当前文件夹"
-          class="filter"
-        >
-          <template #prefix><n-icon :component="FilterOutline" /></template>
-        </n-input>
         <n-dropdown v-if="prefs.viewMode === 'grid'" :options="sortOptions" trigger="click" @select="onSortSelect">
           <n-button size="small" quaternary>
             <template #icon><n-icon :component="SwapVerticalOutline" /></template>
@@ -778,7 +760,7 @@ const emptyText = computed(() => {
           v-if="prefs.viewMode === 'list'"
           v-model:selected="selected"
           v-model:sort="sort"
-          :entries="filtered"
+          :entries="sorted"
           :loading="loading"
           :is-root="isRoot"
           :compact="isMobile"
@@ -793,7 +775,7 @@ const emptyText = computed(() => {
         <n-spin v-else :show="loading" class="grid-spin" content-class="grid-spin-content">
           <file-grid
             v-model:selected="selected"
-            :entries="filtered"
+            :entries="sorted"
             :is-root="isRoot"
             @open="open"
             @select="onSelect"
@@ -809,7 +791,6 @@ const emptyText = computed(() => {
 
     <div class="status-bar">
       <span>{{ stats.dirs }} 个文件夹，{{ stats.files }} 个文件<template v-if="stats.files">，共 {{ formatSize(stats.bytes) }}</template></span>
-      <span v-if="filterText" class="muted">· 筛选出 {{ filtered.length }} 项</span>
       <span class="spacer" />
       <span v-if="!isMobile" class="muted keys">双击打开 · Del 删除 · F2 重命名 · ⌘/Ctrl+A 全选 · 拖放上传</span>
     </div>
@@ -898,9 +879,6 @@ const emptyText = computed(() => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-}
-.filter {
-  width: 200px;
 }
 .action-row {
   display: flex;
@@ -996,10 +974,6 @@ const emptyText = computed(() => {
   }
   .nav-tools {
     width: 100%;
-  }
-  .filter {
-    flex: 1;
-    width: auto;
   }
   .btn-text {
     display: none;

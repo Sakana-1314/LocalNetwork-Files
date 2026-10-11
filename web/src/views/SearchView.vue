@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NEmpty, NIcon, NInput, NSkeleton, NTab, NTabs, NTag, useThemeVars } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NIcon, NInput, NSkeleton, NTab, NTabs, useThemeVars } from 'naive-ui'
 import { CloseCircle, FolderOpenOutline, SearchOutline } from '@vicons/ionicons5'
 import type { Kind, SearchResponse, SearchResult } from '@/api/types'
 import { fsApi } from '@/api/fs'
 import { isAbortError } from '@/api/http'
 import FileIcon from '@/components/common/FileIcon.vue'
 import HighlightName from '@/components/common/HighlightName.vue'
+import FolderPickerModal from '@/components/files/FolderPickerModal.vue'
 import { useDebounceFn } from '@/composables/useDebounce'
 import { filesRoute, normalizePath, parentPath } from '@/utils/path'
 import { formatRelative, formatSize } from '@/utils/format'
@@ -32,6 +33,11 @@ const tabs: { key: KindTab; label: string }[] = [
 const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const kind = ref<KindTab>(typeof route.query.kind === 'string' ? (route.query.kind as KindTab) : 'all')
 const scope = ref(typeof route.query.path === 'string' ? normalizePath(route.query.path) : '/')
+
+const pickerOpen = ref(false)
+function onScopePicked(path: string): void {
+  scope.value = normalizePath(path)
+}
 
 const result = ref<SearchResponse | null>(null)
 const loading = ref(false)
@@ -137,10 +143,11 @@ const summary = computed(() => {
       <n-tabs v-model:value="kind" type="segment" size="small" class="kind-tabs">
         <n-tab v-for="t in tabs" :key="t.key" :name="t.key">{{ t.label }}</n-tab>
       </n-tabs>
-      <n-tag v-if="scope !== '/'" closable round @close="scope = '/'">
+      <n-button class="scope-btn" :type="scope !== '/' ? 'primary' : 'default'" secondary @click="pickerOpen = true">
         <template #icon><n-icon :component="FolderOpenOutline" /></template>
-        范围：{{ scope }}
-      </n-tag>
+        <span class="scope-text">{{ scope === '/' ? '全部目录' : scope }}</span>
+      </n-button>
+      <n-button v-if="scope !== '/'" quaternary size="small" @click="scope = '/'">清除范围</n-button>
     </div>
 
     <n-alert v-if="result?.indexing" type="info" :bordered="false" class="mb">
@@ -172,6 +179,15 @@ const summary = computed(() => {
         </div>
       </div>
     </div>
+
+    <folder-picker-modal
+      v-model:show="pickerOpen"
+      title="选择搜索范围"
+      confirm-text="在此目录中搜索"
+      :initial-path="scope"
+      :require-writable="false"
+      @confirm="onScopePicked"
+    />
   </div>
 </template>
 
@@ -193,6 +209,14 @@ const summary = computed(() => {
 }
 .kind-tabs :deep(.n-tabs-rail) {
   min-width: 560px;
+}
+.scope-btn {
+  max-width: 320px;
+}
+.scope-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mb {
   margin-bottom: 12px;
