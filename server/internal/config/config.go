@@ -1,5 +1,6 @@
-// Package config loads the static (file based) server configuration.
-// Runtime-tunable options live in the database, see store.Settings.
+// Package config loads the server configuration file. Everything is static:
+// options that used to be editable at runtime in the admin UI (services,
+// transcoding, caches, search) live here too and need a restart to change.
 package config
 
 import (
@@ -33,6 +34,12 @@ type Config struct {
 
 	SMB SMBConfig `yaml:"smb"`
 
+	// Services, Transcode, Cache and Search are the runtime options.
+	Services  ServiceSettings   `yaml:"services"`
+	Transcode TranscodeSettings `yaml:"transcode"`
+	Cache     CacheSettings     `yaml:"cache"`
+	Search    SearchSettings    `yaml:"search"`
+
 	LogLevel string `yaml:"log_level"`
 }
 
@@ -61,6 +68,10 @@ func Default() *Config {
 	c.Admin.Username = "admin"
 	c.Admin.Password = "admin123"
 	c.SMB = SMBConfig{Smbd: "smbd", Smbpasswd: "smbpasswd", UserPrefix: ""}
+	c.Services = defaultServiceSettings()
+	c.Transcode = defaultTranscodeSettings()
+	c.Cache = defaultCacheSettings()
+	c.Search = defaultSearchSettings()
 	return c
 }
 
@@ -84,6 +95,10 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("LNF_DATA_DIR"); v != "" {
 		c.DataDir = v
 	}
+	c.Services.Normalize()
+	c.Transcode.Normalize()
+	c.Cache.Normalize()
+	c.Search.Normalize()
 	var err error
 	if c.DataDir, err = filepath.Abs(c.DataDir); err != nil {
 		return nil, err

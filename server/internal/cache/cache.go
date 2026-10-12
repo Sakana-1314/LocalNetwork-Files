@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 )
 
 type Bucket string
@@ -30,8 +30,8 @@ const (
 var buckets = []Bucket{Thumb, Transcode}
 
 type Manager struct {
-	dir   string
-	store *store.Store
+	dir string
+	cfg config.CacheSettings
 
 	// IsActive reports whether a transcode session directory is in use and must not be evicted.
 	IsActive func(name string) bool
@@ -54,13 +54,13 @@ type Manager struct {
 // earlyCleanupEvery rate-limits cleanups triggered by Added.
 var earlyCleanupEvery = time.Minute
 
-func New(dir string, st *store.Store) (*Manager, error) {
+func New(dir string, cfg config.CacheSettings) (*Manager, error) {
 	for _, b := range buckets {
 		if err := os.MkdirAll(filepath.Join(dir, string(b)), 0o755); err != nil {
 			return nil, err
 		}
 	}
-	m := &Manager{dir: dir, store: st, stop: make(chan struct{}), kick: make(chan struct{}, 1), size: map[Bucket]int64{}}
+	m := &Manager{dir: dir, cfg: cfg, stop: make(chan struct{}), kick: make(chan struct{}, 1), size: map[Bucket]int64{}}
 	for _, b := range buckets {
 		_, m.size[b] = m.scan(b)
 	}
@@ -94,14 +94,14 @@ func Touch(p string) {
 func (m *Manager) Start() {
 	go func() {
 		for {
-			interval := time.Duration(m.store.Settings().Cache.CleanupIntervalMinutes) * time.Minute
+			interval := time.Duration(m.cfg.CleanupIntervalMinutes) * time.Minute
 			select {
 			case <-m.stop:
 				return
 			case <-m.kick:
 			case <-time.After(interval):
 			}
-			m.Cleanup(nil, true)
+			m.Cleanup(nil)
 		}
 	}()
 }
@@ -195,7 +195,7 @@ type BucketStats struct {
 }
 
 func (m *Manager) limits(b Bucket) (ttl time.Duration, max int64) {
-	c := m.store.Settings().Cache
+	c := m.cfg
 	if b == Thumb {
 		return time.Duration(c.ThumbTTLHours) * time.Hour, int64(c.ThumbMaxMB) << 20
 	}
@@ -227,9 +227,10 @@ type CleanResult struct {
 	RemovedBytes int64 `json:"removed_bytes"`
 }
 
-// Cleanup enforces TTL and size limits on the given buckets (all when nil).
-// With expiredOnly=false every (inactive) entry is removed.
-func (m *Manager) Cleanup(only []Bucket, expiredOnly bool) CleanResult {
+// Cleanup enforces the TTL and size limits on the given buckets (all when
+// nil). Only expired entries and entries beyond a bucket's cap are removed;
+// there is deliberately no "wipe everything" mode.
+func (m *Manager) Cleanup(only []Bucket) CleanResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if only == nil {
@@ -248,9 +249,10 @@ func (m *Manager) Cleanup(only []Bucket, expiredOnly bool) CleanResult {
 			if b == Thumb && isTemp(e.name) && time.Since(e.lastUse) < time.Hour {
 				continue // being written right now
 			}
-			expired := e.lastUse.Before(cutoff)
+			// A zero TTL means "never expires".
+			expired := ttl > 0 && e.lastUse.Before(cutoff)
 			over := total > max
-			if expiredOnly && !expired && !over {
+			if !expired && !over {
 				continue
 			}
 			if err := os.RemoveAll(e.path); err != nil {

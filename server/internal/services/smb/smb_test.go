@@ -43,7 +43,7 @@ type env struct {
 	t     *testing.T
 	bin   string
 	mu    sync.Mutex
-	st    store.ServiceSettings
+	st    config.ServiceSettings
 	users []store.User
 	m     *Manager
 }
@@ -58,18 +58,18 @@ func newEnv(t *testing.T) *env {
 			t.Fatal(err)
 		}
 	}
-	e.st = store.DefaultSettings().Services
+	e.st = config.Default().Services
 	e.st.SMBEnabled = true
 	e.st.SMBPort = 4455
 	cfg := config.SMBConfig{Smbd: filepath.Join(e.bin, "smbd"), Smbpasswd: filepath.Join(e.bin, "smbpasswd")}
 	e.m = newManager(cfg, t.TempDir(),
-		func() store.ServiceSettings { e.mu.Lock(); defer e.mu.Unlock(); return e.st },
+		func() config.ServiceSettings { e.mu.Lock(); defer e.mu.Unlock(); return e.st },
 		func() ([]store.User, error) { e.mu.Lock(); defer e.mu.Unlock(); return e.users, nil })
 	t.Cleanup(e.m.Close)
 	return e
 }
 
-func (e *env) set(fn func(*store.ServiceSettings)) {
+func (e *env) set(fn func(*config.ServiceSettings)) {
 	e.mu.Lock()
 	fn(&e.st)
 	e.mu.Unlock()
@@ -134,7 +134,7 @@ func TestLifecycle(t *testing.T) {
 	}
 
 	// Port change: restart.
-	e.set(func(s *store.ServiceSettings) { s.SMBPort = 4456 })
+	e.set(func(s *config.ServiceSettings) { s.SMBPort = 4456 })
 	e.m.Apply()
 	eventually(t, "restart", func() bool { return len(e.lines("starts")) == 2 })
 	if _, port, err := e.m.Status(); port != 4456 || err != nil {
@@ -142,7 +142,7 @@ func TestLifecycle(t *testing.T) {
 	}
 
 	// Disable: stopped without an error.
-	e.set(func(s *store.ServiceSettings) { s.SMBEnabled = false })
+	e.set(func(s *config.ServiceSettings) { s.SMBEnabled = false })
 	e.m.Apply()
 	if running, _, err := e.m.Status(); running || err != nil {
 		t.Errorf("after disable running=%v err=%v", running, err)
@@ -180,7 +180,7 @@ func TestConcurrentApply(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%3 == 0 {
-				e.set(func(s *store.ServiceSettings) { s.SMBPort = 5000 + i })
+				e.set(func(s *config.ServiceSettings) { s.SMBPort = 5000 + i })
 			}
 			e.m.Apply()
 			e.m.Status()
@@ -217,7 +217,7 @@ func TestMissingSamba(t *testing.T) {
 	if _, _, err := e.m.Status(); err == nil || !strings.Contains(err.Error(), "Samba") {
 		t.Fatalf("err = %v", err)
 	}
-	e.set(func(s *store.ServiceSettings) { s.SMBEnabled = false })
+	e.set(func(s *config.ServiceSettings) { s.SMBEnabled = false })
 	e.m.Apply()
 	if _, _, err := e.m.Status(); err != nil {
 		t.Errorf("disabled still reports %v", err)
@@ -253,7 +253,7 @@ func TestSyncPassword(t *testing.T) {
 	}
 
 	// Disabled service: nothing happens.
-	e.set(func(s *store.ServiceSettings) { s.SMBEnabled = false })
+	e.set(func(s *config.ServiceSettings) { s.SMBEnabled = false })
 	e.m.SyncPassword(u, "pw3")
 	if len(e.lines("smbpasswd.args")) != 2 {
 		t.Errorf("synced while disabled")

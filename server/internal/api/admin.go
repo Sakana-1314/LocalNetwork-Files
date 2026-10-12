@@ -308,22 +308,7 @@ func isDir(p string) bool {
 	return err == nil && fi.IsDir()
 }
 
-// ---------- settings / cache / search ----------
-
-func (a *API) adminGetSettings(c *gin.Context) { c.JSON(http.StatusOK, a.Store.Settings()) }
-
-func (a *API) adminPutSettings(c *gin.Context) {
-	st := a.Store.Settings()
-	if !bind(c, &st) {
-		return
-	}
-	saved, err := a.Store.SaveSettings(st)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, saved)
-}
+// ---------- cache / search ----------
 
 func (a *API) adminCacheStats(c *gin.Context) {
 	stats, last := a.Cache.Stats()
@@ -338,13 +323,11 @@ func (a *API) adminCacheStats(c *gin.Context) {
 
 func (a *API) adminCacheClean(c *gin.Context) {
 	var req struct {
-		Kind        string `json:"kind"`
-		ExpiredOnly *bool  `json:"expired_only"`
+		Kind string `json:"kind"`
 	}
 	if c.Request.ContentLength > 0 && !bind(c, &req) {
 		return
 	}
-	expiredOnly := req.ExpiredOnly == nil || *req.ExpiredOnly
 	var buckets []cache.Bucket
 	switch req.Kind {
 	case "thumb":
@@ -356,7 +339,7 @@ func (a *API) adminCacheClean(c *gin.Context) {
 		fail(c, badRequest("kind 无效"))
 		return
 	}
-	c.JSON(http.StatusOK, a.Cache.Cleanup(buckets, expiredOnly))
+	c.JSON(http.StatusOK, a.Cache.Cleanup(buckets))
 }
 
 func (a *API) adminSearchStatus(c *gin.Context) { c.JSON(http.StatusOK, a.Search.Status()) }

@@ -57,7 +57,7 @@ const routes: RouteRecordRaw[] = [
         path: 'admin/system',
         name: 'admin-system',
         component: () => import('@/views/admin/SystemView.vue'),
-        meta: { title: '系统设置', admin: true },
+        meta: { title: '系统状态', admin: true },
       },
       {
         path: ':pathMatch(.*)*',

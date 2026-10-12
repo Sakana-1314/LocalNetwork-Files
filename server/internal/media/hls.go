@@ -213,7 +213,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uint, username, real
 	if audio < 0 || audio >= len(mi.Audio) {
 		audio = 0
 	}
-	ts := s.store.Settings().Transcode
+	ts := s.transcode
 	// The encoder is part of the key: segments of different encoders are not mixed.
 	id := cacheKey("hls", real, fi.ModTime().UnixNano(), fi.Size(), quality, audio, ts.SegmentSeconds, ts.Encoder)[:24]
 
@@ -595,7 +595,7 @@ func (m *hlsManager) startJob(se *hlsSession, owner uint, n int) (*hlsJob, error
 			m.killJob(j)
 		}
 	}
-	ts := m.svc.store.Settings().Transcode
+	ts := m.svc.transcode
 
 	// Enforce the global concurrency limit by stopping the least recently used idle job.
 	m.mu.Lock()

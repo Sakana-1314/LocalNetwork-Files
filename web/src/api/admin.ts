@@ -1,15 +1,6 @@
 import { http } from './http'
 import { arr, normUser } from './normalize'
-import type {
-  BrowseResponse,
-  CacheStats,
-  CleanRequest,
-  CleanResult,
-  IndexStatus,
-  Settings,
-  User,
-  UserInput,
-} from './types'
+import type { BrowseResponse, CacheStats, CleanRequest, CleanResult, IndexStatus, User, UserInput } from './types'
 
 export const adminApi = {
   async users(): Promise<User[]> {
@@ -27,12 +18,6 @@ export const adminApi = {
   async browse(path?: string): Promise<BrowseResponse> {
     const r = await http.get<BrowseResponse>('/admin/browse', { query: { path } })
     return { path: r.path ?? '', parent: r.parent ?? '', dirs: arr(r.dirs) }
-  },
-  settings(): Promise<Settings> {
-    return http.get<Settings>('/admin/settings')
-  },
-  saveSettings(s: Settings): Promise<Settings> {
-    return http.put<Settings>('/admin/settings', s)
   },
   async cache(): Promise<CacheStats> {
     const r = await http.get<CacheStats>('/admin/cache')

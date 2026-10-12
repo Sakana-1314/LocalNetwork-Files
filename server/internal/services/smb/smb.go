@@ -33,8 +33,8 @@ import (
 type Manager struct {
 	cfg config.SMBConfig
 	dir string
-	// settings and listUsers are read from the store (replaceable in tests).
-	settings  func() store.ServiceSettings
+	// settings and listUsers are injected (replaceable in tests).
+	settings  func() config.ServiceSettings
 	listUsers func() ([]store.User, error)
 
 	opMu sync.Mutex // serializes Apply/Close (process start/stop)
@@ -53,11 +53,13 @@ type Manager struct {
 	excluded map[string]string          // account -> reason it is not usable
 }
 
-func New(cfg config.SMBConfig, dataDir string, st *store.Store) *Manager {
-	return newManager(cfg, dataDir, func() store.ServiceSettings { return st.Settings().Services }, st.ListUsers)
+// New builds the SMB manager. svc holds the service options from the
+// configuration file; the getter keeps them replaceable in tests.
+func New(cfg config.SMBConfig, svc config.ServiceSettings, dataDir string, st *store.Store) *Manager {
+	return newManager(cfg, dataDir, func() config.ServiceSettings { return svc }, st.ListUsers)
 }
 
-func newManager(cfg config.SMBConfig, dataDir string, settings func() store.ServiceSettings, listUsers func() ([]store.User, error)) *Manager {
+func newManager(cfg config.SMBConfig, dataDir string, settings func() config.ServiceSettings, listUsers func() ([]store.User, error)) *Manager {
 	return &Manager{cfg: cfg, dir: filepath.Join(dataDir, "samba"), settings: settings, listUsers: listUsers,
 		synced: map[string][32]byte{}, shares: map[uint]map[string]string{}, excluded: map[string]string{},
 		output: &ringBuffer{max: 4096}}
@@ -215,7 +217,7 @@ func (m *Manager) Close() {
 	m.stop()
 }
 
-func (m *Manager) writeConfig(st store.ServiceSettings) error {
+func (m *Manager) writeConfig(st config.ServiceSettings) error {
 	users, err := m.listUsers()
 	if err != nil {
 		return err

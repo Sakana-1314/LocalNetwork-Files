@@ -545,30 +545,6 @@ paths:
                   path: { type: string }
                   parent: { type: string }
                   dirs: { type: array, items: { type: string }, description: 子目录绝对路径 }
-  /admin/settings:
-    get:
-      tags: [admin]
-      summary: 系统设置
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Settings" }
-    put:
-      tags: [admin]
-      summary: 修改系统设置（立即生效，服务会按需重启）
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Settings" }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Settings" }
   /admin/cache:
     get:
       tags: [admin]
@@ -582,16 +558,15 @@ paths:
   /admin/cache/clean:
     post:
       tags: [admin]
-      summary: 清理缓存
+      summary: 清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
               properties:
                 kind: { type: string, enum: [thumb, transcode, all], default: all }
-                expired_only: { type: boolean, default: true, description: false 时清空全部 }
       responses:
         "200":
           description: OK
@@ -774,38 +749,6 @@ components:
           additionalProperties: { type: string }
           description: 仅 SMB：当前用户的挂载名 → SMB 共享名（同名目录指向不同路径时共享名会带用户名后缀）
         account: { type: string, description: 仅 SMB：当前用户的 SMB 登录名（配置了用户名前缀时与网页用户名不同） }
-    Settings:
-      type: object
-      properties:
-        cache:
-          type: object
-          properties:
-            thumb_ttl_hours: { type: integer, description: 预览图在最后一次访问后保留多久 }
-            thumb_max_mb: { type: integer, description: 预览图缓存上限，超出按 LRU 淘汰 }
-            transcode_ttl_hours: { type: integer, description: 转码分片在最后一次访问后保留多久 }
-            transcode_max_mb: { type: integer }
-            cleanup_interval_minutes: { type: integer }
-        transcode:
-          type: object
-          properties:
-            encoder: { type: string, enum: [libx264, h264_videotoolbox, h264_nvenc, h264_qsv, h264_vaapi], description: 视频编码器 }
-            preset: { type: string, enum: [ultrafast, superfast, veryfast, faster, fast, medium] }
-            max_sessions: { type: integer, description: 同时运行的 ffmpeg 转码进程上限 }
-            segment_seconds: { type: integer }
-        search:
-          type: object
-          properties:
-            reindex_interval_minutes: { type: integer, description: 定时全量重建间隔，0 关闭 }
-            watch: { type: boolean, description: 使用文件系统事件增量更新 }
-        services:
-          type: object
-          properties:
-            webdav_enabled: { type: boolean }
-            s3_enabled: { type: boolean }
-            s3_port: { type: integer }
-            smb_enabled: { type: boolean }
-            smb_port: { type: integer }
-            smb_workgroup: { type: string }
     CacheStats:
       type: object
       properties:

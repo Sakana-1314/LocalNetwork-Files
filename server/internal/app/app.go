@@ -58,21 +58,21 @@ func New(cfg *config.Config, version string) (*App, error) {
 	} else if created {
 		slog.Warn("created bootstrap admin account; change its password after first login", "username", cfg.Admin.Username)
 	}
-	cm, err := cache.New(cfg.CacheDir, st)
+	cm, err := cache.New(cfg.CacheDir, cfg.Cache)
 	if err != nil {
 		return nil, err
 	}
 	a := &App{cfg: cfg, version: version, store: st, auth: au, cache: cm}
-	a.media = media.New(cfg.FFmpeg, cfg.FFprobe, cm, st)
+	a.media = media.New(cfg.FFmpeg, cfg.FFprobe, cm, cfg.Transcode)
 	vfs.FFmpegAvailable = a.media.HasFFmpeg()
 	if !a.media.HasFFmpeg() {
 		slog.Warn("ffmpeg/ffprobe not found: video thumbnails and transcoding are disabled")
 	}
-	a.search = search.New(st)
-	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return st.Settings().Services.WebDAVEnabled })
+	a.search = search.New(st, cfg.Search)
+	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return cfg.Services.WebDAVEnabled })
 	a.s3 = s3.New(au, a.newFS, cfg.DataDir)
 	a.s3.BindHost, _ = splitPort(cfg.Listen)
-	a.smb = smb.New(cfg.SMB, cfg.DataDir, st)
+	a.smb = smb.New(cfg.SMB, cfg.Services, cfg.DataDir, st)
 	au.OnPassword = a.smb.SyncPassword
 
 	st.Subscribe(func(e store.Event) {
@@ -80,10 +80,6 @@ func New(cfg *config.Config, version string) (*App, error) {
 		case store.EventUsersChanged:
 			a.bg.Go(a.search.SyncRoots)
 			a.bg.Go(a.smb.Apply)
-		case store.EventSettingsChanged:
-			a.cache.Reschedule()
-			a.search.SettingsChanged()
-			a.bg.Go(a.applyServices)
 		}
 	})
 	a.handler = a.buildHandler()
@@ -95,14 +91,14 @@ func (a *App) newFS(p *auth.Principal) *vfs.FS {
 }
 
 func (a *App) applyServices() {
-	s := a.store.Settings().Services
+	s := a.cfg.Services
 	a.s3.Apply(s.S3Enabled, s.S3Port)
 	a.smb.Apply()
 }
 
 // Status implements api.Services.
 func (a *App) Status(userID uint) map[string]api.ServiceStatus {
-	s := a.store.Settings().Services
+	s := a.cfg.Services
 	out := map[string]api.ServiceStatus{}
 	_, port := splitPort(a.cfg.Listen)
 	out["webdav"] = api.ServiceStatus{Enabled: s.WebDAVEnabled, Running: s.WebDAVEnabled, Port: port, Path: webdav.Prefix}
@@ -168,7 +164,7 @@ func (a *App) buildHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Windows' WebDAV client probes OPTIONS at the server root before mapping
 		// http://host:port/dav/ as a drive; advertise DAV support there.
-		if req.Method == http.MethodOptions && req.URL.Path == "/" && a.store.Settings().Services.WebDAVEnabled {
+		if req.Method == http.MethodOptions && req.URL.Path == "/" && a.cfg.Services.WebDAVEnabled {
 			w.Header().Set("DAV", "1, 2")
 			w.Header().Set("MS-Author-Via", "DAV")
 			w.Header().Set("Allow", "OPTIONS, GET, HEAD, PROPFIND")

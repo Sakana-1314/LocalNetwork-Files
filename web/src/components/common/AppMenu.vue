@@ -33,7 +33,7 @@ const options = computed<MenuOption[]>(() => {
   if (auth.isAdmin) {
     base.push(
       { label: '用户管理', key: 'admin-users', icon: icon(PeopleOutline) },
-      { label: '系统设置', key: 'admin-system', icon: icon(OptionsOutline) },
+      { label: '系统状态', key: 'admin-system', icon: icon(OptionsOutline) },
     )
   }
   return base

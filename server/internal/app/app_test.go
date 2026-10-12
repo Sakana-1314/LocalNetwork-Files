@@ -60,6 +60,9 @@ func newEnv(t *testing.T) *tenv {
 	cfg.Admin.Password = adminPW
 	cfg.SMB.Smbd = filepath.Join(dir, "no-smbd")
 	cfg.SMB.Smbpasswd = filepath.Join(dir, "no-smbpasswd")
+	// Never bind real ports or start fsnotify from tests.
+	cfg.Services.S3Enabled = false
+	cfg.Search.Watch = false
 	for _, d := range []string{cfg.DataDir, cfg.CacheDir} {
 		must(t, os.MkdirAll(d, 0o755))
 	}
@@ -68,13 +71,6 @@ func newEnv(t *testing.T) *tenv {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
-	// Never bind real ports or start fsnotify from tests.
-	st := a.store.Settings()
-	st.Services.S3Enabled = false
-	st.Search.Watch = false
-	if _, err := a.store.SaveSettings(st); err != nil {
-		t.Fatal(err)
-	}
 	e := &tenv{t: t, a: a, dir: dir, ro: filepath.Join(dir, "ro"), rw: filepath.Join(dir, "rw")}
 	must(t, os.MkdirAll(e.ro, 0o755))
 	must(t, os.MkdirAll(e.rw, 0o755))
@@ -363,8 +359,8 @@ func TestAdminUsers(t *testing.T) {
 	// non-admins
 	expect(t, e.do("GET", users, alice, nil), 403)
 	expect(t, e.do("POST", users, alice, obj{"username": "evil", "password": "evil-pw"}), 403)
-	expect(t, e.do("GET", "/api/v1/admin/settings", alice, nil), 403)
-	expect(t, e.do("PUT", "/api/v1/admin/settings", alice, obj{}), 403)
+	expect(t, e.do("GET", "/api/v1/admin/cache", alice, nil), 403)
+	expect(t, e.do("POST", "/api/v1/admin/cache/clean", alice, nil), 403)
 	expect(t, e.do("GET", "/api/v1/admin/browse?path=/", alice, nil), 403)
 	expect(t, e.do("POST", "/api/v1/admin/search/reindex", alice, nil), 403)
 	expect(t, e.do("DELETE", fmt.Sprintf("%s/%d", users, 1), alice, nil), 403)
@@ -885,8 +881,7 @@ func TestAPITokens(t *testing.T) {
 	rec = e.do("POST", "/api/v1/tokens", e.admin, obj{"name": "admin-ro"})
 	admRO := decode[obj](t, rec)["token"].(string)
 	expect(t, e.do("GET", "/api/v1/admin/users", admRO, nil), 200)
-	expect(t, e.do("GET", "/api/v1/admin/settings", admRO, nil), 200)
-	expect(t, e.do("PUT", "/api/v1/admin/settings", admRO, obj{}), 403)
+	expect(t, e.do("GET", "/api/v1/admin/cache", admRO, nil), 200)
 	expect(t, e.do("POST", "/api/v1/admin/users", admRO, obj{"username": "x", "password": "xxxxxx"}), 403)
 	expect(t, e.do("PUT", fmt.Sprintf("/api/v1/admin/users/%v", aliceID), admRO, obj{"username": "alice"}), 403)
 	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/admin/users/%v", aliceID), admRO, nil), 403)
@@ -1035,45 +1030,14 @@ func TestSearch(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 
-func TestAdminSettingsCacheSearch(t *testing.T) {
+func TestAdminCacheSearch(t *testing.T) {
 	e := newEnv(t)
 
-	rec := e.do("GET", "/api/v1/admin/settings", e.admin, nil)
-	expect(t, rec, 200)
-	s := decode[obj](t, rec)
-	for _, k := range []string{"cache", "transcode", "search", "services"} {
-		if _, ok := s[k].(obj); !ok {
-			t.Fatalf("settings misses %s: %v", k, s)
-		}
-	}
-	rec = e.do("PUT", "/api/v1/admin/settings", e.admin, obj{"cache": obj{"thumb_ttl_hours": 48}})
-	expect(t, rec, 200)
-	s = decode[obj](t, rec)
-	if s["cache"].(obj)["thumb_ttl_hours"] != float64(48) || s["cache"].(obj)["thumb_max_mb"] != float64(2048) ||
-		s["services"].(obj)["s3_enabled"] != false {
-		t.Fatalf("partial update: %v", s)
-	}
-	rec = e.do("PUT", "/api/v1/admin/settings", e.admin, obj{"transcode": obj{"preset": "bogus", "max_sessions": 999, "encoder": "h264_nvenc"},
-		"services": obj{"s3_port": 70000, "s3_region": ""}})
-	expect(t, rec, 200)
-	s = decode[obj](t, rec)
-	tr, sv := s["transcode"].(obj), s["services"].(obj)
-	if tr["preset"] != "veryfast" || tr["max_sessions"] != float64(2) || tr["encoder"] != "h264_nvenc" ||
-		sv["s3_port"] != float64(9000) || sv["s3_enabled"] != false ||
-		s["cache"].(obj)["thumb_ttl_hours"] != float64(48) {
-		t.Fatalf("normalized settings: %v", s)
-	}
-	// S3 区域已下线：请求里带 s3_region 会被忽略，响应里也不再出现该字段。
-	if _, ok := sv["s3_region"]; ok {
-		t.Fatalf("settings must not expose s3_region: %v", sv)
-	}
-	if got := decode[obj](t, e.do("GET", "/api/v1/admin/settings", e.admin, nil)); fmt.Sprint(got) != fmt.Sprint(s) {
-		t.Fatalf("settings not persisted: %v vs %v", got, s)
-	}
-	expect(t, e.do("PUT", "/api/v1/admin/settings", e.admin, "nope"), 400)
-	expect(t, e.do("PUT", "/api/v1/admin/settings", e.admin, obj{"cache": obj{"thumb_ttl_hours": "x"}}), 400)
+	// Runtime options now live in config.yaml; the admin API must not offer them.
+	expect(t, e.do("GET", "/api/v1/admin/settings", e.admin, nil), 404)
+	expect(t, e.do("PUT", "/api/v1/admin/settings", e.admin, obj{}), 404)
 
-	rec = e.do("GET", "/api/v1/admin/cache", e.admin, nil)
+	rec := e.do("GET", "/api/v1/admin/cache", e.admin, nil)
 	expect(t, rec, 200)
 	c := decode[obj](t, rec)
 	if c["dir"] != e.a.cfg.CacheDir || c["sessions"] == nil {
@@ -1093,10 +1057,10 @@ func TestAdminSettingsCacheSearch(t *testing.T) {
 			}
 		}
 	}
-	if c["thumb"].(obj)["ttl_hours"] != float64(48) {
-		t.Fatalf("thumb ttl not reflected: %v", c["thumb"])
+	if c["thumb"].(obj)["ttl_hours"] != float64(0) {
+		t.Fatalf("default thumb ttl must be 0 (never expires): %v", c["thumb"])
 	}
-	for _, body := range []any{nil, obj{"kind": "thumb", "expired_only": false}, obj{"kind": "all"}, obj{"kind": "transcode"}} {
+	for _, body := range []any{nil, obj{"kind": "thumb"}, obj{"kind": "all"}, obj{"kind": "transcode"}} {
 		rec = e.do("POST", "/api/v1/admin/cache/clean", e.admin, body)
 		expect(t, rec, 200)
 		cr := decode[obj](t, rec)
@@ -1108,11 +1072,15 @@ func TestAdminSettingsCacheSearch(t *testing.T) {
 		}
 	}
 	expect(t, e.do("POST", "/api/v1/admin/cache/clean", e.admin, obj{"kind": "bogus"}), 400)
+	// TTL 0: a fresh thumbnail is not expired, so cleaning must keep it.
 	thumb := filepath.Join(e.a.cfg.CacheDir, "thumb", "ab", "abcdef.jpg")
 	writeFile(t, thumb, "jpegdata")
-	cr := decode[obj](t, e.do("POST", "/api/v1/admin/cache/clean", e.admin, obj{"kind": "thumb", "expired_only": false}))
-	if cr["removed_files"] != float64(1) || cr["removed_bytes"] != float64(8) {
-		t.Fatalf("clean all thumbs: %v", cr)
+	cr := decode[obj](t, e.do("POST", "/api/v1/admin/cache/clean", e.admin, obj{"kind": "thumb"}))
+	if cr["removed_files"] != float64(0) || cr["removed_bytes"] != float64(0) {
+		t.Fatalf("clean must only drop expired entries: %v", cr)
+	}
+	if _, err := os.Stat(thumb); err != nil {
+		t.Fatalf("fresh thumbnail was removed: %v", err)
 	}
 	if last := decode[obj](t, e.do("GET", "/api/v1/admin/cache", e.admin, nil))["last_cleanup"]; last == nil {
 		t.Fatal("last_cleanup not set after a cleanup")
