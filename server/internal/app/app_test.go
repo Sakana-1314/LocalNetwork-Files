@@ -781,6 +781,21 @@ func TestAPITokens(t *testing.T) {
 	if _, ok := ro["hash"]; ok {
 		t.Fatal("create response leaks hash")
 	}
+	if _, ok := ro["token_enc"]; ok {
+		t.Fatal("create response leaks the encrypted token")
+	}
+	roID := int(ro["id"].(float64))
+	// The plaintext is readable again later, and only by its owner.
+	rec = e.do("GET", fmt.Sprintf("/api/v1/tokens/%d/secret", roID), alice, nil)
+	expect(t, rec, 200)
+	if got := decode[obj](t, rec)["token"]; got != roTok {
+		t.Fatalf("revealed token %v != created %v", got, roTok)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("secret response must not be cached: %q", cc)
+	}
+	expect(t, e.do("GET", fmt.Sprintf("/api/v1/tokens/%d/secret", roID), e.admin, nil), 404)
+	expect(t, e.do("GET", "/api/v1/tokens/999999/secret", alice, nil), 404)
 
 	rec = e.do("POST", "/api/v1/tokens", alice, obj{"name": "rw", "scopes": []string{"write", "admin", "write"}, "expires_in_days": 30})
 	expect(t, rec, 201)
@@ -794,7 +809,7 @@ func TestAPITokens(t *testing.T) {
 	expect(t, rec, 200)
 	list := decode[[]obj](t, rec)
 	if len(list) != 2 || strings.Contains(rec.Body.String(), roTok) || strings.Contains(rec.Body.String(), rwTok) ||
-		strings.Contains(strings.ToLower(rec.Body.String()), "hash") {
+		strings.Contains(strings.ToLower(rec.Body.String()), "hash") || strings.Contains(rec.Body.String(), "token_enc") {
 		t.Fatalf("token list leaks secrets: %s", rec.Body.String())
 	}
 	for _, k := range []string{"id", "name", "prefix", "scopes", "expires_at", "last_used_at", "created_at"} {
@@ -899,6 +914,18 @@ func TestS3Keys(t *testing.T) {
 	if k1["access_key"] == "" || len(k1["secret_key"].(string)) < 20 || k1["read_only"] != false {
 		t.Fatalf("s3 key: %v", k1)
 	}
+	ak := k1["access_key"].(string)
+	// The secret stays readable for its owner.
+	rec = e.do("GET", "/api/v1/s3keys/"+ak+"/secret", alice, nil)
+	expect(t, rec, 200)
+	if got := decode[obj](t, rec)["secret_key"]; got != k1["secret_key"] {
+		t.Fatalf("revealed secret %v != created %v", got, k1["secret_key"])
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("secret response must not be cached: %q", cc)
+	}
+	expect(t, e.do("GET", "/api/v1/s3keys/"+ak+"/secret", e.admin, nil), 404)
+	expect(t, e.do("GET", "/api/v1/s3keys/deadbeef/secret", alice, nil), 404)
 	if _, ok := k1["secret_enc"]; ok {
 		t.Fatal("leaks encrypted secret")
 	}

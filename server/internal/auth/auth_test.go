@@ -272,7 +272,7 @@ func TestAPITokens(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(plain, TokenPrefix) || len(plain) != len(TokenPrefix)+40 || at.Name != "ci" ||
-		!strings.HasPrefix(plain, at.Prefix) || at.Hash == plain || at.ExpiresAt != nil {
+		!strings.HasPrefix(plain, at.Prefix) || at.TokenEnc == plain || at.TokenEnc == "" || at.ExpiresAt != nil {
 		t.Fatalf("token %+v %q", at, plain)
 	}
 	if strings.Join(at.Scopes, ",") != "read,write" {
@@ -282,9 +282,17 @@ func TestAPITokens(t *testing.T) {
 	if err != nil || p.ReadOnly || p.Via != "token" || p.User.ID != e.user.ID {
 		t.Fatalf("rw token: %v %+v", err, p)
 	}
-	stored, _ := e.st.GetTokenByHash(hashToken(plain))
+	stored, _ := e.st.GetToken(e.user.ID, at.ID)
 	if stored.LastUsedAt == nil {
 		t.Error("last used not recorded")
+	}
+	// The plaintext can be read back at any time by its owner.
+	secret, err := e.svc.TokenSecret(e.user.ID, at.ID)
+	if err != nil || secret != plain {
+		t.Fatalf("reveal token: %q %v", secret, err)
+	}
+	if _, err := e.svc.TokenSecret(e.user.ID+1, at.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("reveal another user's token: %v", err)
 	}
 
 	_, ro, _ := e.svc.CreateToken(e.user.ID, "ro", nil, 30)

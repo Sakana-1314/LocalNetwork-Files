@@ -14,13 +14,13 @@ const show = defineModel<boolean>('show', { default: false })
     style="width: 560px; max-width: calc(100vw - 24px)"
     :mask-closable="false"
   >
-    <n-alert type="warning" :bordered="false" style="margin-bottom: 12px">
-      请立即复制并妥善保存，关闭后将无法再次查看。
+    <n-alert type="info" :bordered="false" style="margin-bottom: 12px">
+      可随时在本页再次查看这些值；请避免在共享设备上展示。
     </n-alert>
     <copy-block v-for="it in items" :key="it.label" :label="it.label" :code="it.value" />
     <template #footer>
       <div style="text-align: right">
-        <n-button type="primary" @click="show = false">我已保存</n-button>
+        <n-button type="primary" @click="show = false">关闭</n-button>
       </div>
     </template>
   </n-modal>

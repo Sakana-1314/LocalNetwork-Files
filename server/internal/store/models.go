@@ -42,11 +42,15 @@ const (
 )
 
 type AccessToken struct {
-	ID         uint       `gorm:"primaryKey" json:"id"`
-	UserID     uint       `gorm:"index;not null" json:"-"`
-	Name       string     `gorm:"size:128" json:"name"`
-	Prefix     string     `gorm:"size:16" json:"prefix"`
-	Hash       string     `gorm:"uniqueIndex;size:64;not null" json:"-"`
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	UserID uint   `gorm:"index;not null" json:"-"`
+	Name   string `gorm:"size:128" json:"name"`
+	// Prefix is the recognisable head of the token, kept in clear text so the
+	// listing can identify a token without decrypting it.
+	Prefix string `gorm:"size:16;index" json:"prefix"`
+	// TokenEnc holds the whole token encrypted (AES-GCM, see auth.encrypt).
+	// Tokens can be read back at any time; nothing is hashed.
+	TokenEnc   string     `gorm:"not null;default:''" json:"-"`
 	ScopesRaw  string     `gorm:"column:scopes;size:64" json:"-"`
 	ExpiresAt  *time.Time `json:"expires_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`

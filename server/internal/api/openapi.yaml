@@ -393,7 +393,7 @@ paths:
                 items: { $ref: "#/components/schemas/AccessToken" }
     post:
       tags: [tokens]
-      summary: 创建访问令牌（令牌明文仅返回一次）
+      summary: 创建访问令牌（明文可随时通过 /tokens/{id}/secret 再次读取）
       requestBody:
         required: true
         content:
@@ -416,6 +416,22 @@ paths:
                   - type: object
                     properties:
                       token: { type: string }
+  /tokens/{id}/secret:
+    get:
+      tags: [tokens]
+      summary: 读取访问令牌明文（仅令牌所属用户）
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+        "404": { description: 令牌不存在或不属于当前用户 }
   /tokens/{id}:
     delete:
       tags: [tokens]
@@ -438,7 +454,7 @@ paths:
                 items: { $ref: "#/components/schemas/S3Key" }
     post:
       tags: [tokens]
-      summary: 创建 S3 密钥（Secret 仅返回一次）
+      summary: 创建 S3 密钥（Secret 可随时通过 /s3keys/{access_key}/secret 再次读取）
       requestBody:
         content:
           application/json:
@@ -458,6 +474,22 @@ paths:
                   - type: object
                     properties:
                       secret_key: { type: string }
+  /s3keys/{access_key}/secret:
+    get:
+      tags: [tokens]
+      summary: 读取 S3 密钥的 Secret（仅密钥所属用户）
+      parameters:
+        - { name: access_key, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret_key: { type: string }
+        "404": { description: 密钥不存在或不属于当前用户 }
   /s3keys/{access_key}:
     delete:
       tags: [tokens]
@@ -675,7 +707,7 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        prefix: { type: string, description: 令牌前若干位，用于辨认 }
+        prefix: { type: string, description: "令牌前若干位，用于辨认；完整明文通过 /tokens/{id}/secret 读取" }
         scopes: { type: array, items: { type: string } }
         expires_at: { type: string, format: date-time, nullable: true }
         last_used_at: { type: string, format: date-time, nullable: true }

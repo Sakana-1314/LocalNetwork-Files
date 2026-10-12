@@ -100,9 +100,11 @@ func Register(r *gin.Engine, d Deps) {
 
 	g.GET("/tokens", a.listTokens)
 	g.POST("/tokens", a.requireWrite, a.createToken)
+	g.GET("/tokens/:id/secret", a.requireWrite, a.revealToken)
 	g.DELETE("/tokens/:id", a.requireWrite, a.deleteToken)
 	g.GET("/s3keys", a.listS3Keys)
 	g.POST("/s3keys", a.requireWrite, a.createS3Key)
+	g.GET("/s3keys/:key/secret", a.requireWrite, a.revealS3Key)
 	g.DELETE("/s3keys/:key", a.requireWrite, a.deleteS3Key)
 
 	g.GET("/system/info", a.systemInfo)

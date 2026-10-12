@@ -27,6 +27,23 @@ const creating = ref(false)
 const form = reactive({ name: '', read_only: false })
 const secretOpen = ref(false)
 const secretItems = ref<{ label: string; value: string }[]>([])
+const revealing = ref<string | null>(null)
+
+/** Read the secret back from the server: it is stored encrypted, not hashed. */
+async function reveal(k: S3Key): Promise<void> {
+  revealing.value = k.access_key
+  try {
+    secretItems.value = [
+      { label: 'Access Key', value: k.access_key },
+      { label: 'Secret Key', value: await s3KeysApi.reveal(k.access_key) },
+    ]
+    secretOpen.value = true
+  } catch {
+    /* 错误已提示 */
+  } finally {
+    revealing.value = null
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -90,16 +107,19 @@ const columns = computed<DataTableColumns<S3Key>>(() => [
   {
     title: '',
     key: 'actions',
-    width: 72,
+    width: 132,
     render: (r) =>
-      h(
-        NPopconfirm,
-        { onPositiveClick: () => remove(r), positiveText: '删除', negativeText: '取消' },
-        {
-          trigger: () => h(NButton, { size: 'small', type: 'error', quaternary: true }, () => '删除'),
-          default: () => '删除该密钥？使用它的 S3 客户端将无法再访问。',
-        },
-      ),
+      h(NSpace, { size: 4, justify: 'end' }, () => [
+        h(NButton, { size: 'small', quaternary: true, loading: revealing.value === r.access_key, onClick: () => reveal(r) }, () => '查看'),
+        h(
+          NPopconfirm,
+          { onPositiveClick: () => remove(r), positiveText: '删除', negativeText: '取消' },
+          {
+            trigger: () => h(NButton, { size: 'small', type: 'error', quaternary: true }, () => '删除'),
+            default: () => '删除该密钥？使用它的 S3 客户端将无法再访问。',
+          },
+        ),
+      ]),
   },
 ])
 </script>
@@ -135,7 +155,7 @@ const columns = computed<DataTableColumns<S3Key>>(() => [
       </template>
     </n-modal>
 
-    <secret-dialog v-model:show="secretOpen" title="S3 密钥已创建" :items="secretItems" />
+    <secret-dialog v-model:show="secretOpen" title="S3 密钥" :items="secretItems" />
   </div>
 </template>
 
