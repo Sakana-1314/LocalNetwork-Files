@@ -4,8 +4,6 @@ import {
   NButton,
   NCard,
   NDataTable,
-  NDrawer,
-  NDrawerContent,
   NEmpty,
   NForm,
   NFormItem,
@@ -13,6 +11,7 @@ import {
   NGrid,
   NIcon,
   NInput,
+  NModal,
   NPopconfirm,
   NSelect,
   NSpace,
@@ -50,8 +49,8 @@ async function load(): Promise<void> {
 }
 onMounted(load)
 
-// ---------- 编辑抽屉 ----------
-const drawerOpen = ref(false)
+// ---------- 编辑弹窗 ----------
+const modalOpen = ref(false)
 const editing = ref<User | null>(null)
 const saving = ref(false)
 const formRef = ref<FormInst | null>(null)
@@ -96,7 +95,7 @@ function openCreate(): void {
   editing.value = null
   Object.assign(form, { username: '', password: '', role: 'user', disabled: false, mounts: [] })
   addMount()
-  drawerOpen.value = true
+  modalOpen.value = true
 }
 
 function openEdit(u: User): void {
@@ -108,7 +107,7 @@ function openEdit(u: User): void {
     disabled: u.disabled,
     mounts: u.mounts.map((m) => ({ name: m.name, path: m.path ?? '', writable: m.writable, _key: ++keySeq })),
   })
-  drawerOpen.value = true
+  modalOpen.value = true
 }
 
 function addMount(): void {
@@ -182,7 +181,7 @@ async function save(): Promise<void> {
       await adminApi.createUser(payload)
       message.success('用户已创建')
     }
-    drawerOpen.value = false
+    modalOpen.value = false
     await load()
   } catch {
     /* 错误已提示 */
@@ -191,10 +190,13 @@ async function save(): Promise<void> {
   }
 }
 
-async function remove(u: User): Promise<void> {
+async function removeEditing(): Promise<void> {
+  const u = editing.value
+  if (!u) return
   try {
     await adminApi.deleteUser(u.id)
     message.success(`已删除用户 ${u.username}`)
+    modalOpen.value = false
     await load()
   } catch {
     /* 错误已提示 */
@@ -257,26 +259,13 @@ const columns = computed<DataTableColumns<User>>(() => {
     },
   ]
   if (!isMobile.value) cols.push({ title: '创建时间', key: 'created_at', width: 150, render: (u) => formatDate(u.created_at) })
-  cols.push({
-    title: '操作',
-    key: 'actions',
-    width: 130,
-    render: (u) =>
-      h(NSpace, { size: 4 }, () => [
-        h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => openEdit(u) }, () => '编辑'),
-        h(
-          NPopconfirm,
-          { onPositiveClick: () => remove(u), positiveText: '删除', negativeText: '取消' },
-          {
-            trigger: () =>
-              h(NButton, { size: 'small', quaternary: true, type: 'error', disabled: u.id === auth.user?.id }, () => '删除'),
-            default: () => `确定删除用户「${u.username}」？其访问令牌与 S3 密钥也将失效。`,
-          },
-        ),
-      ]),
-  })
   return cols
 })
+
+/** Clicking anywhere on a row opens the editor. */
+function rowProps(u: User): { style: string; onClick: () => void } {
+  return { style: 'cursor: pointer', onClick: () => openEdit(u) }
+}
 </script>
 
 <template>
@@ -298,15 +287,21 @@ const columns = computed<DataTableColumns<User>>(() => {
         :data="users"
         :loading="loading"
         :row-key="(u: User) => u.id"
+        :row-props="rowProps"
         :bordered="false"
-        :scroll-x="isMobile ? 720 : undefined"
+        :scroll-x="isMobile ? 620 : undefined"
       >
         <template #empty><n-empty description="暂无用户" /></template>
       </n-data-table>
     </n-card>
 
-    <n-drawer v-model:show="drawerOpen" :width="isMobile ? '100%' : 560" placement="right">
-      <n-drawer-content :title="editing ? `编辑用户 · ${editing.username}` : '新建用户'" closable>
+    <n-modal
+      v-model:show="modalOpen"
+      preset="card"
+      :title="editing ? `编辑用户 · ${editing.username}` : '新建用户'"
+      :style="{ width: isMobile ? 'calc(100vw - 24px)' : '640px' }"
+    >
+      <div class="modal-body">
         <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
           <n-form-item label="用户名" path="username">
             <n-input v-model:value="form.username" placeholder="用于登录、WebDAV、SMB" :input-props="{ autocomplete: 'off' }" />
@@ -366,14 +361,31 @@ const columns = computed<DataTableColumns<User>>(() => {
             </div>
           </div>
         </n-form>
-        <template #footer>
-          <n-space justify="end">
-            <n-button @click="drawerOpen = false">取消</n-button>
+      </div>
+      <template #footer>
+        <div class="modal-footer">
+          <n-popconfirm
+            v-if="editing"
+            positive-text="删除"
+            negative-text="取消"
+            :positive-button-props="{ type: 'error' }"
+            @positive-click="removeEditing"
+          >
+            <template #trigger>
+              <n-button type="error" secondary :disabled="editing.id === auth.user?.id">
+                <template #icon><n-icon :component="TrashOutline" /></template>
+                删除用户
+              </n-button>
+            </template>
+            确定删除用户「{{ editing.username }}」？其访问令牌与 S3 密钥也将失效。
+          </n-popconfirm>
+          <n-space>
+            <n-button @click="modalOpen = false">取消</n-button>
             <n-button type="primary" :loading="saving" @click="save">{{ editing ? '保存' : '创建' }}</n-button>
           </n-space>
-        </template>
-      </n-drawer-content>
-    </n-drawer>
+        </div>
+      </template>
+    </n-modal>
 
     <server-dir-picker-modal v-model:show="pickerOpen" :initial-path="pickerInitial" @confirm="onPicked" />
   </div>
@@ -384,6 +396,17 @@ const columns = computed<DataTableColumns<User>>(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 12px;
+}
+.modal-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
 }
 .mounts-head {
