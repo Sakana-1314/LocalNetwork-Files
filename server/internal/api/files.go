@@ -16,6 +16,15 @@ import (
 	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
+// @Summary  列出目录
+// @Tags     文件
+// @Produce  json
+// @Param    path query string false "目录的虚拟路径，省略时为根目录 /" default(/)
+// @Success  200 {object} ListResponse "该目录下的条目列表"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "目录不存在"
+// @Security bearerAuth
+// @Router   /fs/list [get]
 func (a *API) fsList(c *gin.Context) {
 	p := c.DefaultQuery("path", "/")
 	entries, writable, err := a.fs(c).List(p)
@@ -24,9 +33,18 @@ func (a *API) fsList(c *gin.Context) {
 		return
 	}
 	a.signEntries(entries)
-	c.JSON(http.StatusOK, gin.H{"path": vfs.CleanPath(p), "writable": writable, "entries": entries})
+	c.JSON(http.StatusOK, ListResponse{Path: vfs.CleanPath(p), Writable: writable, Entries: entries})
 }
 
+// @Summary  获取单个文件/目录信息
+// @Tags     文件
+// @Produce  json
+// @Param    path query string true "文件或目录的虚拟路径"
+// @Success  200 {object} vfs.Entry "该文件或目录的信息"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件或目录不存在"
+// @Security bearerAuth
+// @Router   /fs/stat [get]
 func (a *API) fsStat(c *gin.Context) {
 	e, err := a.fs(c).Stat(c.Query("path"))
 	if err != nil {
@@ -42,6 +60,16 @@ var activeTypes = map[string]bool{
 	"text/html": true, "image/svg+xml": true, "application/xhtml+xml": true, "text/xml": true, "application/xml": true,
 }
 
+// @Summary  读取原始文件（支持 Range 断点续传）
+// @Tags     文件
+// @Param    path query string true "文件的虚拟路径"
+// @Param    download query boolean false "为 true 时以附件形式下载（Content-Disposition: attachment）"
+// @Success  200 {string} binary "完整文件内容；响应头带 Content-Type 与 Accept-Ranges"
+// @Success  206 {string} binary "Range 请求命中的部分内容"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /fs/raw [get]
 func (a *API) fsRaw(c *gin.Context) {
 	f, fi, err := a.fs(c).Open(c.Query("path"))
 	if err != nil {
@@ -66,8 +94,30 @@ func (a *API) fsRaw(c *gin.Context) {
 	http.ServeContent(c.Writer, c.Request, "", fi.ModTime(), f)
 }
 
+// @Summary  同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名
+// @Tags     文件
+// @Param    name path string true "文件名，仅用于让浏览器显示真实文件名，服务端忽略"
+// @Param    path query string true "文件的虚拟路径（实际使用的路径）"
+// @Param    download query boolean false "为 true 时以附件形式下载"
+// @Success  200 {string} binary "完整文件内容"
+// @Success  206 {string} binary "Range 请求命中的部分内容"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /fs/raw/{name} [get]
+func (a *API) fsRawNamed(c *gin.Context) { a.fsRaw(c) }
+
 const maxTextSize = 4 << 20
 
+// @Summary  读取文本文件（最大 4 MiB）
+// @Tags     文件
+// @Produce  json
+// @Param    path query string true "文本文件的虚拟路径"
+// @Success  200 {object} TextResponse "文本内容"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /fs/text [get]
 func (a *API) fsText(c *gin.Context) {
 	f, fi, err := a.fs(c).Open(c.Query("path"))
 	if err != nil {
@@ -93,9 +143,22 @@ func (a *API) fsText(c *gin.Context) {
 			content = string(dec)
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"content": content, "truncated": truncated})
+	c.JSON(http.StatusOK, TextResponse{Content: content, Truncated: truncated})
 }
 
+// @Summary  上传 / 覆盖文件（请求体为文件内容，自动创建父目录）
+// @Tags     文件
+// @Accept   application/octet-stream
+// @Produce  json
+// @Param    path query string true "目标文件的完整虚拟路径"
+// @Param    overwrite query boolean false "目标已存在时是否覆盖；为 false 时返回 409" default(false)
+// @Param    body body string true "文件内容"
+// @Success  201 {object} vfs.Entry "上传成功，返回新文件的条目信息"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Failure  409 {object} ErrorResponse "目标文件已存在且未允许覆盖"
+// @Security bearerAuth
+// @Router   /fs/file [put]
 func (a *API) fsPut(c *gin.Context) {
 	overwrite, _ := strconv.ParseBool(c.DefaultQuery("overwrite", "false"))
 	e, err := a.fs(c).WriteFile(c.Query("path"), c.Request.Body, overwrite)
@@ -106,10 +169,18 @@ func (a *API) fsPut(c *gin.Context) {
 	c.JSON(http.StatusCreated, e)
 }
 
+// @Summary  新建目录
+// @Tags     文件
+// @Accept   json
+// @Produce  json
+// @Param    body body MkdirRequest true "新目录路径"
+// @Success  201 {object} vfs.Entry "目录创建成功，返回新目录的条目信息"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Security bearerAuth
+// @Router   /fs/mkdir [post]
 func (a *API) fsMkdir(c *gin.Context) {
-	var req struct {
-		Path string `json:"path" binding:"required"`
-	}
+	var req MkdirRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -121,11 +192,18 @@ func (a *API) fsMkdir(c *gin.Context) {
 	c.JSON(http.StatusCreated, e)
 }
 
+// @Summary  重命名
+// @Tags     文件
+// @Accept   json
+// @Produce  json
+// @Param    body body RenameRequest true "原路径与新名称"
+// @Success  200 {object} vfs.Entry "重命名成功，返回更新后的条目信息"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Security bearerAuth
+// @Router   /fs/rename [post]
 func (a *API) fsRename(c *gin.Context) {
-	var req struct {
-		Path string `json:"path" binding:"required"`
-		Name string `json:"name" binding:"required"`
-	}
+	var req RenameRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -159,11 +237,7 @@ func (b *batchResult) add(p string, err error) {
 }
 
 func (a *API) transfer(c *gin.Context, op func(fsys *vfs.FS, src, dst string, overwrite bool) error) {
-	var req struct {
-		Sources   []string `json:"sources" binding:"required"`
-		DestDir   string   `json:"dest_dir" binding:"required"`
-		Overwrite bool     `json:"overwrite"`
-	}
+	var req TransferRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -176,18 +250,46 @@ func (a *API) transfer(c *gin.Context, op func(fsys *vfs.FS, src, dst string, ov
 	c.JSON(http.StatusOK, res)
 }
 
+// @Summary  移动（可跨授权目录）
+// @Tags     文件
+// @Accept   json
+// @Produce  json
+// @Param    body body TransferRequest true "源路径、目标目录与是否覆盖"
+// @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Security bearerAuth
+// @Router   /fs/move [post]
 func (a *API) fsMove(c *gin.Context) {
 	a.transfer(c, func(fsys *vfs.FS, src, dst string, ow bool) error { return fsys.Move(src, dst, ow) })
 }
 
+// @Summary  复制
+// @Tags     文件
+// @Accept   json
+// @Produce  json
+// @Param    body body TransferRequest true "源路径、目标目录与是否覆盖"
+// @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Security bearerAuth
+// @Router   /fs/copy [post]
 func (a *API) fsCopy(c *gin.Context) {
 	a.transfer(c, func(fsys *vfs.FS, src, dst string, ow bool) error { return fsys.Copy(src, dst, ow) })
 }
 
+// @Summary  删除（目录递归删除）
+// @Tags     文件
+// @Accept   json
+// @Produce  json
+// @Param    body body DeleteRequest true "要删除的路径列表"
+// @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
+// @Security bearerAuth
+// @Router   /fs/delete [post]
 func (a *API) fsDelete(c *gin.Context) {
-	var req struct {
-		Paths []string `json:"paths" binding:"required"`
-	}
+	var req DeleteRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -199,6 +301,17 @@ func (a *API) fsDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// @Summary  模糊搜索文件名
+// @Tags     文件
+// @Produce  json
+// @Param    q query string true "搜索关键字（支持中文；按子序列模糊匹配）"
+// @Param    path query string false "仅在该目录（含子目录）下搜索，省略时为全部授权目录" default(/)
+// @Param    kind query string false "只返回该类型的条目，省略时不限类型"
+// @Param    limit query integer false "最多返回的结果条数，上限 500" default(100)
+// @Success  200 {object} SearchResponse "按相关度排序的搜索结果"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Security bearerAuth
+// @Router   /fs/search [get]
 func (a *API) fsSearch(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	if q == "" {

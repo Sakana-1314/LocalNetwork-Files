@@ -62,19 +62,22 @@ func lanRank(ip string) int {
 	return 3
 }
 
+// @Summary  系统与服务信息（用于挂载向导）
+// @Tags     系统
+// @Produce  json
+// @Success  200 {object} SystemInfo "版本、主机名、地址与各协议服务的运行状态"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Security bearerAuth
+// @Router   /system/info [get]
 func (a *API) systemInfo(c *gin.Context) {
 	host, _ := os.Hostname()
 	addrs := lanAddresses()
 	if addrs == nil {
 		addrs = []string{}
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"version":   a.Version,
-		"hostname":  host,
-		"addresses": addrs,
-		"http_port": a.httpPort(),
-		"ffmpeg":    a.Media.HasFFmpeg(),
-		"services":  a.Services.Status(principal(c).User.ID),
+	c.JSON(http.StatusOK, SystemInfo{
+		Version: a.Version, Hostname: host, Addresses: addrs, HTTPPort: a.httpPort(),
+		FFmpeg: a.Media.HasFFmpeg(), Services: a.Services.Status(principal(c).User.ID),
 	})
 }
 
@@ -82,15 +85,7 @@ func (a *API) systemInfo(c *gin.Context) {
 
 var validUsername = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$`)
 
-type userInput struct {
-	Username string        `json:"username"`
-	Password string        `json:"password"`
-	Role     string        `json:"role"`
-	Disabled bool          `json:"disabled"`
-	Mounts   []store.Mount `json:"mounts"`
-}
-
-func (in *userInput) validate(creating bool) error {
+func (in *UserInput) validate(creating bool) error {
 	in.Username = strings.TrimSpace(in.Username)
 	if !validUsername.MatchString(in.Username) {
 		return badRequest("用户名只能包含字母、数字、下划线、点和横线，最长 32 位")
@@ -149,6 +144,14 @@ func (a *API) checkUsername(c *gin.Context, name string, exclude uint) bool {
 	return true
 }
 
+// @Summary  用户列表
+// @Tags     管理
+// @Produce  json
+// @Success  200 {array} store.User "全部用户及其授权目录（仅管理员可见本地路径）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/users [get]
 func (a *API) adminListUsers(c *gin.Context) {
 	users, err := a.Store.ListUsers()
 	if err != nil {
@@ -162,8 +165,18 @@ func (a *API) adminListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+// @Summary  创建用户
+// @Tags     管理
+// @Accept   json
+// @Produce  json
+// @Param    body body UserInput true "用户信息与授权目录"
+// @Success  201 {object} store.User "用户创建成功"
+// @Failure  400 {object} ErrorResponse "用户名或密码无效"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/users [post]
 func (a *API) adminCreateUser(c *gin.Context) {
-	var in userInput
+	var in UserInput
 	if !bind(c, &in) {
 		return
 	}
@@ -201,6 +214,18 @@ func (a *API) countActiveAdmins(exclude uint) int {
 	return n
 }
 
+// @Summary  更新用户（password 为空表示不修改）
+// @Tags     管理
+// @Accept   json
+// @Produce  json
+// @Param    id path integer true "用户 ID"
+// @Param    body body UserInput true "用户信息与授权目录（整表替换）"
+// @Success  200 {object} store.User "用户已更新；角色或状态变化会导致该用户重新登录"
+// @Failure  400 {object} ErrorResponse "用户名或密码无效"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Failure  404 {object} ErrorResponse "用户不存在"
+// @Security bearerAuth
+// @Router   /admin/users/{id} [put]
 func (a *API) adminUpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -212,7 +237,7 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	var in userInput
+	var in UserInput
 	if !bind(c, &in) {
 		return
 	}
@@ -244,6 +269,15 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, userView(u, true))
 }
 
+// @Summary  删除用户
+// @Tags     管理
+// @Param    id path integer true "用户 ID"
+// @Success  204 "用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体"
+// @Failure  400 {object} ErrorResponse "不允许删除最后一个管理员或当前登录用户"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Failure  404 {object} ErrorResponse "用户不存在"
+// @Security bearerAuth
+// @Router   /admin/users/{id} [delete]
 func (a *API) adminDeleteUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -262,6 +296,14 @@ func (a *API) adminDeleteUser(c *gin.Context) {
 }
 
 // adminBrowse lists local directories so admins can pick mount paths.
+// @Summary  浏览服务器本地目录（用于选择授权目录）
+// @Tags     管理
+// @Produce  json
+// @Param    path query string false "服务器本地绝对路径；省略时返回根目录 / 盘符列表"
+// @Success  200 {object} BrowseResponse "该本地目录的子目录列表"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/browse [get]
 func (a *API) adminBrowse(c *gin.Context) {
 	p := c.Query("path")
 	if p == "" {
@@ -273,7 +315,7 @@ func (a *API) adminBrowse(c *gin.Context) {
 					drives = append(drives, root)
 				}
 			}
-			c.JSON(http.StatusOK, gin.H{"path": "", "parent": "", "dirs": drives})
+			c.JSON(http.StatusOK, BrowseResponse{Path: "", Parent: "", Dirs: drives})
 			return
 		}
 		p = "/"
@@ -300,7 +342,7 @@ func (a *API) adminBrowse(c *gin.Context) {
 	if parent == p {
 		parent = ""
 	}
-	c.JSON(http.StatusOK, gin.H{"path": p, "parent": parent, "dirs": dirs})
+	c.JSON(http.StatusOK, BrowseResponse{Path: p, Parent: parent, Dirs: dirs})
 }
 
 func isDir(p string) bool {
@@ -310,21 +352,33 @@ func isDir(p string) bool {
 
 // ---------- cache / search ----------
 
+// @Summary  缓存统计
+// @Tags     管理
+// @Produce  json
+// @Success  200 {object} CacheStats "预览图 / 转码缓存的占用、上限与保留时长，以及当前转码会话"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/cache [get]
 func (a *API) adminCacheStats(c *gin.Context) {
 	stats, last := a.Cache.Stats()
-	c.JSON(http.StatusOK, gin.H{
-		"dir":          a.Cache.Dir(),
-		"thumb":        stats[cache.Thumb],
-		"transcode":    stats[cache.Transcode],
-		"sessions":     a.Media.Sessions(),
-		"last_cleanup": last,
+	c.JSON(http.StatusOK, CacheStats{
+		Dir: a.Cache.Dir(), Thumb: stats[cache.Thumb], Transcode: stats[cache.Transcode],
+		Sessions: a.Media.Sessions(), LastCleanup: last,
 	})
 }
 
+// @Summary  清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）
+// @Tags     管理
+// @Accept   json
+// @Produce  json
+// @Param    body body CacheCleanRequest false "要清理的缓存桶，省略或 all 表示全部"
+// @Success  200 {object} CacheCleanResponse "清理完成，返回删除的文件数与字节数"
+// @Failure  400 {object} ErrorResponse "kind 无效"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/cache/clean [post]
 func (a *API) adminCacheClean(c *gin.Context) {
-	var req struct {
-		Kind string `json:"kind"`
-	}
+	var req CacheCleanRequest
 	if c.Request.ContentLength > 0 && !bind(c, &req) {
 		return
 	}
@@ -342,9 +396,23 @@ func (a *API) adminCacheClean(c *gin.Context) {
 	c.JSON(http.StatusOK, a.Cache.Cleanup(buckets))
 }
 
+// @Summary  搜索索引状态
+// @Tags     管理
+// @Produce  json
+// @Success  200 {object} IndexStatus "索引的构建状态与统计"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/search/status [get]
 func (a *API) adminSearchStatus(c *gin.Context) { c.JSON(http.StatusOK, a.Search.Status()) }
 
+// @Summary  重建搜索索引
+// @Tags     管理
+// @Produce  json
+// @Success  202 {object} ReindexResponse "已开始后台重建"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Security bearerAuth
+// @Router   /admin/search/reindex [post]
 func (a *API) adminReindex(c *gin.Context) {
 	a.Search.RebuildAsync()
-	c.JSON(http.StatusAccepted, gin.H{"ok": true})
+	c.JSON(http.StatusAccepted, ReindexResponse{OK: true})
 }

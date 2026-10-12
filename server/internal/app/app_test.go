@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -1224,26 +1225,64 @@ func TestRoutingAndSpec(t *testing.T) {
 		}
 	}
 
-	// Every operation of the spec is routed and requires authentication
-	// (except login and openapi).
+	// 规范里每个 operation 都必须真实存在路由；未标注 security 的视为公开接口，
+	// 且只允许是下面这几个（新增公开接口时必须显式登记，避免误把受保护接口写成公开）。
+	publicOps := map[string]int{
+		"POST /auth/login":  400, // 未带凭据时由参数校验拒绝
+		"POST /auth/logout": 204, // 只清 Cookie，必须在会话过期后仍可用
+		"GET /media/thumb":  403, // 只校验摘要签名，不要求登录
+	}
+	seen := map[string]bool{}
 	for p, ops := range spec.Paths {
 		for method := range ops {
 			m := strings.ToUpper(method)
-			target := "/api/v1" + strings.NewReplacer("{id}", "x", "{segment}", "0", "{access_key}", "x").Replace(p)
+			target := "/api/v1" + replacePathParams(p)
+			key := m + " " + p
 			rec := e.do(m, target, "", nil)
-			_, public := ops[method]["security"]
-			// Logout only clears the cookie and must work with an expired session,
-			// so it is intentionally public (the spec omits `security: []` here).
-			public = public || p == "/auth/logout"
+			_, requiresAuth := ops[method]["security"]
 			if rec.Code == 404 && strings.Contains(rec.Body.String(), "接口不存在") {
 				t.Errorf("%s %s is in the spec but not routed", m, target)
+				continue
 			}
-			if !public && rec.Code != 401 {
+			if !requiresAuth {
+				want, ok := publicOps[key]
+				if !ok {
+					t.Errorf("%s %s is public in the spec but is not a known public operation", m, target)
+					continue
+				}
+				seen[key] = true
+				if rec.Code != want {
+					t.Errorf("%s %s without credentials: got %d, want %d", m, target, rec.Code, want)
+				}
+				continue
+			}
+			if rec.Code != 401 {
 				t.Errorf("%s %s without credentials: %d", m, target, rec.Code)
 			}
 		}
 	}
+	for key := range publicOps {
+		if !seen[key] {
+			t.Errorf("%s is expected to be public, but the spec marks it as protected", key)
+		}
+	}
 }
+
+// replacePathParams 把规范里的路径参数替换成可用于请求路由的样例值。
+func replacePathParams(p string) string {
+	return pathParamRe.ReplaceAllStringFunc(p, func(m string) string {
+		switch strings.TrimSuffix(strings.TrimPrefix(m, "{"), "}") {
+		case "file":
+			return "0.ts"
+		case "id", "access_key":
+			return "x"
+		default:
+			return "x"
+		}
+	})
+}
+
+var pathParamRe = regexp.MustCompile(`\{[^}]+\}`)
 
 // ---------------------------------------------------------------------------
 

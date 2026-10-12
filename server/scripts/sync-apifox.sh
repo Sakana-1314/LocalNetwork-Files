@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# 把 server/internal/api/openapi.yaml 同步到 Apifox 项目。
+# 把 server/internal/api/openapi.json 同步到 Apifox 项目。
+#
+# 该文件是 Go 注解的生成物（make docs），不要手改。
 #
 #   APIFOX_TOKEN=afxp_xxx ./server/scripts/sync-apifox.sh
 #   APIFOX_TOKEN=afxp_xxx APIFOX_PROJECT_ID=8912512 ./server/scripts/sync-apifox.sh
@@ -11,7 +13,7 @@ set -euo pipefail
 
 # 脚本位于 server/scripts/，仓库根目录是上两级。
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SPEC="${SPEC:-$ROOT/server/internal/api/openapi.yaml}"
+SPEC="${SPEC:-$ROOT/server/internal/api/openapi.json}"
 
 : "${APIFOX_TOKEN:?请先设置 APIFOX_TOKEN 环境变量（Apifox 系统级访问令牌）}"
 PROJECT_ID="${APIFOX_PROJECT_ID:-8912512}"

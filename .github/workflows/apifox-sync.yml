@@ -1,6 +1,6 @@
 name: Apifox Sync
 
-# 手动把 server/internal/api/openapi.yaml 同步到 Apifox 项目。
+# 手动把 server/internal/api/openapi.json 同步到 Apifox 项目。
 # 需要仓库 Secret：APIFOX_TOKEN（Apifox 系统级访问令牌）。
 # 未配置令牌时只提示并成功退出，不阻塞其它流程。
 
@@ -34,7 +34,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync openapi.yaml
+      - name: Sync openapi.json
         if: steps.token.outputs.configured == 'true'
         env:
           APIFOX_TOKEN: ${{ secrets.APIFOX_TOKEN }}

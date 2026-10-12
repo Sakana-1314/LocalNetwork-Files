@@ -5,7 +5,7 @@ import { OpenOutline, RefreshOutline } from '@vicons/ionicons5'
 
 /**
  * 接口文档以 iframe 内嵌 Apifox 在线文档（https://local-files.apifox.cn）。
- * 规范源文件为 server/internal/api/openapi.yaml，用 server/scripts/sync-apifox.sh 同步。
+ * 规范由 Go 注解生成到 server/internal/api/openapi.json，用 server/scripts/sync-apifox.sh 同步。
  * 可通过 VITE_APIFOX_DOC_URL 覆盖地址。
  */
 const DOC_URL = (import.meta.env.VITE_APIFOX_DOC_URL as string | undefined) ?? 'https://local-files.apifox.cn/'

@@ -1,0 +1,3355 @@
+{
+  "components": {
+    "schemas": {
+      "api.BatchFailure": {
+        "properties": {
+          "error": {
+            "description": "失败原因",
+            "type": "string"
+          },
+          "path": {
+            "description": "失败的虚拟路径",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.BatchResult": {
+        "properties": {
+          "failed": {
+            "description": "操作失败的条目及原因",
+            "items": {
+              "$ref": "#/components/schemas/api.BatchFailure"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "succeeded": {
+            "description": "操作成功的虚拟路径列表",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "type": "object"
+      },
+      "api.BrowseResponse": {
+        "properties": {
+          "dirs": {
+            "description": "子目录的绝对路径",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "parent": {
+            "description": "上一级本地路径；已在顶层时为空字符串",
+            "type": "string"
+          },
+          "path": {
+            "description": "当前浏览的本地绝对路径",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.CacheCleanRequest": {
+        "properties": {
+          "kind": {
+            "description": "要清理的缓存桶：thumb 预览图，transcode 转码分片，all 全部",
+            "enum": [
+              "thumb",
+              "transcode",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.CacheCleanResponse": {
+        "properties": {
+          "removed_bytes": {
+            "description": "释放的字节数",
+            "type": "integer"
+          },
+          "removed_files": {
+            "description": "删除的文件数",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "api.CacheStats": {
+        "properties": {
+          "dir": {
+            "description": "缓存目录的绝对路径",
+            "type": "string"
+          },
+          "last_cleanup": {
+            "description": "上次清理时间；null 表示尚未清理过",
+            "type": "string"
+          },
+          "sessions": {
+            "description": "当前已知的转码会话",
+            "items": {
+              "$ref": "#/components/schemas/media.SessionInfo"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "thumb": {
+            "$ref": "#/components/schemas/cache.BucketStats",
+            "description": "预览图缓存"
+          },
+          "transcode": {
+            "$ref": "#/components/schemas/cache.BucketStats",
+            "description": "转码分片缓存"
+          }
+        },
+        "type": "object"
+      },
+      "api.CreateS3KeyRequest": {
+        "properties": {
+          "name": {
+            "description": "备注名称，便于辨认，最长 128 字符",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "是否只读；true 时该密钥只能读取",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.CreateTokenRequest": {
+        "properties": {
+          "expires_in_days": {
+            "description": "有效期天数；0 或省略表示永不过期，最大 3650",
+            "type": "integer"
+          },
+          "name": {
+            "description": "令牌名称，便于辨认，最长 128 字符",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "权限范围：read 只读，write 可写；至少包含 read",
+            "items": {
+              "enum": [
+                "read",
+                "write"
+              ],
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "api.DeleteRequest": {
+        "properties": {
+          "paths": {
+            "description": "要删除的虚拟路径列表，目录会被递归删除",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "required": [
+          "paths"
+        ],
+        "type": "object"
+      },
+      "api.ErrorResponse": {
+        "properties": {
+          "error": {
+            "description": "错误信息",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.IndexStatus": {
+        "properties": {
+          "duration_ms": {
+            "description": "上次构建耗时（毫秒）",
+            "type": "integer"
+          },
+          "entries": {
+            "description": "已索引的条目数",
+            "type": "integer"
+          },
+          "indexing": {
+            "description": "是否正在构建索引",
+            "type": "boolean"
+          },
+          "last_built": {
+            "description": "上次构建完成时间；null 表示尚未构建",
+            "type": "string"
+          },
+          "roots": {
+            "description": "索引的顶层目录数",
+            "type": "integer"
+          },
+          "watching": {
+            "description": "是否启用了文件系统监听",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.ListResponse": {
+        "properties": {
+          "entries": {
+            "description": "目录下的文件与子目录",
+            "items": {
+              "$ref": "#/components/schemas/vfs.Entry"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "path": {
+            "description": "规范化后的目录虚拟路径",
+            "type": "string"
+          },
+          "writable": {
+            "description": "当前目录是否可写",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.LoginRequest": {
+        "properties": {
+          "password": {
+            "description": "登录密码",
+            "type": "string"
+          },
+          "username": {
+            "description": "用户名",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "username"
+        ],
+        "type": "object"
+      },
+      "api.LoginResponse": {
+        "properties": {
+          "expires_at": {
+            "description": "会话过期时间",
+            "type": "string"
+          },
+          "token": {
+            "description": "会话令牌",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/store.User",
+            "description": "登录用户信息"
+          }
+        },
+        "type": "object"
+      },
+      "api.MkdirRequest": {
+        "properties": {
+          "path": {
+            "description": "新目录的完整虚拟路径",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "api.PasswordRequest": {
+        "properties": {
+          "new_password": {
+            "description": "新密码，至少 6 位",
+            "type": "string"
+          },
+          "old_password": {
+            "description": "当前密码",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_password",
+          "old_password"
+        ],
+        "type": "object"
+      },
+      "api.PasswordResponse": {
+        "properties": {
+          "expires_at": {
+            "description": "新会话的过期时间",
+            "type": "string"
+          },
+          "token": {
+            "description": "新的会话令牌",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.ReindexResponse": {
+        "properties": {
+          "ok": {
+            "description": "是否已开始后台重建",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.RenameRequest": {
+        "properties": {
+          "name": {
+            "description": "新名称（不含路径）",
+            "type": "string"
+          },
+          "path": {
+            "description": "要重命名的文件或目录的虚拟路径",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "type": "object"
+      },
+      "api.S3KeySecret": {
+        "properties": {
+          "secret_key": {
+            "description": "S3 Secret Key（访问密钥对应的私钥）",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.S3KeyWithSecret": {
+        "properties": {
+          "access_key": {
+            "description": "S3 Access Key（访问密钥 ID）",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "备注名称",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "是否只读",
+            "type": "boolean"
+          },
+          "secret_key": {
+            "description": "S3 Secret Key（访问密钥对应的私钥）",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.SearchResponse": {
+        "properties": {
+          "indexing": {
+            "description": "索引是否正在构建（此时结果可能不完整）",
+            "type": "boolean"
+          },
+          "results": {
+            "description": "命中的条目，按相关度从高到低",
+            "items": {
+              "$ref": "#/components/schemas/api.SearchResult"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "took_ms": {
+            "description": "本次搜索耗时（毫秒）",
+            "type": "number"
+          },
+          "total": {
+            "description": "命中总数（可能大于返回数量）",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "api.SearchResult": {
+        "properties": {
+          "is_dir": {
+            "description": "是否为目录",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "文件类型，用于选择预览方式",
+            "enum": [
+              "dir",
+              "image",
+              "video",
+              "audio",
+              "text",
+              "pdf",
+              "archive",
+              "other"
+            ],
+            "type": "string"
+          },
+          "matches": {
+            "description": "名称中命中的字符下标（按 Unicode 字符计）",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "mime": {
+            "description": "由扩展名推断的 MIME 类型",
+            "type": "string"
+          },
+          "mod_time": {
+            "description": "最后修改时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "文件或目录名",
+            "type": "string"
+          },
+          "path": {
+            "description": "虚拟路径",
+            "type": "string"
+          },
+          "score": {
+            "description": "匹配得分，越高越相关",
+            "type": "integer"
+          },
+          "size": {
+            "description": "文件大小（字节）；目录为 0",
+            "type": "integer"
+          },
+          "thumb": {
+            "description": "Thumb 是预览源文件的内容摘要（不可预览时为空串）。它不是路径，\n因此列目录不会暴露文件在服务器上的位置。",
+            "type": "string"
+          },
+          "thumb_sig": {
+            "description": "ThumbSig 是服务端对 Thumb 的签名，供 /media/thumb 校验。",
+            "type": "string"
+          },
+          "writable": {
+            "description": "是否可写（目录权限与令牌范围共同决定）",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.ServiceStatus": {
+        "properties": {
+          "account": {
+            "description": "仅 SMB：当前用户的 SMB 登录名",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "是否在 config.yaml 中启用",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "服务启动错误（仅管理员可见）",
+            "type": "string"
+          },
+          "path": {
+            "description": "服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）",
+            "type": "string"
+          },
+          "port": {
+            "description": "监听端口",
+            "type": "integer"
+          },
+          "running": {
+            "description": "当前是否正在运行",
+            "type": "boolean"
+          },
+          "shares": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "仅 SMB：当前用户的挂载名 → SMB 共享名",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "api.SystemInfo": {
+        "properties": {
+          "addresses": {
+            "description": "服务器探测到的局域网 IP 地址",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "ffmpeg": {
+            "description": "是否检测到 ffmpeg（决定转码与部分预览是否可用）",
+            "type": "boolean"
+          },
+          "hostname": {
+            "description": "服务器主机名",
+            "type": "string"
+          },
+          "http_port": {
+            "description": "Web / API / WebDAV / S3 的监听端口",
+            "type": "integer"
+          },
+          "services": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/api.ServiceStatus"
+            },
+            "description": "各协议服务的状态",
+            "type": "object"
+          },
+          "version": {
+            "description": "服务器版本",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.TextResponse": {
+        "properties": {
+          "content": {
+            "description": "文件文本内容（按 UTF-8 解码）",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "是否因超过 4 MiB 而被截断",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "api.TokenSecret": {
+        "properties": {
+          "token": {
+            "description": "令牌明文",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.TokenWithSecret": {
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "过期时间；null 表示永不过期",
+            "type": "string"
+          },
+          "id": {
+            "description": "令牌 ID",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "description": "最近使用时间；null 表示从未使用",
+            "type": "string"
+          },
+          "name": {
+            "description": "令牌名称",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Prefix 是令牌开头若干位，用于辨认；完整明文可通过 /tokens/{id}/secret 读取。",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "权限范围",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "token": {
+            "description": "令牌明文（ml_ 前缀），可随时通过 /tokens/{id}/secret 再次读取",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.TranscodeRequest": {
+        "properties": {
+          "audio_track": {
+            "description": "音轨序号（MediaInfo.audio 下标），0 为第 1 条",
+            "type": "integer"
+          },
+          "path": {
+            "description": "视频文件的虚拟路径",
+            "type": "string"
+          },
+          "quality": {
+            "description": "输出画质",
+            "enum": [
+              "original",
+              "1080p",
+              "720p",
+              "480p"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "api.TranscodeResponse": {
+        "properties": {
+          "duration": {
+            "description": "视频总时长（秒）",
+            "type": "number"
+          },
+          "id": {
+            "description": "转码会话 ID，用于请求播放列表与分片",
+            "type": "string"
+          },
+          "playlist": {
+            "description": "播放列表路径，如 /api/v1/media/hls/{id}/index.m3u8",
+            "type": "string"
+          },
+          "quality": {
+            "description": "实际生效的画质",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.TransferRequest": {
+        "properties": {
+          "dest_dir": {
+            "description": "目标目录的虚拟路径",
+            "type": "string"
+          },
+          "overwrite": {
+            "description": "目标已存在时是否覆盖",
+            "type": "boolean"
+          },
+          "sources": {
+            "description": "源文件或目录的虚拟路径列表",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "required": [
+          "dest_dir",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "api.UserInput": {
+        "properties": {
+          "disabled": {
+            "description": "是否禁用该账户",
+            "type": "boolean"
+          },
+          "mounts": {
+            "description": "授权目录列表，整表替换",
+            "items": {
+              "$ref": "#/components/schemas/store.Mount"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "password": {
+            "description": "密码；创建时必填且至少 6 位，更新时留空表示不修改",
+            "type": "string"
+          },
+          "role": {
+            "description": "角色，admin 为管理员",
+            "enum": [
+              "admin",
+              "user"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "description": "用户名，1-32 位，可用字母、数字、下划线、点和横线",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cache.BucketStats": {
+        "properties": {
+          "bytes": {
+            "description": "当前占用字节数",
+            "type": "integer"
+          },
+          "files": {
+            "description": "文件数量",
+            "type": "integer"
+          },
+          "max_bytes": {
+            "description": "容量上限（字节），超出后按最近最少使用淘汰",
+            "type": "integer"
+          },
+          "ttl_hours": {
+            "description": "保留时长（小时）；0 表示永不过期",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "media.AudioStream": {
+        "properties": {
+          "channels": {
+            "description": "声道数",
+            "type": "integer"
+          },
+          "codec": {
+            "description": "音频编码，如 aac、ac3",
+            "type": "string"
+          },
+          "index": {
+            "description": "音轨序号",
+            "type": "integer"
+          },
+          "language": {
+            "description": "语言标签（来自容器元数据）",
+            "type": "string"
+          },
+          "title": {
+            "description": "轨道标题（来自容器元数据）",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "media.MediaInfo": {
+        "properties": {
+          "audio": {
+            "description": "音频轨道列表；index 即请求转码时的 audio_track",
+            "items": {
+              "$ref": "#/components/schemas/media.AudioStream"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "bit_rate": {
+            "description": "总码率（bps）",
+            "type": "integer"
+          },
+          "direct_play": {
+            "description": "浏览器大概率可直接播放（无需转码）",
+            "type": "boolean"
+          },
+          "duration": {
+            "description": "总时长（秒）",
+            "type": "number"
+          },
+          "format": {
+            "description": "容器格式，如 matroska,webm",
+            "type": "string"
+          },
+          "subtitles": {
+            "description": "字幕轨道列表；index 即请求转换时的 index",
+            "items": {
+              "$ref": "#/components/schemas/media.SubtitleStream"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "video": {
+            "$ref": "#/components/schemas/media.VideoStream",
+            "description": "视频轨道；纯音频文件为 null"
+          }
+        },
+        "type": "object"
+      },
+      "media.SessionInfo": {
+        "properties": {
+          "id": {
+            "description": "会话 ID",
+            "type": "string"
+          },
+          "last_access": {
+            "description": "最近一次访问时间",
+            "type": "string"
+          },
+          "path": {
+            "description": "源视频的虚拟路径",
+            "type": "string"
+          },
+          "quality": {
+            "description": "输出画质",
+            "type": "string"
+          },
+          "running": {
+            "description": "当前是否有 ffmpeg 进程在转码",
+            "type": "boolean"
+          },
+          "user": {
+            "description": "正在观看的用户名（多用户时用逗号分隔）",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "media.SubtitleStream": {
+        "properties": {
+          "codec": {
+            "description": "字幕编码，如 subrip、ass、hdmv_pgs_subtitle",
+            "type": "string"
+          },
+          "external": {
+            "description": "外挂字幕的虚拟路径；内嵌字幕为空",
+            "type": "string"
+          },
+          "index": {
+            "description": "字幕序号",
+            "type": "integer"
+          },
+          "language": {
+            "description": "语言标签（来自容器元数据）",
+            "type": "string"
+          },
+          "title": {
+            "description": "轨道标题（来自容器元数据）",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "media.VideoStream": {
+        "properties": {
+          "codec": {
+            "description": "视频编码，如 h264、hevc",
+            "type": "string"
+          },
+          "fps": {
+            "description": "帧率",
+            "type": "number"
+          },
+          "height": {
+            "description": "画面高度（像素）",
+            "type": "integer"
+          },
+          "width": {
+            "description": "画面宽度（像素）",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "store.AccessToken": {
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "过期时间；null 表示永不过期",
+            "type": "string"
+          },
+          "id": {
+            "description": "令牌 ID",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "description": "最近使用时间；null 表示从未使用",
+            "type": "string"
+          },
+          "name": {
+            "description": "令牌名称",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Prefix 是令牌开头若干位，用于辨认；完整明文可通过 /tokens/{id}/secret 读取。",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "权限范围",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "type": "object"
+      },
+      "store.Mount": {
+        "properties": {
+          "id": {
+            "description": "授权目录 ID",
+            "type": "integer"
+          },
+          "name": {
+            "description": "在虚拟根目录下显示的名称",
+            "type": "string"
+          },
+          "path": {
+            "description": "服务器本地绝对路径（仅管理员可见）",
+            "type": "string"
+          },
+          "writable": {
+            "description": "false 为只读目录，true 为可写目录",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "store.S3Key": {
+        "properties": {
+          "access_key": {
+            "description": "S3 Access Key（访问密钥 ID）",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "备注名称",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "是否只读",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "store.User": {
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "disabled": {
+            "description": "是否已禁用（禁用后无法登录，令牌也失效）",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "用户 ID",
+            "type": "integer"
+          },
+          "mounts": {
+            "description": "该用户被授权的目录",
+            "items": {
+              "$ref": "#/components/schemas/store.Mount"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "role": {
+            "description": "角色，admin 为管理员",
+            "enum": [
+              "admin",
+              "user"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "description": "用户名",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "vfs.Entry": {
+        "properties": {
+          "is_dir": {
+            "description": "是否为目录",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "文件类型，用于选择预览方式",
+            "enum": [
+              "dir",
+              "image",
+              "video",
+              "audio",
+              "text",
+              "pdf",
+              "archive",
+              "other"
+            ],
+            "type": "string"
+          },
+          "mime": {
+            "description": "由扩展名推断的 MIME 类型",
+            "type": "string"
+          },
+          "mod_time": {
+            "description": "最后修改时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "文件或目录名",
+            "type": "string"
+          },
+          "path": {
+            "description": "虚拟路径",
+            "type": "string"
+          },
+          "size": {
+            "description": "文件大小（字节）；目录为 0",
+            "type": "integer"
+          },
+          "thumb": {
+            "description": "Thumb 是预览源文件的内容摘要（不可预览时为空串）。它不是路径，\n因此列目录不会暴露文件在服务器上的位置。",
+            "type": "string"
+          },
+          "thumb_sig": {
+            "description": "ThumbSig 是服务端对 Thumb 的签名，供 /media/thumb 校验。",
+            "type": "string"
+          },
+          "writable": {
+            "description": "是否可写（目录权限与令牌范围共同决定）",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "会话令牌或 API 访问令牌，形如 `Authorization: Bearer <token>`",
+        "in": "header",
+        "name": "Authorization",
+        "type": "apiKey"
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "项目文档",
+    "url": "https://github.com/Sakana-1314/MList"
+  },
+  "info": {
+    "description": "局域网文件管理系统 HTTP API。\n**认证方式**（任选其一）：\n- `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「账号设置 → 访问令牌」中创建的 API 访问令牌（`ml_` 前缀）。\n- 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。\n- 浏览器登录后自动携带的会话 Cookie。\n\n**路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的目录（挂载名），例如 `/电影/2024/a.mkv`。\n\n**预览图**：`GET /media/thumb` 只接收内容摘要与签名，不接收文件路径，且不要求登录，因此可直接放进 `<img>` 标签。\n\n**错误**：非 2xx 响应体为 `{\"error\": \"message\"}`。",
+    "title": "MList API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin/browse": {
+      "get": {
+        "parameters": [
+          {
+            "description": "服务器本地绝对路径；省略时返回根目录 / 盘符列表",
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BrowseResponse"
+                }
+              }
+            },
+            "description": "该本地目录的子目录列表"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "浏览服务器本地目录（用于选择授权目录）",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/cache": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.CacheStats"
+                }
+              }
+            },
+            "description": "预览图 / 转码缓存的占用、上限与保留时长，以及当前转码会话"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "缓存统计",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/cache/clean": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.CacheCleanRequest",
+                "description": "要清理的缓存桶，省略或 all 表示全部",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "要清理的缓存桶，省略或 all 表示全部"
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.CacheCleanResponse"
+                }
+              }
+            },
+            "description": "清理完成，返回删除的文件数与字节数"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "kind 无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/search/reindex": {
+      "post": {
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ReindexResponse"
+                }
+              }
+            },
+            "description": "已开始后台重建"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "重建搜索索引",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/search/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.IndexStatus"
+                }
+              }
+            },
+            "description": "索引的构建状态与统计"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "搜索索引状态",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/store.User"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "全部用户及其授权目录（仅管理员可见本地路径）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "用户列表",
+        "tags": [
+          "管理"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.UserInput",
+                "description": "用户信息与授权目录",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "用户信息与授权目录",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/store.User"
+                }
+              }
+            },
+            "description": "用户创建成功"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "用户名或密码无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建用户",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/users/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "description": "用户 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "不允许删除最后一个管理员或当前登录用户"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "用户不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "删除用户",
+        "tags": [
+          "管理"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "description": "用户 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.UserInput",
+                "description": "用户信息与授权目录（整表替换）",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "用户信息与授权目录（整表替换）",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/store.User"
+                }
+              }
+            },
+            "description": "用户已更新；角色或状态变化会导致该用户重新登录"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "用户名或密码无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "用户不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "更新用户（password 为空表示不修改）",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.LoginRequest",
+                "description": "登录凭据",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "登录凭据",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.LoginResponse"
+                }
+              }
+            },
+            "description": "登录成功，返回会话令牌与用户信息（同时写入会话 Cookie）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "用户名或密码错误"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "登录失败次数过多，请 10 分钟后再试"
+          }
+        },
+        "summary": "用户名密码登录",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "responses": {
+          "204": {
+            "description": "已退出登录，无响应体"
+          }
+        },
+        "summary": "退出登录（清除会话 Cookie）",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/store.User"
+                }
+              }
+            },
+            "description": "当前登录用户及其授权目录"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "当前用户",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/auth/password": {
+      "put": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.PasswordRequest",
+                "description": "原密码与新密码",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "原密码与新密码",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.PasswordResponse"
+                }
+              }
+            },
+            "description": "修改成功。旧会话全部失效，返回新的会话令牌（同时写入 Cookie），客户端应替换本地保存的令牌。"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "原密码错误或新密码不足 6 位"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "修改自己的密码",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/fs/copy": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.TransferRequest",
+                "description": "源路径、目标目录与是否覆盖",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "源路径、目标目录与是否覆盖",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BatchResult"
+                }
+              }
+            },
+            "description": "每个条目的处理结果（成功与失败分别列出）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "复制",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/delete": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.DeleteRequest",
+                "description": "要删除的路径列表",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "要删除的路径列表",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BatchResult"
+                }
+              }
+            },
+            "description": "每个条目的处理结果（成功与失败分别列出）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "删除（目录递归删除）",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/file": {
+      "put": {
+        "parameters": [
+          {
+            "description": "目标文件的完整虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "目标已存在时是否覆盖；为 false 时返回 409",
+            "in": "query",
+            "name": "overwrite",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "文件内容",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vfs.Entry"
+                }
+              }
+            },
+            "description": "上传成功，返回新文件的条目信息"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目标文件已存在且未允许覆盖"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "上传 / 覆盖文件（请求体为文件内容，自动创建父目录）",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/list": {
+      "get": {
+        "parameters": [
+          {
+            "description": "目录的虚拟路径，省略时为根目录 /",
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "default": "/",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ListResponse"
+                }
+              }
+            },
+            "description": "该目录下的条目列表"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "列出目录",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/mkdir": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.MkdirRequest",
+                "description": "新目录路径",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "新目录路径",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vfs.Entry"
+                }
+              }
+            },
+            "description": "目录创建成功，返回新目录的条目信息"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "新建目录",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/move": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.TransferRequest",
+                "description": "源路径、目标目录与是否覆盖",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "源路径、目标目录与是否覆盖",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BatchResult"
+                }
+              }
+            },
+            "description": "每个条目的处理结果（成功与失败分别列出）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "移动（可跨授权目录）",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/raw": {
+      "get": {
+        "parameters": [
+          {
+            "description": "文件的虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "为 true 时以附件形式下载（Content-Disposition: attachment）",
+            "in": "query",
+            "name": "download",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "完整文件内容；响应头带 Content-Type 与 Accept-Ranges"
+          },
+          "206": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Range 请求命中的部分内容"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "读取原始文件（支持 Range 断点续传）",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/raw/{name}": {
+      "get": {
+        "parameters": [
+          {
+            "description": "文件名，仅用于让浏览器显示真实文件名，服务端忽略",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "文件的虚拟路径（实际使用的路径）",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "为 true 时以附件形式下载",
+            "in": "query",
+            "name": "download",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "完整文件内容"
+          },
+          "206": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Range 请求命中的部分内容"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/rename": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.RenameRequest",
+                "description": "原路径与新名称",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "原路径与新名称",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vfs.Entry"
+                }
+              }
+            },
+            "description": "重命名成功，返回更新后的条目信息"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "目录只读或令牌无 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "重命名",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/search": {
+      "get": {
+        "parameters": [
+          {
+            "description": "搜索关键字（支持中文；按子序列模糊匹配）",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "仅在该目录（含子目录）下搜索，省略时为全部授权目录",
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "default": "/",
+              "type": "string"
+            }
+          },
+          {
+            "description": "只返回该类型的条目，省略时不限类型",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "最多返回的结果条数，上限 500",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 100,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.SearchResponse"
+                }
+              }
+            },
+            "description": "按相关度排序的搜索结果"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "模糊搜索文件名",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/stat": {
+      "get": {
+        "parameters": [
+          {
+            "description": "文件或目录的虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vfs.Entry"
+                }
+              }
+            },
+            "description": "该文件或目录的信息"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件或目录不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "获取单个文件/目录信息",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/fs/text": {
+      "get": {
+        "parameters": [
+          {
+            "description": "文本文件的虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.TextResponse"
+                }
+              }
+            },
+            "description": "文本内容"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "读取文本文件（最大 4 MiB）",
+        "tags": [
+          "文件"
+        ]
+      }
+    },
+    "/media/audio": {
+      "get": {
+        "parameters": [
+          {
+            "description": "音频文件的虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "起始秒数，从该位置开始转码（用于拖动进度）",
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "MP3 音频流（chunked 传输，Content-Type: audio/mpeg）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "音频实时转码为 MP3 流（用于浏览器不支持的格式，如 APE/WMA/DSD）",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/hls/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "description": "转码会话 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "会话已停止，无响应体"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "停止转码会话",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/hls/{id}/index.m3u8": {
+      "get": {
+        "parameters": [
+          {
+            "description": "转码会话 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "HLS 播放列表（m3u8，Content-Type: application/vnd.apple.mpegurl）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "会话不存在或已停止"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "HLS 播放列表",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/hls/{id}/{file}": {
+      "get": {
+        "parameters": [
+          {
+            "description": "转码会话 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "分片文件名，形如 0.ts",
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "MPEG-TS 分片数据（按需转码后返回，Content-Type: video/mp2t）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "会话不存在、已停止或分片不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "HLS 分片（按需转码）",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/info": {
+      "get": {
+        "parameters": [
+          {
+            "description": "媒体文件的虚拟路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/media.MediaInfo"
+                }
+              }
+            },
+            "description": "探测到的媒体信息（含视频/音频/字幕轨道）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "媒体信息（ffprobe）",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/subtitle": {
+      "get": {
+        "parameters": [
+          {
+            "description": "视频路径（用于提取内嵌字幕）或字幕文件路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "内嵌字幕序号（MediaInfo.subtitles 下标）；省略时按外挂字幕处理",
+            "in": "query",
+            "name": "index",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "WebVTT 字幕内容（Content-Type: text/vtt）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "字幕转 WebVTT（内嵌字幕或同名外挂 .srt/.ass/.vtt）",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/thumb": {
+      "get": {
+        "parameters": [
+          {
+            "description": "内容摘要（Entry.thumb）",
+            "in": "query",
+            "name": "d",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "服务端对摘要的签名（Entry.thumb_sig）",
+            "in": "query",
+            "name": "s",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "预览图边长（像素），取最接近的可用档位",
+            "in": "query",
+            "name": "size",
+            "schema": {
+              "default": 256,
+              "enum": [
+                128,
+                256,
+                512,
+                1024
+              ],
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "JPEG 预览图（Content-Type: image/jpeg）"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "签名无效或缺失"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "摘要未知（服务端无记录或文件已变化），或该文件无法生成预览图"
+          }
+        },
+        "summary": "按内容摘要取预览图（图片/视频/音频封面），JPEG",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/media/transcode": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.TranscodeRequest",
+                "description": "源文件、画质与音轨",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "源文件、画质与音轨",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.TranscodeResponse"
+                }
+              }
+            },
+            "description": "会话创建成功，返回播放列表地址"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "文件不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建 HLS 实时转码会话",
+        "tags": [
+          "媒体"
+        ]
+      }
+    },
+    "/s3keys": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/store.S3Key"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "当前用户的 S3 密钥列表（不含 Secret）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "我的 S3 访问密钥",
+        "tags": [
+          "访问凭据"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.CreateS3KeyRequest",
+                "description": "备注名称与是否只读",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "备注名称与是否只读",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.S3KeyWithSecret"
+                }
+              }
+            },
+            "description": "密钥创建成功，返回 Access Key 与 Secret"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建 S3 密钥（Secret 可随时通过 /s3keys/{access_key}/secret 再次读取）",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    },
+    "/s3keys/{access_key}": {
+      "delete": {
+        "parameters": [
+          {
+            "description": "S3 Access Key（访问密钥 ID）",
+            "in": "path",
+            "name": "access_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "密钥已删除，无响应体"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "密钥不存在或不属于当前用户"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "删除 S3 密钥",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    },
+    "/s3keys/{access_key}/secret": {
+      "get": {
+        "parameters": [
+          {
+            "description": "S3 Access Key（访问密钥 ID）",
+            "in": "path",
+            "name": "access_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.S3KeySecret"
+                }
+              }
+            },
+            "description": "S3 Secret Key。响应带 Cache-Control: no-store，请勿长期缓存。"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "密钥不存在或不属于当前用户"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "读取 S3 密钥的 Secret（仅密钥所属用户）",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    },
+    "/system/info": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.SystemInfo"
+                }
+              }
+            },
+            "description": "版本、主机名、地址与各协议服务的运行状态"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "系统与服务信息（用于挂载向导）",
+        "tags": [
+          "系统"
+        ]
+      }
+    },
+    "/tokens": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/store.AccessToken"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "当前用户的访问令牌列表（不含令牌明文）"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "我的访问令牌",
+        "tags": [
+          "访问凭据"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.CreateTokenRequest",
+                "description": "令牌名称、权限范围与有效期",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "令牌名称、权限范围与有效期",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.TokenWithSecret"
+                }
+              }
+            },
+            "description": "令牌创建成功，返回令牌信息与明文"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "名称或有效期无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建访问令牌（明文可随时通过 /tokens/{id}/secret 再次读取）",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    },
+    "/tokens/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "description": "令牌 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "令牌已吊销，无响应体"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "令牌不存在或不属于当前用户"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "吊销访问令牌",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    },
+    "/tokens/{id}/secret": {
+      "get": {
+        "parameters": [
+          {
+            "description": "令牌 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.TokenSecret"
+                }
+              }
+            },
+            "description": "令牌明文。响应带 Cache-Control: no-store，请勿长期缓存。"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "令牌不存在或不属于当前用户"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "读取访问令牌明文（仅令牌所属用户）",
+        "tags": [
+          "访问凭据"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "tags": [
+    {
+      "description": "登录、退出与当前用户信息",
+      "name": "认证"
+    },
+    {
+      "description": "目录浏览、上传下载、重命名、移动复制、删除与搜索",
+      "name": "文件"
+    },
+    {
+      "description": "预览图、媒体信息、HLS 实时转码、音频转码与字幕转换",
+      "name": "媒体"
+    },
+    {
+      "description": "访问令牌与 S3 访问密钥（仅当前用户自己的凭据）",
+      "name": "访问凭据"
+    },
+    {
+      "description": "系统与服务状态（用于挂载向导）",
+      "name": "系统"
+    },
+    {
+      "description": "用户与授权目录、缓存与搜索索引，需要管理员权限",
+      "name": "管理"
+    }
+  ]
+}

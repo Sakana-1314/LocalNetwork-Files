@@ -29,6 +29,10 @@ jobs:
         run: go vet ./...
       - name: go test
         run: go test -race ./...
+      # OpenAPI 规范只能由 Go 注解生成：这里重新生成并与仓库中的文件比对，
+      # 手写或手改 internal/api/openapi.json 都会让本步骤失败。
+      - name: OpenAPI 规范必须与 Go 注解一致
+        run: ./scripts/check-openapi.sh
       - name: Cross-compile
         run: make dist VERSION=ci
 

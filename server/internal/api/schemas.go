@@ -1,0 +1,214 @@
+package api
+
+import (
+	"time"
+
+	"github.com/Sakana-1314/MList/server/internal/cache"
+	"github.com/Sakana-1314/MList/server/internal/media"
+	"github.com/Sakana-1314/MList/server/internal/search"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
+)
+
+// This file holds the request and response bodies that the OpenAPI document is
+// generated from. Every type and field carries a Chinese comment: swag copies
+// those comments into the spec, so they are the single source of truth for the
+// API documentation. Moving an inline struct or gin.H into a named type here is
+// what makes its fields appear (with descriptions) in the spec.
+
+// ListResponse 目录列表。
+type ListResponse struct {
+	Path     string      `json:"path"`     // 规范化后的目录虚拟路径
+	Writable bool        `json:"writable"` // 当前目录是否可写
+	Entries  []vfs.Entry `json:"entries"`  // 目录下的文件与子目录
+}
+
+// TextResponse 文本文件内容。
+type TextResponse struct {
+	Content   string `json:"content"`   // 文件文本内容（按 UTF-8 解码）
+	Truncated bool   `json:"truncated"` // 是否因超过 4 MiB 而被截断
+}
+
+// BatchFailure 批量操作中失败的单个条目。
+type BatchFailure struct {
+	Path  string `json:"path"`  // 失败的虚拟路径
+	Error string `json:"error"` // 失败原因
+}
+
+// BatchResult 批量操作结果（移动、复制、删除）。
+type BatchResult struct {
+	Succeeded []string       `json:"succeeded"` // 操作成功的虚拟路径列表
+	Failed    []BatchFailure `json:"failed"`    // 操作失败的条目及原因
+}
+
+// LoginRequest 登录请求。
+type LoginRequest struct {
+	Username string `json:"username" binding:"required"` // 用户名
+	Password string `json:"password" binding:"required"` // 登录密码
+}
+
+// LoginResponse 登录成功后的会话信息。
+type LoginResponse struct {
+	Token     string     `json:"token"`      // 会话令牌
+	ExpiresAt time.Time  `json:"expires_at"` // 会话过期时间
+	User      store.User `json:"user"`       // 登录用户信息
+}
+
+// PasswordRequest 修改自己的密码。
+type PasswordRequest struct {
+	OldPassword string `json:"old_password" binding:"required"` // 当前密码
+	NewPassword string `json:"new_password" binding:"required"` // 新密码，至少 6 位
+}
+
+// PasswordResponse 改密后签发的新会话。
+type PasswordResponse struct {
+	Token     string    `json:"token"`      // 新的会话令牌
+	ExpiresAt time.Time `json:"expires_at"` // 新会话的过期时间
+}
+
+// MkdirRequest 新建目录。
+type MkdirRequest struct {
+	Path string `json:"path" binding:"required"` // 新目录的完整虚拟路径
+}
+
+// RenameRequest 重命名。
+type RenameRequest struct {
+	Path string `json:"path" binding:"required"` // 要重命名的文件或目录的虚拟路径
+	Name string `json:"name" binding:"required"` // 新名称（不含路径）
+}
+
+// DeleteRequest 删除。
+type DeleteRequest struct {
+	Paths []string `json:"paths" binding:"required"` // 要删除的虚拟路径列表，目录会被递归删除
+}
+
+// TransferRequest 移动 / 复制的请求体。
+type TransferRequest struct {
+	Sources   []string `json:"sources" binding:"required"`  // 源文件或目录的虚拟路径列表
+	DestDir   string   `json:"dest_dir" binding:"required"` // 目标目录的虚拟路径
+	Overwrite bool     `json:"overwrite"`                   // 目标已存在时是否覆盖
+}
+
+// SearchResult 单条搜索结果。
+type SearchResult struct {
+	vfs.Entry
+	Score   int   `json:"score"`   // 匹配得分，越高越相关
+	Matches []int `json:"matches"` // 名称中命中的字符下标（按 Unicode 字符计）
+}
+
+// SearchResponse 搜索结果。
+type SearchResponse struct {
+	Results  []SearchResult `json:"results"`  // 命中的条目，按相关度从高到低
+	Total    int            `json:"total"`    // 命中总数（可能大于返回数量）
+	Indexing bool           `json:"indexing"` // 索引是否正在构建（此时结果可能不完整）
+	TookMS   float64        `json:"took_ms"`  // 本次搜索耗时（毫秒）
+}
+
+// TranscodeRequest 创建 HLS 转码会话。
+type TranscodeRequest struct {
+	Path       string `json:"path" binding:"required"`                  // 视频文件的虚拟路径
+	Quality    string `json:"quality" enums:"original,1080p,720p,480p"` // 输出画质
+	AudioTrack int    `json:"audio_track"`                              // 音轨序号（MediaInfo.audio 下标），0 为第 1 条
+}
+
+// TranscodeResponse 转码会话信息。
+type TranscodeResponse struct {
+	ID       string  `json:"id"`       // 转码会话 ID，用于请求播放列表与分片
+	Playlist string  `json:"playlist"` // 播放列表路径，如 /api/v1/media/hls/{id}/index.m3u8
+	Duration float64 `json:"duration"` // 视频总时长（秒）
+	Quality  string  `json:"quality"`  // 实际生效的画质
+}
+
+// CreateTokenRequest 创建访问令牌。
+type CreateTokenRequest struct {
+	Name          string   `json:"name" binding:"required"`   // 令牌名称，便于辨认，最长 128 字符
+	Scopes        []string `json:"scopes" enums:"read,write"` // 权限范围：read 只读，write 可写；至少包含 read
+	ExpiresInDays int      `json:"expires_in_days"`           // 有效期天数；0 或省略表示永不过期，最大 3650
+}
+
+// TokenWithSecret 创建访问令牌的响应，含一次性展示的明文。
+type TokenWithSecret struct {
+	store.AccessToken
+	Token string `json:"token"` // 令牌明文（ml_ 前缀），可随时通过 /tokens/{id}/secret 再次读取
+}
+
+// TokenSecret 访问令牌明文。
+type TokenSecret struct {
+	Token string `json:"token"` // 令牌明文
+}
+
+// CreateS3KeyRequest 创建 S3 密钥。
+type CreateS3KeyRequest struct {
+	Name     string `json:"name"`      // 备注名称，便于辨认，最长 128 字符
+	ReadOnly bool   `json:"read_only"` // 是否只读；true 时该密钥只能读取
+}
+
+// S3KeyWithSecret 创建 S3 密钥的响应，含 Secret。
+type S3KeyWithSecret struct {
+	store.S3Key
+	SecretKey string `json:"secret_key"` // S3 Secret Key（访问密钥对应的私钥）
+}
+
+// S3KeySecret S3 密钥的 Secret。
+type S3KeySecret struct {
+	SecretKey string `json:"secret_key"` // S3 Secret Key（访问密钥对应的私钥）
+}
+
+// UserInput 创建 / 更新用户的请求体。
+type UserInput struct {
+	Username string        `json:"username"`                // 用户名，1-32 位，可用字母、数字、下划线、点和横线
+	Password string        `json:"password"`                // 密码；创建时必填且至少 6 位，更新时留空表示不修改
+	Role     string        `json:"role" enums:"admin,user"` // 角色，admin 为管理员
+	Disabled bool          `json:"disabled"`                // 是否禁用该账户
+	Mounts   []store.Mount `json:"mounts"`                  // 授权目录列表，整表替换
+}
+
+// BrowseResponse 服务器本地目录浏览结果。
+type BrowseResponse struct {
+	Path   string   `json:"path"`   // 当前浏览的本地绝对路径
+	Parent string   `json:"parent"` // 上一级本地路径；已在顶层时为空字符串
+	Dirs   []string `json:"dirs"`   // 子目录的绝对路径
+}
+
+// CacheCleanRequest 清理缓存的请求体。
+type CacheCleanRequest struct {
+	Kind string `json:"kind" enums:"thumb,transcode,all"` // 要清理的缓存桶：thumb 预览图，transcode 转码分片，all 全部
+}
+
+// CacheCleanResponse 清理结果。
+type CacheCleanResponse struct {
+	RemovedFiles int   `json:"removed_files"` // 删除的文件数
+	RemovedBytes int64 `json:"removed_bytes"` // 释放的字节数
+}
+
+// ReindexResponse 重建索引的受理结果。
+type ReindexResponse struct {
+	OK bool `json:"ok"` // 是否已开始后台重建
+}
+
+// ErrorResponse 错误响应。
+type ErrorResponse struct {
+	Error string `json:"error"` // 错误信息
+}
+
+// SystemInfo 系统与协议服务信息（用于挂载向导）。
+type SystemInfo struct {
+	Version   string                   `json:"version"`   // 服务器版本
+	Hostname  string                   `json:"hostname"`  // 服务器主机名
+	Addresses []string                 `json:"addresses"` // 服务器探测到的局域网 IP 地址
+	HTTPPort  int                      `json:"http_port"` // Web / API / WebDAV / S3 的监听端口
+	FFmpeg    bool                     `json:"ffmpeg"`    // 是否检测到 ffmpeg（决定转码与部分预览是否可用）
+	Services  map[string]ServiceStatus `json:"services"`  // 各协议服务的状态
+}
+
+// CacheStats 缓存统计。
+type CacheStats struct {
+	Dir         string              `json:"dir"`          // 缓存目录的绝对路径
+	Thumb       cache.BucketStats   `json:"thumb"`        // 预览图缓存
+	Transcode   cache.BucketStats   `json:"transcode"`    // 转码分片缓存
+	Sessions    []media.SessionInfo `json:"sessions"`     // 当前已知的转码会话
+	LastCleanup *time.Time          `json:"last_cleanup"` // 上次清理时间；null 表示尚未清理过
+}
+
+// IndexStatus 是搜索索引状态。
+type IndexStatus = search.Status
