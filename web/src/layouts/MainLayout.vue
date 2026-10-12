@@ -30,6 +30,7 @@ import UploadQueuePanel from '@/components/files/UploadQueuePanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePrefsStore } from '@/stores/prefs'
 import { useIsMobile } from '@/composables/useIsMobile'
+import { normalizePath } from '@/utils/path'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,8 +81,22 @@ async function onUserSelect(key: string): Promise<void> {
   }
 }
 
+// Inside a folder the header search button carries that folder along as the
+// search scope, so the query only looks at what the user is browsing.
+const searchScope = computed(() => {
+  if (route.name !== 'files') return ''
+  const segs = Array.isArray(route.params.path) ? route.params.path : []
+  const p = normalizePath('/' + segs.join('/'))
+  return p === '/' ? '' : p
+})
+
 function goSearch(): void {
-  void router.push({ name: 'search' })
+  if (route.name === 'search') {
+    void router.push({ name: 'search', query: { ...route.query } })
+    return
+  }
+  const path = searchScope.value
+  void router.push({ name: 'search', query: path ? { path } : {} })
 }
 </script>
 
