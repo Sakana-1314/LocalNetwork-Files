@@ -6,12 +6,12 @@ package config
 
 // ServiceSettings controls the protocol services.
 type ServiceSettings struct {
-	WebDAVEnabled bool   `yaml:"webdav_enabled"`
-	S3Enabled     bool   `yaml:"s3_enabled"`
-	S3Port        int    `yaml:"s3_port"`
-	SMBEnabled    bool   `yaml:"smb_enabled"`
-	SMBPort       int    `yaml:"smb_port"`
-	SMBWorkgroup  string `yaml:"smb_workgroup"`
+	WebDAVEnabled bool `yaml:"webdav_enabled"`
+	// S3Enabled serves the S3-compatible API under /s3 on the main HTTP port.
+	S3Enabled    bool   `yaml:"s3_enabled"`
+	SMBEnabled   bool   `yaml:"smb_enabled"`
+	SMBPort      int    `yaml:"smb_port"`
+	SMBWorkgroup string `yaml:"smb_workgroup"`
 }
 
 // TranscodeSettings controls ffmpeg based HLS transcoding.
@@ -39,7 +39,7 @@ type SearchSettings struct {
 }
 
 func defaultServiceSettings() ServiceSettings {
-	return ServiceSettings{WebDAVEnabled: true, S3Enabled: true, S3Port: 9000, SMBEnabled: false, SMBPort: 445, SMBWorkgroup: "WORKGROUP"}
+	return ServiceSettings{WebDAVEnabled: true, S3Enabled: true, SMBEnabled: false, SMBPort: 445, SMBWorkgroup: "WORKGROUP"}
 }
 
 func defaultTranscodeSettings() TranscodeSettings {
@@ -68,7 +68,6 @@ func clamp(v *int, lo, hi, def int) {
 // loading the file, so a partial configuration file keeps working defaults.
 func (s *ServiceSettings) Normalize() {
 	d := defaultServiceSettings()
-	clamp(&s.S3Port, 1, 65535, d.S3Port)
 	clamp(&s.SMBPort, 1, 65535, d.SMBPort)
 	if s.SMBWorkgroup == "" {
 		s.SMBWorkgroup = d.SMBWorkgroup

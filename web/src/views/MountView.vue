@@ -37,7 +37,6 @@ const currentOrigin = location.origin.replace(/\/+$/, '')
 // location.hostname keeps the brackets of an IPv6 literal; SMB wants the bare
 // address while URL templates want them back.
 const currentHostname = location.hostname.replace(/^\[|\]$/g, '')
-const currentHostnameURL = location.hostname
 const usingCurrent = computed(() => host.value === CURRENT)
 
 async function load(): Promise<void> {
@@ -123,18 +122,22 @@ const smbSnippets = computed(() => {
 })
 
 // ---------- S3 ----------
+// S3 shares the main HTTP port and lives under /s3, so the endpoint is just
+// the address the user reached the page with plus that prefix.
 const s3 = computed<ServiceStatus | null>(() => info.value?.services.s3 ?? null)
-const s3Port = computed(() => s3.value?.port || 9000)
+const s3Path = computed(() => (s3.value?.path || '/s3').replace(/\/+$/, ''))
 const s3Endpoint = computed(() =>
-  usingCurrent.value ? `${location.protocol}//${currentHostnameURL}:${s3Port.value}` : `http://${host.value}:${s3Port.value}`,
+  usingCurrent.value
+    ? `${currentOrigin}${s3Path.value}`
+    : `http://${host.value}${(info.value?.http_port || 0) === 80 ? '' : ':' + info.value?.http_port}${s3Path.value}`,
 )
-const s3Region = 'us-east-1'
+const s3Region = 'auto'
 const s3Snippets = computed(() => {
   const ep = s3Endpoint.value
   const region = s3Region
   const m = firstMount.value
   return {
-    summary: `Endpoint:   ${ep}\nRegion:     ${region}（任意值均可，服务端忽略）\n寻址方式:   Path-style（force_path_style = true）\nBuckets:    ${mounts.value.join(', ')}`,
+    summary: `Endpoint:   ${ep}\nRegion:     ${region}\nBuckets:    ${mounts.value.join(', ')}`,
     awsConfig: `aws configure set aws_access_key_id <ACCESS_KEY> --profile mlist\naws configure set aws_secret_access_key <SECRET_KEY> --profile mlist\naws configure set region ${region} --profile mlist\naws configure set s3.addressing_style path --profile mlist`,
     awsUse: `aws --profile mlist --endpoint-url ${ep} s3 ls\naws --profile mlist --endpoint-url ${ep} s3 ls s3://${m}/\naws --profile mlist --endpoint-url ${ep} s3 cp ./photo.jpg s3://${m}/photo.jpg`,
     rcloneConf: `[mlist-s3]\ntype = s3\nprovider = Other\naccess_key_id = <ACCESS_KEY>\nsecret_access_key = <SECRET_KEY>\nendpoint = ${ep}\nregion = ${region}\nforce_path_style = true`,

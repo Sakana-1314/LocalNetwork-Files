@@ -74,7 +74,6 @@ func New(cfg *config.Config, version string) (*App, error) {
 	a.search = search.New(st, cfg.Search)
 	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return cfg.Services.WebDAVEnabled })
 	a.s3 = s3.New(au, a.newFS, cfg.DataDir)
-	a.s3.BindHost, _ = splitPort(cfg.Listen)
 	a.smb = smb.New(cfg.SMB, cfg.Services, cfg.DataDir, st)
 	au.OnPassword = a.smb.SyncPassword
 
@@ -95,7 +94,7 @@ func (a *App) newFS(p *auth.Principal) *vfs.FS {
 
 func (a *App) applyServices() {
 	s := a.cfg.Services
-	a.s3.Apply(s.S3Enabled, s.S3Port)
+	a.s3.SetEnabled(s.S3Enabled)
 	a.smb.Apply()
 }
 
@@ -105,17 +104,13 @@ func (a *App) Status(userID uint) map[string]api.ServiceStatus {
 	out := map[string]api.ServiceStatus{}
 	_, port := splitPort(a.cfg.Listen)
 	out["webdav"] = api.ServiceStatus{Enabled: s.WebDAVEnabled, Running: s.WebDAVEnabled, Port: port, Path: webdav.Prefix}
-	running, s3port, err := a.s3.Status()
-	st := api.ServiceStatus{Enabled: s.S3Enabled, Running: running, Port: s.S3Port}
-	if running {
-		st.Port = s3port
+	// S3 shares the main listener, so its port and status follow it.
+	out["s3"] = api.ServiceStatus{
+		Enabled: s.S3Enabled, Running: s.S3Enabled && a.s3.Enabled(),
+		Port: port, Path: s3.Prefix,
 	}
-	if err != nil {
-		st.Error = err.Error()
-	}
-	out["s3"] = st
 	running, smbPort, err := a.smb.Status()
-	st = api.ServiceStatus{Enabled: s.SMBEnabled, Running: running, Port: s.SMBPort}
+	st := api.ServiceStatus{Enabled: s.SMBEnabled, Running: running, Port: s.SMBPort}
 	if running {
 		st.Port = smbPort
 	}
@@ -176,6 +171,12 @@ func (a *App) buildHandler() http.Handler {
 		}
 		if req.URL.Path == webdav.Prefix || strings.HasPrefix(req.URL.Path, webdav.Prefix+"/") {
 			a.dav.ServeHTTP(w, req)
+			return
+		}
+		// S3 lives on the same port as the web UI; the handler strips the prefix
+		// itself, after verifying the signature against the signed path.
+		if req.URL.Path == s3.Prefix || strings.HasPrefix(req.URL.Path, s3.Prefix+"/") {
+			a.s3.ServeHTTP(w, req)
 			return
 		}
 		r.ServeHTTP(w, req)

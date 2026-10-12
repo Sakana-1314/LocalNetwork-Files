@@ -38,6 +38,7 @@ type env struct {
 	t         *testing.T
 	rw, ro    string // local dirs of the "rw" and "ro" buckets
 	outside   string // a directory next to the mounts that must never be reachable
+	handler   *s3svc.Server
 	srv       *httptest.Server
 	tls       *httptest.Server
 	ak, sk    string
@@ -99,6 +100,11 @@ func newEnv(t *testing.T) *env {
 
 	newFS := func(p *auth.Principal) *vfs.FS { return vfs.New(p.User.Mounts, p.ReadOnly, nil) }
 	h := s3svc.New(au, newFS, data)
+	e.handler = h
+	// S3 is served as a handler now (no listener of its own); the API is
+	// disabled until the app turns it on.
+	h.SetEnabled(true)
+	t.Cleanup(h.Close)
 	e.srv = httptest.NewServer(h)
 	t.Cleanup(e.srv.Close)
 	e.tls = httptest.NewTLSServer(h)
@@ -186,9 +192,10 @@ func TestSDKBasics(t *testing.T) {
 	if _, err := c.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String("nope")}); err == nil {
 		t.Fatal("HeadBucket nope succeeded")
 	}
-	// The region is fixed server-side and clients may sign with any region.
+	// The region reported by the server is "auto" (what the mount guide has
+	// clients configure); clients may still sign with any region.
 	loc := must(c.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: aws.String("rw")}))
-	if loc.LocationConstraint != "us-east-1" {
+	if loc.LocationConstraint != "auto" {
 		t.Fatalf("location = %q", loc.LocationConstraint)
 	}
 
@@ -866,5 +873,76 @@ func TestListingPerformance(t *testing.T) {
 		if el > 5*time.Second {
 			t.Errorf("listing too slow: %v", el)
 		}
+	}
+}
+
+// The S3 API shares the main HTTP port and is mounted under /s3. A client whose
+// endpoint includes that prefix signs the full path, so the handler must verify
+// against the signed path and only then strip the prefix for routing.
+func TestPrefixedEndpoint(t *testing.T) {
+	e := newEnv(t)
+
+	// A client pointed at <base>/s3 must work end to end.
+	prefixed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Mirror the app's routing: forward only the prefixed paths.
+		if r.URL.Path != s3svc.Prefix && !strings.HasPrefix(r.URL.Path, s3svc.Prefix+"/") {
+			http.NotFound(w, r)
+			return
+		}
+		e.handler.ServeHTTP(w, r)
+	}))
+	defer prefixed.Close()
+
+	c := s3.New(s3.Options{
+		Region:       "auto",
+		Credentials:  credentials.NewStaticCredentialsProvider(e.ak, e.sk, ""),
+		BaseEndpoint: aws.String(prefixed.URL + s3svc.Prefix),
+		UsePathStyle: true,
+	})
+	ctx := context.Background()
+
+	buckets := must(c.ListBuckets(ctx, &s3.ListBucketsInput{}))
+	if len(buckets.Buckets) == 0 {
+		t.Fatal("no buckets over the prefixed endpoint")
+	}
+	body := "hello over /s3"
+	if _, err := c.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String("rw"), Key: aws.String("prefixed.txt"), Body: strings.NewReader(body),
+	}); err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	got := must(c.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String("rw"), Key: aws.String("prefixed.txt")}))
+	defer got.Body.Close()
+	b, _ := io.ReadAll(got.Body)
+	if string(b) != body {
+		t.Fatalf("round trip = %q", b)
+	}
+
+	// A signature made for the prefixed path must be rejected when replayed
+	// against the same request minus the prefix: that proves the prefix is
+	// covered by the signature rather than silently stripped before verifying.
+	signed, err := http.NewRequest(http.MethodGet, prefixed.URL+s3svc.Prefix+"/rw/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed.Host = strings.TrimPrefix(prefixed.URL, "http://")
+	resp, err := http.DefaultClient.Do(signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("unauthenticated prefixed request: %d", resp.StatusCode)
+	}
+}
+
+func TestDisabledAPIRejectsRequests(t *testing.T) {
+	e := newEnv(t)
+	e.handler.SetEnabled(false)
+	req := httptest.NewRequest(http.MethodGet, s3svc.Prefix+"/", nil)
+	rec := httptest.NewRecorder()
+	e.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("disabled API: %d", rec.Code)
 	}
 }

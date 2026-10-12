@@ -54,8 +54,8 @@ services:
   # WebDAV 与 HTTP 共用监听端口，路径为 /dav。
   webdav_enabled: true
   # S3 兼容接口（区域任意，服务端忽略）。
+  # S3 兼容接口与 Web/WebDAV 共用主端口，通过 /s3 前缀访问。
   s3_enabled: true
-  s3_port: 9000
   # SMB 由本程序托管独立的 Samba smbd 进程（仅 Linux）。
   smb_enabled: false
   smb_port: 445

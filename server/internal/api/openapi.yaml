@@ -810,7 +810,7 @@ components:
         enabled: { type: boolean, description: 是否在 config.yaml 中启用 }
         running: { type: boolean, description: 当前是否正在运行 }
         port: { type: integer, description: 监听端口 }
-        path: { type: string, description: WebDAV 路径前缀，如 /dav }
+        path: { type: string, description: "服务在 HTTP 端口上的路径前缀：WebDAV 为 /dav，S3 为 /s3（S3 与 Web 共用主端口）" }
         error: { type: string, description: 服务启动错误（仅管理员可见） }
         shares:
           type: object
