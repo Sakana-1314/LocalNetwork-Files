@@ -65,6 +65,9 @@ func New(cfg *config.Config, version string) (*App, error) {
 	a := &App{cfg: cfg, version: version, store: st, auth: au, cache: cm}
 	a.media = media.New(cfg.FFmpeg, cfg.FFprobe, cm, cfg.Transcode)
 	vfs.FFmpegAvailable = a.media.HasFFmpeg()
+	// Directory listings and search results carry a content digest instead of a
+	// path, so previews never have to expose where a file lives.
+	vfs.Fingerprint = a.media.Fingerprint
 	if !a.media.HasFFmpeg() {
 		slog.Warn("ffmpeg/ffprobe not found: video thumbnails and transcoding are disabled")
 	}

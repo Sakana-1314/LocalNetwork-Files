@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
         controls
         playsinline
         preload="metadata"
-        :poster="entry.thumb ? mediaApi.thumbUrl(entry.path, 1024) : undefined"
+        :poster="mediaApi.thumbUrl(entry, 1024) || undefined"
         @error="onVideoError"
       >
         <track

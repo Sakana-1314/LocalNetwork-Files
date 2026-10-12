@@ -36,8 +36,18 @@ var (
 // TempPrefix marks in-progress uploads; such files are hidden from listings.
 const TempPrefix = ".lnf-upload-"
 
-// FFmpegAvailable is set at startup; it controls Entry.Thumb for media files.
+// FFmpegAvailable is set at startup; it controls whether media files can be
+// thumbnailed at all.
 var FFmpegAvailable bool
+
+// Fingerprint computes a file's content digest. The app wires it to the media
+// service; when nil, entries carry no digest and previews are unavailable.
+var Fingerprint func(real string, size int64, mtime time.Time) (string, error)
+
+// OnDigest, when set, is called with every digest produced for an entry. The
+// API layer uses it to remember which file a digest belongs to, so previews can
+// be requested by digest without putting paths in URLs.
+var OnDigest func(digest, real string, size int64, mtime time.Time)
 
 // Notifier is told about local paths changed through the VFS (e.g. the search index).
 type Notifier interface {
@@ -240,21 +250,49 @@ type Entry struct {
 	Mime     string    `json:"mime"`
 	Kind     string    `json:"kind"`
 	Writable bool      `json:"writable"`
-	Thumb    bool      `json:"thumb"`
+	// Thumb is the content digest of the preview source (empty when the file
+	// cannot be previewed). It is not a path, so listing a directory never
+	// reveals where the file lives.
+	Thumb string `json:"thumb"`
+	// ThumbSig is the server signature over Thumb, filled in by the API layer.
+	ThumbSig string `json:"thumb_sig"`
 }
 
-func NewEntry(vpath string, fi fs.FileInfo, writable bool) Entry {
+func NewEntry(vpath, real string, fi fs.FileInfo, writable bool) Entry {
 	name := path.Base(vpath)
 	isDir := fi.IsDir()
 	e := Entry{
 		Name: name, Path: vpath, IsDir: isDir, ModTime: fi.ModTime(),
 		Mime: MimeOf(name, isDir), Kind: KindOf(name, isDir), Writable: writable,
-		Thumb: Thumbable(name, isDir, FFmpegAvailable),
 	}
 	if !isDir {
 		e.Size = fi.Size()
+		e.Thumb = thumbDigest(real, fi, name)
 	}
 	return e
+}
+
+// thumbDigest fingerprints only files that can actually be previewed, so that
+// listing a directory of documents or archives costs no extra reads.
+func thumbDigest(real string, fi fs.FileInfo, name string) string {
+	return DigestFor(real, name, fi.Size(), fi.ModTime())
+}
+
+// DigestFor returns the preview digest for a file, or "" when it cannot be
+// previewed. It takes primitives so callers that only have index metadata
+// (the search index) can use it without a FileInfo.
+func DigestFor(real, name string, size int64, mtime time.Time) string {
+	if Fingerprint == nil || real == "" || !Thumbable(name, false, FFmpegAvailable) {
+		return ""
+	}
+	fp, err := Fingerprint(real, size, mtime)
+	if err != nil {
+		return ""
+	}
+	if OnDigest != nil {
+		OnDigest(fp, real, size, mtime)
+	}
+	return fp
 }
 
 func (f *FS) rootEntry(r *Root) Entry {
@@ -282,7 +320,7 @@ func (f *FS) Stat(vpath string) (*Entry, error) {
 		e := f.rootEntry(l.Root)
 		return &e, nil
 	}
-	e := NewEntry(l.VPath, fi, l.Root.Writable)
+	e := NewEntry(l.VPath, l.Real, fi, l.Root.Writable)
 	return &e, nil
 }
 
@@ -323,7 +361,7 @@ func (f *FS) List(vpath string) ([]Entry, bool, error) {
 				continue
 			}
 		}
-		out = append(out, NewEntry(path.Join(l.VPath, name), fi, l.Root.Writable))
+		out = append(out, NewEntry(path.Join(l.VPath, name), filepath.Join(l.Real, name), fi, l.Root.Writable))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].IsDir != out[j].IsDir {

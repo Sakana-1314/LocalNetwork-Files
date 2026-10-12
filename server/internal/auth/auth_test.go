@@ -558,3 +558,27 @@ func TestBasicCacheRename(t *testing.T) {
 		t.Fatalf("new name: %v", err)
 	}
 }
+
+func TestThumbSignature(t *testing.T) {
+	e := newEnv(t, time.Hour)
+	sig := e.svc.ThumbSignature("abc123")
+	if sig == "" {
+		t.Fatal("empty signature")
+	}
+	if !e.svc.VerifyThumbSignature("abc123", sig) {
+		t.Fatal("valid signature rejected")
+	}
+	if e.svc.VerifyThumbSignature("other", sig) {
+		t.Fatal("signature accepted for a different digest")
+	}
+	if e.svc.VerifyThumbSignature("abc123", sig+"x") {
+		t.Fatal("tampered signature accepted")
+	}
+	if e.svc.VerifyThumbSignature("", sig) || e.svc.VerifyThumbSignature("abc123", "") {
+		t.Fatal("empty inputs accepted")
+	}
+	// No timestamp in the payload, so the same digest always signs the same way.
+	if again := e.svc.ThumbSignature("abc123"); again != sig {
+		t.Fatalf("signature is not stable: %q vs %q", again, sig)
+	}
+}

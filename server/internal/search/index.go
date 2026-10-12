@@ -706,10 +706,15 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 		it := &h.ri.items[h.idx]
 		vp := h.sc.virtualDir(h.ri.dirs[it.dir]) + it.name
 		pos := matchPositions(it, pats)
+		var digest string
+		if !it.isDir {
+			real := filepath.Join(h.ri.root, h.ri.dirs[it.dir], it.name)
+			digest = vfs.DigestFor(real, it.name, it.size, time.Unix(it.mtime, 0))
+		}
 		e := vfs.Entry{
 			Name: it.name, Path: vp, IsDir: it.isDir, Size: it.size, ModTime: time.Unix(it.mtime, 0),
 			Mime: vfs.MimeOf(it.name, it.isDir), Kind: kinds[it.kind], Writable: h.sc.mount.Writable,
-			Thumb: vfs.Thumbable(it.name, it.isDir, vfs.FFmpegAvailable),
+			Thumb: digest,
 		}
 		resp.Results = append(resp.Results, Result{Entry: e, Score: h.score, Matches: pos})
 	}

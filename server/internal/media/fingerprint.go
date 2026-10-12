@@ -24,8 +24,10 @@ const (
 	fingerprintSmall = 1 << 20 // 1 MiB
 	// fingerprintChunk is how much of the head and tail a large file contributes.
 	fingerprintChunk = 64 << 10 // 64 KiB
-	// fingerprintMemoMax bounds the in-memory fingerprint cache.
-	fingerprintMemoMax = 512
+	// fingerprintMemoMax bounds the in-memory fingerprint cache. Directory
+	// listings fingerprint every previewable file, so this is sized for a
+	// large folder being re-listed repeatedly rather than a single request.
+	fingerprintMemoMax = 4096
 )
 
 func hashChunks(h io.Writer, f *os.File, size int64) error {
