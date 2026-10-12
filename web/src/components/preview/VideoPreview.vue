@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { NAlert, NIcon, NSelect, NSpin, NTag, useMessage, type SelectOption } from 'naive-ui'
+import { NAlert, NIcon, NSelect, NSpin, useMessage, type SelectOption } from 'naive-ui'
 import { InformationCircleOutline } from '@vicons/ionicons5'
 import type HlsType from 'hls.js'
 import type { Entry, MediaInfo, Quality } from '@/api/types'
@@ -82,8 +82,6 @@ const subtitleLabel = computed(() => {
   const o = subtitleOptions.value.find((x) => x.value === subtitleIdx.value)
   return typeof o?.label === 'string' ? o.label : '字幕'
 })
-
-const playbackLabel = computed(() => (mode.value === 'direct' ? '直连播放' : `转码播放 · ${mode.value === 'original' ? '原画' : mode.value}`))
 
 function stopSession(id: string | null): void {
   if (id) void mediaApi.stopHls(id)
@@ -298,6 +296,28 @@ onBeforeUnmount(() => {
         />
       </video>
       <div v-if="loading || infoLoading" class="overlay"><n-spin /><span>{{ infoLoading ? '读取媒体信息…' : '正在准备转码…' }}</span></div>
+
+      <!-- 媒体信息：半透明浮窗，悬在画面上，不再占下方一行 -->
+      <transition name="fade">
+        <div v-if="showInfo" class="info-float">
+          <template v-if="info">
+            <div><span>容器</span>{{ info.format || '-' }}</div>
+            <div><span>时长</span>{{ formatDuration(info.duration) }}</div>
+            <div><span>码率</span>{{ formatBitrate(info.bit_rate) }}</div>
+            <div v-if="info.video">
+              <span>视频</span>{{ info.video.codec }} · {{ info.video.width }}×{{ info.video.height }}
+              <template v-if="info.video.fps"> · {{ Math.round(info.video.fps * 100) / 100 }} fps</template>
+            </div>
+            <div v-for="(a, i) in info.audio" :key="'a' + i">
+              <span>音轨 {{ i + 1 }}</span>{{ a.codec }}<template v-if="a.channels"> · {{ a.channels }} 声道</template>
+              <template v-if="a.language"> · {{ a.language }}</template><template v-if="a.title"> · {{ a.title }}</template>
+            </div>
+            <div v-if="info.subtitles.length"><span>字幕</span>{{ info.subtitles.length }} 条</div>
+            <div><span>直连</span>{{ info.direct_play ? '浏览器可直接播放' : '需要转码' }}</div>
+          </template>
+          <div v-else>无法获取媒体信息（服务器可能未安装 ffmpeg）</div>
+        </div>
+      </transition>
     </div>
 
     <div class="controls">
@@ -326,33 +346,13 @@ onBeforeUnmount(() => {
         :options="subtitleOptions"
         :consistent-menu-width="false"
       />
-      <n-tag size="small" :bordered="false" :type="mode === 'direct' ? 'success' : 'info'">{{ playbackLabel }}</n-tag>
       <span class="spacer" />
-      <a class="info-toggle" @click="showInfo = !showInfo">
+      <a class="info-toggle" :class="{ on: showInfo }" @click="showInfo = !showInfo">
         <n-icon :component="InformationCircleOutline" /> 媒体信息
       </a>
     </div>
 
     <n-alert v-if="error" type="error" class="err" :bordered="false">{{ error }}</n-alert>
-
-    <div v-if="showInfo" class="info">
-      <template v-if="info">
-        <div><span>容器</span>{{ info.format || '-' }}</div>
-        <div><span>时长</span>{{ formatDuration(info.duration) }}</div>
-        <div><span>码率</span>{{ formatBitrate(info.bit_rate) }}</div>
-        <div v-if="info.video">
-          <span>视频</span>{{ info.video.codec }} · {{ info.video.width }}×{{ info.video.height }}
-          <template v-if="info.video.fps"> · {{ Math.round(info.video.fps * 100) / 100 }} fps</template>
-        </div>
-        <div v-for="(a, i) in info.audio" :key="'a' + i">
-          <span>音轨 {{ i + 1 }}</span>{{ a.codec }}<template v-if="a.channels"> · {{ a.channels }} 声道</template>
-          <template v-if="a.language"> · {{ a.language }}</template><template v-if="a.title"> · {{ a.title }}</template>
-        </div>
-        <div v-if="info.subtitles.length"><span>字幕</span>{{ info.subtitles.length }} 条</div>
-        <div><span>直连</span>{{ info.direct_play ? '浏览器可直接播放' : '需要转码' }}</div>
-      </template>
-      <div v-else>无法获取媒体信息（服务器可能未安装 ffmpeg）</div>
-    </div>
   </div>
 </template>
 
@@ -419,20 +419,46 @@ onBeforeUnmount(() => {
 .info-toggle:hover {
   opacity: 1;
 }
-.info {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 4px 20px;
-  font-size: 13px;
-  opacity: 0.85;
-  max-height: 120px;
-  overflow-y: auto;
+.info-toggle.on {
+  opacity: 1;
+  color: #63e2b7;
 }
-.info span {
+/* 半透明浮窗：叠在画面左上角，不挤压播放器 */
+.info-float {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  max-width: min(380px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(12, 12, 14, 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+  line-height: 1.6;
+  pointer-events: auto;
+}
+.info-float > div + div {
+  margin-top: 2px;
+}
+.info-float span {
   display: inline-block;
   min-width: 52px;
-  opacity: 0.6;
   margin-right: 8px;
+  opacity: 0.6;
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 .err {
   flex-shrink: 0;
