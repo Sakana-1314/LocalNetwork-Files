@@ -329,8 +329,14 @@ func TestLegacyHashedTokensAreDropped(t *testing.T) {
 	if err := st.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the old schema: an extra hash column holding a hashed token.
+	// Simulate the old schema: an extra hash column holding a hashed token,
+	// plus the unique index the old version created on it. SQLite refuses to
+	// drop a column while an index still references it, and if the column
+	// survives as NOT NULL every later token INSERT fails with a 500.
 	if err := st.db.Exec("ALTER TABLE access_tokens ADD COLUMN hash TEXT NOT NULL DEFAULT ''").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.Exec("CREATE UNIQUE INDEX idx_access_tokens_hash ON access_tokens(hash)").Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := st.db.Exec("INSERT INTO access_tokens (user_id, name, prefix, scopes, hash) VALUES (?,?,?,?,?)",

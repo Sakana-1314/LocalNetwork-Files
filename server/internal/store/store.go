@@ -64,12 +64,53 @@ func (s *Store) dropHashedTokens() error {
 	if err := s.db.Exec("DELETE FROM access_tokens").Error; err != nil {
 		return fmt.Errorf("drop legacy tokens: %w", err)
 	}
+	// SQLite refuses DROP COLUMN while any index still references it, and the
+	// old unique index on hash does. Dropping the index first is what makes the
+	// column go away; if it stays behind as NOT NULL the next token INSERT fails
+	// with a 500, so this must not be best-effort.
+	if err := s.dropIndexesOn("access_tokens", "hash"); err != nil {
+		return fmt.Errorf("drop legacy token index: %w", err)
+	}
 	// GORM's DropColumn is a no-op for SQLite, so issue the statement directly.
 	if err := s.db.Exec("ALTER TABLE access_tokens DROP COLUMN hash").Error; err != nil {
-		slog.Warn("store: could not drop the legacy token hash column", "err", err)
+		if s.db.Migrator().HasColumn(&AccessToken{}, "hash") {
+			return fmt.Errorf("drop legacy token hash column: %w", err)
+		}
 	}
 	if n > 0 {
 		slog.Warn("store: cleared access tokens created by an older version; create new ones in 设置 → 访问令牌", "removed", n)
+	}
+	return nil
+}
+
+// dropIndexesOn drops every index of table that references any of cols.
+func (s *Store) dropIndexesOn(table string, cols ...string) error {
+	want := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		want[c] = true
+	}
+	var idx []struct {
+		Name string `gorm:"column:name"`
+	}
+	if err := s.db.Raw(fmt.Sprintf("PRAGMA index_list(%q)", table)).Scan(&idx).Error; err != nil {
+		return err
+	}
+	for _, ix := range idx {
+		var info []struct {
+			Name string `gorm:"column:name"`
+		}
+		if err := s.db.Raw(fmt.Sprintf("PRAGMA index_info(%q)", ix.Name)).Scan(&info).Error; err != nil {
+			return err
+		}
+		for _, c := range info {
+			if !want[c.Name] {
+				continue
+			}
+			if err := s.db.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %q", ix.Name)).Error; err != nil {
+				return err
+			}
+			break
+		}
 	}
 	return nil
 }
