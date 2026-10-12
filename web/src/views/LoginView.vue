@@ -57,7 +57,6 @@ async function submit(): Promise<void> {
       <app-logo class="brand" />
       <n-card class="login-card" :bordered="false" size="large">
         <h2 class="title">登录</h2>
-        <p class="subtitle">局域网文件管理系统</p>
         <n-form ref="formRef" :model="form" :rules="rules" size="large" :show-label="false" @submit.prevent="submit">
           <n-form-item path="username">
             <n-input v-model:value="form.username" placeholder="用户名" autocomplete="username" :input-props="{ autocapitalize: 'off' }">
@@ -78,7 +77,6 @@ async function submit(): Promise<void> {
           <n-button type="primary" block size="large" :loading="loading" attr-type="submit">登录</n-button>
         </n-form>
       </n-card>
-      <p class="foot">MList · 浏览、预览、挂载你的局域网文件</p>
     </div>
   </div>
 </template>
@@ -116,16 +114,5 @@ async function submit(): Promise<void> {
 .title {
   margin: 0;
   font-size: 22px;
-}
-.subtitle {
-  margin: 4px 0 20px;
-  opacity: 0.6;
-  font-size: 14px;
-}
-.foot {
-  text-align: center;
-  font-size: 12px;
-  opacity: 0.5;
-  margin-top: 18px;
 }
 </style>

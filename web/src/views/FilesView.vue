@@ -792,7 +792,6 @@ const emptyText = computed(() => {
     <div class="status-bar">
       <span>{{ stats.dirs }} 个文件夹，{{ stats.files }} 个文件<template v-if="stats.files">，共 {{ formatSize(stats.bytes) }}</template></span>
       <span class="spacer" />
-      <span v-if="!isMobile" class="muted keys">双击打开 · Del 删除 · F2 重命名 · ⌘/Ctrl+A 全选 · 拖放上传</span>
     </div>
 
     <!-- 拖放遮罩 -->

@@ -68,10 +68,6 @@ const hostOptions = computed(() => {
     if (a === currentHostname || a === currentHost) continue
     opts.push({ label: a, value: a.includes(':') && !a.startsWith('[') ? `[${a}]` : a })
   }
-  if (i.hostname) {
-    const h = /\.local\.?$/i.test(i.hostname) ? i.hostname.replace(/\.$/, '') : `${i.hostname}.local`
-    opts.push({ label: `${h}（mDNS）`, value: h })
-  }
   return opts
 })
 
@@ -183,7 +179,7 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
         <div class="host-row">
           <div class="host-info">
             <div class="label">服务器</div>
-            <div class="value">{{ info.hostname || '-' }} <span class="ver">v{{ info.version }}</span></div>
+            <div class="value">MList <span class="ver">v{{ info.version }}</span></div>
           </div>
           <div class="host-info">
             <div class="label">示例中使用的地址</div>
@@ -224,13 +220,9 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
               <n-tab-pane name="win" tab="Windows">
                 <copy-block label="资源管理器" :code="davSnippets.windowsGui" />
                 <copy-block label="命令行（cmd）" :code="davSnippets.windowsCmd" />
-                <p class="tip">
-                  Windows 默认禁止通过 http 使用基本认证，且单文件限制 50MB。如连接失败，请以管理员身份运行以下命令后重试：
-                </p>
                 <copy-block :code="davSnippets.windowsReg" />
               </n-tab-pane>
               <n-tab-pane name="mac" tab="macOS">
-                <p class="tip">在访达中按 <b>⌘ K</b>（前往 → 连接服务器），输入以下地址并点击“连接”，选择“注册用户”后输入用户名与密码 / 访问令牌：</p>
                 <copy-block :code="webdavBase" />
               </n-tab-pane>
               <n-tab-pane name="linux" tab="Linux">
@@ -248,7 +240,6 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
             <n-alert v-if="!smb?.enabled" type="warning" :bordered="false" class="mb">
               SMB 服务未启用<template v-if="auth.isAdmin">，{{ serviceHint }}</template>。
             </n-alert>
-            <p class="tip">认证方式：<b>用户名 + 登录密码</b>。每个授权目录对应一个共享：{{ smbShares.join('、') }}</p>
             <n-alert v-if="!smbDefaultPort" type="info" :bordered="false" class="mb">
               当前 SMB 端口为 {{ smbPort }}（非 445）。Windows 资源管理器只能连接 445 端口，请使用 macOS / Linux 或修改端口。
             </n-alert>
@@ -258,7 +249,6 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
                 <copy-block label="映射为网络驱动器（cmd）" :code="smbSnippets.windowsCmd" />
               </n-tab-pane>
               <n-tab-pane name="mac" tab="macOS">
-                <p class="tip">在访达中按 <b>⌘ K</b>，输入以下地址：</p>
                 <copy-block :code="smbSnippets.macos" />
               </n-tab-pane>
               <n-tab-pane name="linux" tab="Linux">
@@ -272,10 +262,6 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
             <n-alert v-if="!s3?.enabled" type="warning" :bordered="false" class="mb">
               S3 服务未启用<template v-if="auth.isAdmin">，{{ serviceHint }}</template>。
             </n-alert>
-            <p class="tip">
-              认证方式：<b>S3 访问密钥</b>（Access Key / Secret Key），请在
-              <b>账号设置 → S3 密钥</b> 中创建。
-            </p>
             <copy-block label="连接参数" :code="s3Snippets.summary" />
             <n-tabs type="segment" size="small" class="os-tabs">
               <n-tab-pane name="aws" tab="AWS CLI">
@@ -342,12 +328,6 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
 .svc-err {
   color: #d03050;
   word-break: break-all;
-}
-.tip {
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 8px 0;
-  opacity: 0.85;
 }
 .os-tabs {
   margin-top: 12px;

@@ -273,7 +273,6 @@ function rowProps(u: User): { style: string; onClick: () => void } {
     <div class="title-row">
       <div>
         <h2 class="page-title">用户管理</h2>
-        <p class="page-desc">管理用户账户及其可访问的服务器目录。</p>
       </div>
       <n-button type="primary" @click="openCreate">
         <template #icon><n-icon :component="PersonAddOutline" /></template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NIcon, NInput, NSkeleton, NTab, NTabs, useThemeVars } from 'naive-ui'
 import { CloseCircle, FolderOpenOutline, SearchOutline } from '@vicons/ionicons5'
@@ -125,13 +125,6 @@ function openParent(r: SearchResult, e: MouseEvent): void {
   void router.push(filesRoute(parentPath(r.path), { preview: r.name }))
 }
 
-const summary = computed(() => {
-  const r = result.value
-  if (!r) return ''
-  const shown = r.results.length
-  const t = `${Math.round(r.took_ms * 10) / 10} ms`
-  return r.total > shown ? `共 ${r.total} 条结果，显示前 ${shown} 条 · 耗时 ${t}` : `共 ${r.total} 条结果 · 耗时 ${t}`
-})
 </script>
 
 <template>
@@ -163,8 +156,6 @@ const summary = computed(() => {
       索引构建中，搜索结果可能不完整。
     </n-alert>
     <n-alert v-if="error" type="error" :bordered="false" class="mb">{{ error }}</n-alert>
-
-    <div v-if="summary" class="summary">{{ summary }}</div>
 
     <div v-if="loading && !result" class="list">
       <div v-for="i in 6" :key="i" class="sk"><n-skeleton circle width="32px" height="32px" /><n-skeleton text style="width: 60%" /></div>
@@ -202,7 +193,7 @@ const summary = computed(() => {
 
 <style scoped>
 .search-page {
-  max-width: 980px;
+  max-width: none;
 }
 .filters {
   display: flex;
@@ -229,11 +220,6 @@ const summary = computed(() => {
 }
 .mb {
   margin-bottom: 12px;
-}
-.summary {
-  font-size: 12px;
-  opacity: 0.6;
-  margin: 0 4px 8px;
 }
 .empty {
   padding: 80px 0;
