@@ -274,8 +274,7 @@ const serviceHint = computed(() => (auth.isAdmin ? '在 config.yaml 的 services
             </n-alert>
             <p class="tip">
               认证方式：<b>S3 访问密钥</b>（Access Key / Secret Key），请在
-              <router-link :to="{ name: 'settings', query: { tab: 's3' } }">设置 → S3 密钥</router-link>
-              中创建。
+              <b>账号设置 → S3 密钥</b> 中创建。
             </p>
             <copy-block label="连接参数" :code="s3Snippets.summary" />
             <n-tabs type="segment" size="small" class="os-tabs">

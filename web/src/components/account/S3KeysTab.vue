@@ -127,10 +127,6 @@ const columns = computed<DataTableColumns<S3Key>>(() => [
 <template>
   <div class="tab">
     <div class="head">
-      <p class="desc">
-        S3 密钥用于通过 S3 协议访问你的授权目录（每个目录即一个 Bucket）。连接参数见
-        <router-link :to="{ name: 'mount' }">挂载与服务</router-link>。
-      </p>
       <n-button type="primary" @click="openCreate">创建密钥</n-button>
     </div>
     <n-data-table :columns="columns" :data="list" :loading="loading" :row-key="(r: S3Key) => r.access_key" size="small" :bordered="false">
@@ -169,12 +165,6 @@ const columns = computed<DataTableColumns<S3Key>>(() => [
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 12px;
-}
-.desc {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.75;
-  line-height: 1.7;
 }
 .sw-hint {
   margin-left: 10px;

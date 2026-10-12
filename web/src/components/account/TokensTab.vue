@@ -170,9 +170,6 @@ const columns = computed<DataTableColumns<AccessToken>>(() => {
 <template>
   <div class="tab">
     <div class="head">
-      <p class="desc">
-        访问令牌可用于 API 调用（<code>Authorization: Bearer &lt;token&gt;</code>）以及 WebDAV 登录（用户名 + 令牌作为密码）。
-      </p>
       <n-button type="primary" @click="openCreate">创建令牌</n-button>
     </div>
     <n-data-table :columns="columns" :data="list" :loading="loading" :row-key="(r: AccessToken) => r.id" size="small" :bordered="false">
@@ -218,12 +215,6 @@ const columns = computed<DataTableColumns<AccessToken>>(() => {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 12px;
-}
-.desc {
-  margin: 0;
-  font-size: 13px;
-  opacity: 0.75;
-  line-height: 1.7;
 }
 .muted {
   opacity: 0.6;

@@ -9,7 +9,6 @@ import {
   OptionsOutline,
   PeopleOutline,
   SearchOutline,
-  SettingsOutline,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 
@@ -27,7 +26,6 @@ const options = computed<MenuOption[]>(() => {
     { label: '文件', key: 'files', icon: icon(FolderOpenOutline) },
     { label: '搜索', key: 'search', icon: icon(SearchOutline) },
     { label: '挂载与服务', key: 'mount', icon: icon(GitNetworkOutline) },
-    { label: '设置', key: 'settings', icon: icon(SettingsOutline) },
     { label: 'API 文档', key: 'api-docs', icon: icon(BookOutline) },
   ]
   if (auth.isAdmin) {
