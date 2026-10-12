@@ -100,6 +100,15 @@ watch(
   },
 )
 
+// 从文件页「在文件夹内搜索」跳进来时同步范围。
+watch(
+  () => route.query.path,
+  (v) => {
+    const s = typeof v === 'string' ? normalizePath(v) : '/'
+    if (s !== scope.value) scope.value = s
+  },
+)
+
 const inputRef = ref<InstanceType<typeof NInput> | null>(null)
 onMounted(() => {
   inputRef.value?.focus()
