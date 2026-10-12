@@ -25,8 +25,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 // Manager owns the smbd child process and its generated configuration.

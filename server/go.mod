@@ -1,4 +1,4 @@
-module github.com/Sakana-1314/LocalNetwork-Files/server
+module github.com/Sakana-1314/MList/server
 
 go 1.26.0
 

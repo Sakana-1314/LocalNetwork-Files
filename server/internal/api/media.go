@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/media"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/media"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 func (a *API) mediaThumb(c *gin.Context) {

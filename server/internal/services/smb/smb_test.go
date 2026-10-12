@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 // fakeSmbd behaves like Samba's smbd closely enough for process management:

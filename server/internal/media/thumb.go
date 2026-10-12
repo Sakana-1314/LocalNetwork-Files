@@ -21,8 +21,8 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/cache"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 var ErrNoThumb = errors.New("无法生成预览图")

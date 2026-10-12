@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 type recNotifier struct {

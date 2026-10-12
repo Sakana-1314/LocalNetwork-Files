@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
-  title: LocalNetwork Files API
+  title: MList API
   version: 1.0.0
   description: |
     局域网文件管理系统 HTTP API。
 
     **认证方式**（任选其一）：
-    - `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「设置 → 访问令牌」中创建的 API 访问令牌（`lnf_` 前缀）。
+    - `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「设置 → 访问令牌」中创建的 API 访问令牌（`ml_` 前缀）。
     - 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。
     - 浏览器登录后自动携带的会话 Cookie。
 
@@ -423,7 +423,7 @@ paths:
                   - $ref: "#/components/schemas/AccessToken"
                   - type: object
                     properties:
-                      token: { type: string, description: 令牌明文（lnf_ 前缀） }
+                      token: { type: string, description: 令牌明文（ml_ 前缀） }
   /tokens/{id}/secret:
     get:
       tags: [访问凭据]

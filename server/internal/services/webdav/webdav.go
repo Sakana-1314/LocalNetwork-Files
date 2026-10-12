@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/net/webdav"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 const Prefix = "/dav"
@@ -59,7 +59,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.auth.FromRequest(r)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Basic realm="LocalNetwork Files", charset="UTF-8"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="MList", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}

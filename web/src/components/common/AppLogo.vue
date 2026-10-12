@@ -12,8 +12,7 @@ defineProps<{ collapsed?: boolean }>()
       <path d="M27 36h10" stroke="#2080f0" stroke-width="2.5" />
     </svg>
     <div v-if="!collapsed" class="text">
-      <div class="name">LocalNetwork</div>
-      <div class="sub">Files</div>
+      <div class="name">MList</div>
     </div>
   </div>
 </template>
@@ -41,10 +40,5 @@ defineProps<{ collapsed?: boolean }>()
   font-weight: 700;
   font-size: 15px;
   line-height: 1.1;
-}
-.sub {
-  font-size: 12px;
-  opacity: 0.6;
-  line-height: 1.2;
 }
 </style>

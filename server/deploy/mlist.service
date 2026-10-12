@@ -1,9 +1,9 @@
-# systemd unit for LocalNetwork Files.
+# systemd unit for MList.
 #
-#   install -Dm755 bin/lnfiles /usr/local/bin/lnfiles
-#   install -Dm640 config.example.yaml /etc/lnfiles/config.yaml   # then edit
-#   install -Dm644 deploy/lnfiles.service /etc/systemd/system/lnfiles.service
-#   systemctl daemon-reload && systemctl enable --now lnfiles
+#   install -Dm755 bin/mlist /usr/local/bin/mlist
+#   install -Dm640 config.example.yaml /etc/mlist/config.yaml   # then edit
+#   install -Dm644 deploy/mlist.service /etc/systemd/system/mlist.service
+#   systemctl daemon-reload && systemctl enable --now mlist
 #
 # The service runs as root because the managed Samba smbd (SMB service) and the
 # creation of SMB system accounts need it. If you do not use SMB you can run it
@@ -11,18 +11,18 @@
 # can read/write the shared directories, and keep data_dir writable by it.
 
 [Unit]
-Description=LocalNetwork Files (LAN file manager)
+Description=MList (LAN file manager)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-#User=lnfiles
-#Group=lnfiles
-ExecStart=/usr/local/bin/lnfiles -config /etc/lnfiles/config.yaml
-WorkingDirectory=/var/lib/lnfiles
-StateDirectory=lnfiles
-Environment=LNF_DATA_DIR=/var/lib/lnfiles
+#User=mlist
+#Group=mlist
+ExecStart=/usr/local/bin/mlist -config /etc/mlist/config.yaml
+WorkingDirectory=/var/lib/mlist
+StateDirectory=mlist
+Environment=MLIST_DATA_DIR=/var/lib/mlist
 Restart=on-failure
 RestartSec=3
 # smbd is a child process; stop it together with the server.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 func params() confParams {
@@ -174,11 +174,11 @@ func TestPaths(t *testing.T) {
 
 func TestForceUserAndGlobals(t *testing.T) {
 	p := params()
-	p.ForceUser = "lnfiles\n[evil]"
+	p.ForceUser = "mlist\n[evil]"
 	p.Workgroup = "HOME\nsecurity = share"
 	p.Port = 4455
 	res := buildConfig([]store.User{user(1, "alice", mount("A", "/a", true))}, p)
-	if v := directive(section(res.Conf, "A"), "force user"); v != "lnfiles[evil]" {
+	if v := directive(section(res.Conf, "A"), "force user"); v != "mlist[evil]" {
 		t.Errorf("force user = %q", v)
 	}
 	if strings.Count(res.Conf, "\n  security =") != 1 || !strings.Contains(res.Conf, "workgroup = HOMEsecurity = share") {
@@ -263,9 +263,9 @@ func TestAccounts(t *testing.T) {
 	}
 	// A prefix can make an otherwise invalid username usable.
 	p := params()
-	p.UserPrefix = "lnf_"
+	p.UserPrefix = "ml_"
 	res = buildConfig(users[2:3], p)
-	if directive(section(res.Conf, "C"), "valid users") != "lnf_9lives" {
+	if directive(section(res.Conf, "C"), "valid users") != "ml_9lives" {
 		t.Errorf("prefixed account missing:\n%s", res.Conf)
 	}
 }

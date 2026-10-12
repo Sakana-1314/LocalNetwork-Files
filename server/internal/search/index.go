@@ -22,9 +22,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 // skipNames are well-known junk/system entries that are never indexed.

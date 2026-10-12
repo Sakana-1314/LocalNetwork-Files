@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 #
-# LocalNetwork Files 容器镜像。构建上下文必须是仓库根目录：
+# MList 容器镜像。构建上下文必须是仓库根目录：
 #
-#   docker build -f server/Dockerfile -t lnfiles .
-#   docker run -d --name lnfiles \
+#   docker build -f server/Dockerfile -t mlist .
+#   docker run -d --name mlist \
 #     -p 8080:8080 -p 9000:9000 -p 445:445 \
-#     -v lnfiles-data:/data -v /path/to/media:/media \
-#     lnfiles
+#     -v mlist-data:/data -v /path/to/media:/media \
+#     mlist
 #
 # 然后在管理界面中把 /media 下的目录授权给用户。
 #
@@ -52,7 +52,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
-      -o /out/lnfiles ./cmd/lnfiles
+      -o /out/mlist ./cmd/mlist
 
 # ---------- runtime ----------
 FROM alpine:${ALPINE_VERSION}
@@ -77,13 +77,13 @@ RUN apk add --no-cache \
       ca-certificates \
  && rm -rf /var/cache/apk/*
 
-COPY --from=server /out/lnfiles /usr/local/bin/lnfiles
-COPY server/deploy/config.docker.yaml /etc/lnfiles/config.yaml
+COPY --from=server /out/mlist /usr/local/bin/mlist
+COPY server/deploy/config.docker.yaml /etc/mlist/config.yaml
 
 # Samba 需要 /var/lib/samba 等可写目录；数据与状态都放在 /data 下。
 VOLUME ["/data"]
 # 8080: Web / REST API / WebDAV, 9000: S3, 445: SMB
 EXPOSE 8080 9000 445
 # 以 root 运行：smbd 监听 445 端口，且创建 SMB 系统账户需要 root。
-ENTRYPOINT ["/usr/local/bin/lnfiles"]
-CMD ["-config", "/etc/lnfiles/config.yaml"]
+ENTRYPOINT ["/usr/local/bin/mlist"]
+CMD ["-config", "/etc/mlist/config.yaml"]

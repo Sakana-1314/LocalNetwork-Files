@@ -97,9 +97,9 @@ const davSnippets = computed(() => {
     windowsGui: `1. 打开“此电脑” → 右键“网络” → “映射网络驱动器”\n2. 文件夹填写：${url}\n3. 勾选“使用其他凭据连接”，输入用户名 ${u} 与密码（或访问令牌）`,
     windowsCmd: `net use Z: ${url} /user:${u} *`,
     windowsReg: `reg add HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters /v BasicAuthLevel /t REG_DWORD /d 2 /f\nreg add HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters /v FileSizeLimitInBytes /t REG_DWORD /d 4294967295 /f\nnet stop WebClient && net start WebClient`,
-    linux: `sudo apt install davfs2        # Debian/Ubuntu\nsudo mkdir -p /mnt/lnfiles\nsudo mount -t davfs ${url} /mnt/lnfiles -o uid=$(id -u),gid=$(id -g)\n# 按提示输入用户名 ${u} 与密码（或访问令牌）`,
-    fstab: `${url} /mnt/lnfiles davfs user,noauto,uid=1000,gid=1000 0 0\n# 凭据写入 /etc/davfs2/secrets：\n${url} ${u} <密码或访问令牌>`,
-    rclone: `rclone config create lnfiles webdav url=${url} vendor=other user=${u} pass=$(rclone obscure '<密码或访问令牌>')\nrclone ls lnfiles:${firstMount.value}\nrclone mount lnfiles: ~/lnfiles --vfs-cache-mode writes`,
+    linux: `sudo apt install davfs2        # Debian/Ubuntu\nsudo mkdir -p /mnt/mlist\nsudo mount -t davfs ${url} /mnt/mlist -o uid=$(id -u),gid=$(id -g)\n# 按提示输入用户名 ${u} 与密码（或访问令牌）`,
+    fstab: `${url} /mnt/mlist davfs user,noauto,uid=1000,gid=1000 0 0\n# 凭据写入 /etc/davfs2/secrets：\n${url} ${u} <密码或访问令牌>`,
+    rclone: `rclone config create mlist webdav url=${url} vendor=other user=${u} pass=$(rclone obscure '<密码或访问令牌>')\nrclone ls mlist:${firstMount.value}\nrclone mount mlist: ~/mlist --vfs-cache-mode writes`,
   }
 })
 
@@ -135,10 +135,10 @@ const s3Snippets = computed(() => {
   const m = firstMount.value
   return {
     summary: `Endpoint:   ${ep}\nRegion:     ${region}（任意值均可，服务端忽略）\n寻址方式:   Path-style（force_path_style = true）\nBuckets:    ${mounts.value.join(', ')}`,
-    awsConfig: `aws configure set aws_access_key_id <ACCESS_KEY> --profile lnfiles\naws configure set aws_secret_access_key <SECRET_KEY> --profile lnfiles\naws configure set region ${region} --profile lnfiles\naws configure set s3.addressing_style path --profile lnfiles`,
-    awsUse: `aws --profile lnfiles --endpoint-url ${ep} s3 ls\naws --profile lnfiles --endpoint-url ${ep} s3 ls s3://${m}/\naws --profile lnfiles --endpoint-url ${ep} s3 cp ./photo.jpg s3://${m}/photo.jpg`,
-    rcloneConf: `[lnfiles-s3]\ntype = s3\nprovider = Other\naccess_key_id = <ACCESS_KEY>\nsecret_access_key = <SECRET_KEY>\nendpoint = ${ep}\nregion = ${region}\nforce_path_style = true`,
-    rcloneMount: `# rclone.conf 位置：rclone config file\nrclone lsd lnfiles-s3:\nrclone mount lnfiles-s3:${m} ~/mnt/${m} --vfs-cache-mode writes`,
+    awsConfig: `aws configure set aws_access_key_id <ACCESS_KEY> --profile mlist\naws configure set aws_secret_access_key <SECRET_KEY> --profile mlist\naws configure set region ${region} --profile mlist\naws configure set s3.addressing_style path --profile mlist`,
+    awsUse: `aws --profile mlist --endpoint-url ${ep} s3 ls\naws --profile mlist --endpoint-url ${ep} s3 ls s3://${m}/\naws --profile mlist --endpoint-url ${ep} s3 cp ./photo.jpg s3://${m}/photo.jpg`,
+    rcloneConf: `[mlist-s3]\ntype = s3\nprovider = Other\naccess_key_id = <ACCESS_KEY>\nsecret_access_key = <SECRET_KEY>\nendpoint = ${ep}\nregion = ${region}\nforce_path_style = true`,
+    rcloneMount: `# rclone.conf 位置：rclone config file\nrclone lsd mlist-s3:\nrclone mount mlist-s3:${m} ~/mnt/${m} --vfs-cache-mode writes`,
   }
 })
 

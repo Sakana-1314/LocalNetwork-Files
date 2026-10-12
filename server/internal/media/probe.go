@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/cache"
+	"github.com/Sakana-1314/MList/server/internal/config"
 )
 
 var ErrNoFFmpeg = errors.New("服务器未安装 ffmpeg")

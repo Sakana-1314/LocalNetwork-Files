@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 // defaultRegion is reported by GetBucketLocation. The region in a request's
@@ -177,7 +177,7 @@ type request struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Server", "LocalNetworkFiles")
+	w.Header().Set("Server", "MList")
 	w.Header().Set("x-amz-request-id", requestID())
 	sig, err := parseSigV4(r)
 	if err != nil {

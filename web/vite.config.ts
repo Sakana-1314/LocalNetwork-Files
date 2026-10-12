@@ -5,8 +5,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const outDir = fileURLToPath(new URL('../server/internal/webui/dist', import.meta.url))
-// 可通过环境变量 LNF_BACKEND 覆盖开发代理目标
-const backend = process.env.LNF_BACKEND || 'http://127.0.0.1:8080'
+// 可通过环境变量 MLIST_BACKEND 覆盖开发代理目标
+const backend = process.env.MLIST_BACKEND || 'http://127.0.0.1:8080'
 
 /** emptyOutDir 会删掉仓库里跟踪的 .gitkeep，构建结束后重新创建。 */
 function keepGitkeep(): Plugin {

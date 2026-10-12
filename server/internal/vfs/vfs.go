@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 var (

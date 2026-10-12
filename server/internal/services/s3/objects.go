@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 const s3NS = "http://s3.amazonaws.com/doc/2006-03-01/"

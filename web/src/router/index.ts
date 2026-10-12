@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { feedback } from '@/composables/feedback'
 import MainLayout from '@/layouts/MainLayout.vue'
 
-const APP_NAME = 'LocalNetwork Files'
+const APP_NAME = 'MList'
 
 const routes: RouteRecordRaw[] = [
   {

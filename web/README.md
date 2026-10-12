@@ -1,4 +1,4 @@
-# LocalNetwork Files · Web 前端
+# MList · Web 前端
 
 Vite + Vue 3（`<script setup lang="ts">`）+ TypeScript（strict）+ Vue Router + Pinia + Naive UI。
 接口契约见 `../server/internal/api/openapi.yaml`（Base URL `/api/v1`）。
@@ -9,7 +9,7 @@ Vite + Vue 3（`<script setup lang="ts">`）+ TypeScript（strict）+ Vue Router
 
 ```bash
 pnpm install
-pnpm dev         # 开发服务器，/api 与 /dav 代理到 http://127.0.0.1:8080（可用 LNF_BACKEND 覆盖）
+pnpm dev         # 开发服务器，/api 与 /dav 代理到 http://127.0.0.1:8080（可用 MLIST_BACKEND 覆盖）
 pnpm typecheck   # vue-tsc 类型检查（应用 + vite.config.ts）
 pnpm build       # 类型检查 + 构建到 ../server/internal/webui/dist（构建后自动重建 .gitkeep）
 ```

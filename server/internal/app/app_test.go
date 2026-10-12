@@ -27,7 +27,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/config"
 )
 
 func TestMain(m *testing.M) {
@@ -96,7 +96,7 @@ type reqOpt func(*http.Request)
 func withHeader(k, v string) reqOpt { return func(r *http.Request) { r.Header.Set(k, v) } }
 func withRemote(addr string) reqOpt { return func(r *http.Request) { r.RemoteAddr = addr } }
 func withCookie(tok string) reqOpt {
-	return func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "lnf_session", Value: tok}) }
+	return func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "ml_session", Value: tok}) }
 }
 
 // do sends a request. tok (if non-empty) is sent as a bearer token. body may be
@@ -215,7 +215,7 @@ func TestAuthMethods(t *testing.T) {
 	}
 	var cookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == "lnf_session" {
+		if c.Name == "ml_session" {
 			cookie = c
 		}
 	}
@@ -228,7 +228,7 @@ func TestAuthMethods(t *testing.T) {
 	expect(t, e.do("GET", "/api/v1/auth/me?access_token="+q(tok), "", nil), 200)
 	expect(t, e.do("GET", "/api/v1/auth/me", "", nil), 401)
 	expect(t, e.do("GET", "/api/v1/auth/me", "garbage", nil), 401)
-	expect(t, e.do("GET", "/api/v1/auth/me", "lnf_garbage", nil), 401)
+	expect(t, e.do("GET", "/api/v1/auth/me", "ml_garbage", nil), 401)
 	expect(t, e.do("GET", "/api/v1/auth/me", "", nil, withHeader("Authorization", "Bearer ")), 401)
 	// A JWT signed with another key must be rejected.
 	forged := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjEsInZlciI6MCwiZXhwIjo0MTAyNDQ0ODAwfQ.c2lnbmF0dXJl"
@@ -771,7 +771,7 @@ func TestAPITokens(t *testing.T) {
 	expect(t, rec, 201)
 	ro := decode[obj](t, rec)
 	roTok := ro["token"].(string)
-	if !strings.HasPrefix(roTok, "lnf_") || !strings.HasPrefix(roTok, ro["prefix"].(string)) ||
+	if !strings.HasPrefix(roTok, "ml_") || !strings.HasPrefix(roTok, ro["prefix"].(string)) ||
 		len(ro["prefix"].(string)) < 6 || len(ro["prefix"].(string)) >= len(roTok)/2 {
 		t.Fatalf("token create: %v", ro)
 	}
@@ -876,7 +876,7 @@ func TestAPITokens(t *testing.T) {
 	expect(t, e.do("GET", "/api/v1/auth/me", child["token"].(string), nil), 401)
 
 	// expired
-	db, err := gorm.Open(sqlite.Open(filepath.Join(e.a.cfg.DataDir, "lnfiles.db")+"?_pragma=busy_timeout(5000)"),
+	db, err := gorm.Open(sqlite.Open(filepath.Join(e.a.cfg.DataDir, "mlist.db")+"?_pragma=busy_timeout(5000)"),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	must(t, err)
 	must(t, db.Exec("UPDATE access_tokens SET expires_at = ? WHERE id = ?", time.Now().Add(-time.Minute), rw["id"]).Error)

@@ -78,7 +78,7 @@ async function submit(): Promise<void> {
           <n-button type="primary" block size="large" :loading="loading" attr-type="submit">登录</n-button>
         </n-form>
       </n-card>
-      <p class="foot">LocalNetwork Files · 浏览、预览、挂载你的局域网文件</p>
+      <p class="foot">MList · 浏览、预览、挂载你的局域网文件</p>
     </div>
   </div>
 </template>

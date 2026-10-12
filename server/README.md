@@ -1,11 +1,11 @@
-# LocalNetwork Files · 后端
+# MList · 后端
 
-Go（Gin）服务端，模块 `github.com/Sakana-1314/LocalNetwork-Files/server`。项目介绍、部署与使用说明见[仓库根目录 README](../README.md)。
+Go（Gin）服务端，模块 `github.com/Sakana-1314/MList/server`。项目介绍、部署与使用说明见[仓库根目录 README](../README.md)。
 
 ## 命令
 
 ```bash
-make build        # 编译到 bin/lnfiles（内嵌 internal/webui/dist 中已构建的前端）
+make build        # 编译到 bin/mlist（内嵌 internal/webui/dist 中已构建的前端）
 make web          # 构建前端（../web，pnpm）
 make all          # web + build
 make run          # 编译并运行，存在 config.yaml 时使用它
@@ -14,16 +14,16 @@ make vet          # go vet ./...
 make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwin/arm64、windows/amd64 → bin/dist/
 ```
 
-`go run ./cmd/lnfiles -config config.yaml` 亦可；`-version` 打印版本（由 `-ldflags "-X main.version=..."` 注入）。
+`go run ./cmd/mlist -config config.yaml` 亦可；`-version` 打印版本（由 `-ldflags "-X main.version=..."` 注入）。
 
 ## 包结构
 
 | 包 | 职责 |
 | --- | --- |
-| `cmd/lnfiles` | 入口：解析参数、加载配置、设置日志、处理 SIGINT/SIGTERM |
-| `internal/config` | YAML 配置与默认值：监听、数据目录、服务开关与端口、转码、缓存、搜索（带 `Normalize` 校验），`LNF_LISTEN` / `LNF_DATA_DIR` 环境变量覆盖 |
+| `cmd/mlist` | 入口：解析参数、加载配置、设置日志、处理 SIGINT/SIGTERM |
+| `internal/config` | YAML 配置与默认值：监听、数据目录、服务开关与端口、转码、缓存、搜索（带 `Normalize` 校验），`MLIST_LISTEN` / `MLIST_DATA_DIR` 环境变量覆盖 |
 | `internal/store` | GORM + SQLite（纯 Go 驱动）：用户、授权目录（Mount）、访问令牌、S3 密钥；`Subscribe` 发布 `EventUsersChanged` |
-| `internal/auth` | bcrypt 密码、会话 JWT、`lnf_` API 令牌（`read`/`write` 范围，与 S3 密钥一样 AES-GCM 加密存储、可再次读取）、WebDAV 用的 Basic 认证（带短期缓存）；`OnPassword` 回调把明文密码交给 SMB 同步 |
+| `internal/auth` | bcrypt 密码、会话 JWT、`ml_` API 令牌（`read`/`write` 范围，与 S3 密钥一样 AES-GCM 加密存储、可再次读取）、WebDAV 用的 Basic 认证（带短期缓存）；`OnPassword` 回调把明文密码交给 SMB 同步 |
 | `internal/vfs` | 每用户虚拟文件系统：`/<mount>/<rel>` → 磁盘路径；路径清理、符号链接约束、只读检查、原子上传（`.lnf-upload-*` 临时文件）。**REST / WebDAV / S3 的唯一权限执行层** |
 | `internal/search` | 内存文件名索引（按顶层授权目录分根）、fzf 风格模糊匹配与打分、vfs 写入通知 + fsnotify 监听 + 定时重建 |
 | `internal/media` | ffprobe 探测、图片 / 视频预览图、HLS 实时转码会话（按需分片、拖动重启、硬件编码回退）、音频转码流、字幕转 WebVTT；缓存以内容指纹（大小 + 首尾各 64 KiB 的 sha256）为 key，与文件路径无关 |
@@ -51,4 +51,4 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 
 - `Dockerfile`：多阶段构建（node:alpine → golang:alpine 交叉编译 → alpine + ffmpeg + Samba），构建上下文为仓库根目录：`docker build -f server/Dockerfile .`；忽略规则在 `Dockerfile.dockerignore`。基础镜像选 Alpine 是为了避开 Debian 版 ffmpeg 带入的 Mesa/LLVM 依赖链（代价是 Alpine 的 ffmpeg 不含 NVENC）；由 `.github/workflows/docker.yml` 构建并推送到 ghcr.io。
 - `deploy/config.docker.yaml`：镜像内置配置。
-- `deploy/lnfiles.service`：systemd unit。
+- `deploy/mlist.service`：systemd unit。

@@ -16,10 +16,10 @@ import (
 
 	"github.com/studio-b12/gowebdav"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/services/webdav"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	"github.com/Sakana-1314/MList/server/internal/services/webdav"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 type env struct {

@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ghcr.io 要求镜像名全小写，而仓库名可能是 LocalNetwork-Files；
+      # ghcr.io 要求镜像名全小写，而仓库名可能是 MList；
       # 直接使用 github.repository 会因大写字母报 invalid reference format。
       - name: Compute lowercase image name
         run: echo "IMAGE=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
@@ -99,14 +99,14 @@ jobs:
           file: server/Dockerfile
           platforms: linux/amd64
           load: true
-          tags: lnfiles:verify
+          tags: mlist:verify
           build-args: |
             VERSION=verify
           cache-from: type=gha,scope=docker
 
       - name: Check required tools are present
         run: |
-          docker run --rm --entrypoint sh lnfiles:verify -c '
+          docker run --rm --entrypoint sh mlist:verify -c '
             set -e
             for bin in ffmpeg ffprobe smbd smbpasswd heif-convert useradd nologin; do
               command -v "$bin" >/dev/null || { echo "缺少 $bin"; exit 1; }
@@ -122,13 +122,13 @@ jobs:
       - name: Run container and probe HTTP endpoints
         run: |
           set -e
-          docker run -d --name lnfiles-verify -p 18080:8080 -p 19000:9000 lnfiles:verify
+          docker run -d --name mlist-verify -p 18080:8080 -p 19000:9000 mlist:verify
           ready=0
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18080/api/openapi.json -o /dev/null; then ready=1; break; fi
             sleep 1
           done
-          test "$ready" = "1" || { echo "服务在 30 秒内没有就绪"; docker logs lnfiles-verify; exit 1; }
+          test "$ready" = "1" || { echo "服务在 30 秒内没有就绪"; docker logs mlist-verify; exit 1; }
           echo "--- web UI ---"
           curl -fsS -o /dev/null -w 'GET / -> %{http_code}\n' http://127.0.0.1:18080/
           echo "--- OpenAPI spec ---"
@@ -137,14 +137,14 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/fs/list)
           test "$code" = "401" || { echo "expected 401, got $code"; exit 1; }
           echo "auth check ok"
-          docker logs lnfiles-verify
-          docker rm -f lnfiles-verify
+          docker logs mlist-verify
+          docker rm -f mlist-verify
 
       - name: Report image size
         run: |
           set -e
           # docker 的 .Size 是未压缩大小（层在本地展开后的占用）。
-          size=$(docker image inspect lnfiles:verify --format '{{.Size}}')
+          size=$(docker image inspect mlist:verify --format '{{.Size}}')
           mb=$((size / 1024 / 1024))
           echo "image size: ${mb} MiB (uncompressed, amd64)"
           {

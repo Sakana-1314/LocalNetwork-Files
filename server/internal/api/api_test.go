@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/media"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	"github.com/Sakana-1314/MList/server/internal/media"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 func TestStatusAndPublicMessage(t *testing.T) {

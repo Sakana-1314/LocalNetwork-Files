@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-const KEY = 'lnf_token'
+const KEY = 'ml_token'
 
 function read(): string {
   try {
