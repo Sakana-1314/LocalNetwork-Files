@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { NButton, NIcon, NSlider, NTag } from 'naive-ui'
+import { NButton, NIcon, NSlider } from 'naive-ui'
 import { MusicalNotes, PauseOutline, PlayOutline } from '@vicons/ionicons5'
 import type { Entry, MediaInfo } from '@/api/types'
 import { fsApi } from '@/api/fs'
@@ -97,9 +97,6 @@ onBeforeUnmount(() => {
     </div>
     <div class="title">{{ entry.name }}</div>
     <div class="meta">
-      <n-tag size="small" :bordered="false" :type="mode === 'direct' ? 'success' : 'info'">
-        {{ mode === 'direct' ? '直连播放' : '实时转码 MP3' }}
-      </n-tag>
       <span>{{ formatSize(entry.size) }}</span>
       <span v-if="info?.audio[0]">{{ info.audio[0].codec }}</span>
       <span v-if="info?.bit_rate">{{ formatBitrate(info.bit_rate) }}</span>
