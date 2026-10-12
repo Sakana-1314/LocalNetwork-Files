@@ -18,16 +18,22 @@ servers:
 security:
   - bearerAuth: []
 tags:
-  - name: auth
-  - name: files
-  - name: media
-  - name: tokens
-  - name: system
-  - name: admin
+  - name: 认证
+    description: 登录、退出与当前用户信息
+  - name: 文件
+    description: 目录浏览、上传下载、重命名、移动复制、删除与搜索
+  - name: 媒体
+    description: 预览图、媒体信息、HLS 实时转码、音频转码与字幕转换
+  - name: 访问凭据
+    description: 访问令牌与 S3 访问密钥（仅当前用户自己的凭据）
+  - name: 系统
+    description: 系统与服务状态（用于挂载向导）
+  - name: 管理
+    description: 用户与授权目录、缓存与搜索索引，需要管理员权限
 paths:
   /auth/login:
     post:
-      tags: [auth]
+      tags: [认证]
       summary: 用户名密码登录
       security: []
       requestBody:
@@ -38,39 +44,39 @@ paths:
               type: object
               required: [username, password]
               properties:
-                username: { type: string }
-                password: { type: string }
+                username: { type: string, description: 用户名 }
+                password: { type: string, description: 登录密码 }
       responses:
         "200":
-          description: 登录成功
+          description: 登录成功，返回会话令牌与用户信息（同时写入会话 Cookie）
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
-                  expires_at: { type: string, format: date-time }
+                  token: { type: string, description: 会话令牌 }
+                  expires_at: { type: string, format: date-time, description: 会话过期时间 }
                   user: { $ref: "#/components/schemas/User" }
   /auth/logout:
     post:
-      tags: [auth]
+      tags: [认证]
       summary: 退出登录（清除 Cookie）
       security: []
       responses:
-        "204": { description: OK }
+        "204": { description: 已退出登录，无响应体 }
   /auth/me:
     get:
-      tags: [auth]
+      tags: [认证]
       summary: 当前用户
       responses:
         "200":
-          description: OK
+          description: 当前登录用户及其授权目录
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
   /auth/password:
     put:
-      tags: [auth]
+      tags: [认证]
       summary: 修改自己的密码
       requestBody:
         required: true
@@ -80,8 +86,8 @@ paths:
               type: object
               required: [old_password, new_password]
               properties:
-                old_password: { type: string }
-                new_password: { type: string, minLength: 6 }
+                old_password: { type: string, description: 当前密码 }
+                new_password: { type: string, minLength: 6, description: 新密码，至少 6 位 }
       responses:
         "200":
           description: 修改成功。旧会话全部失效，返回新的会话令牌（同时写入 Cookie），客户端应替换本地保存的令牌。
@@ -90,98 +96,99 @@ paths:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
-                  expires_at: { type: string, format: date-time }
+                  token: { type: string, description: 新的会话令牌 }
+                  expires_at: { type: string, format: date-time, description: 新会话的过期时间 }
 
   /fs/list:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 列出目录
       parameters:
-        - { name: path, in: query, schema: { type: string, default: "/" } }
+        - { name: path, in: query, schema: { type: string, default: "/" }, description: 目录的虚拟路径，省略时为根目录 / }
       responses:
         "200":
-          description: OK
+          description: 该目录下的条目列表
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  path: { type: string }
+                  path: { type: string, description: 规范化后的目录虚拟路径 }
                   writable: { type: boolean, description: 当前目录是否可写 }
                   entries:
                     type: array
+                    description: 目录下的文件与子目录
                     items: { $ref: "#/components/schemas/Entry" }
   /fs/stat:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 获取单个文件/目录信息
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 文件或目录的虚拟路径 }
       responses:
         "200":
-          description: OK
+          description: 该文件或目录的信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Entry" }
   /fs/raw:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 读取原始文件（支持 Range）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: download, in: query, schema: { type: boolean }, description: 以附件形式下载 }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 文件的虚拟路径 }
+        - { name: download, in: query, schema: { type: boolean }, description: "为 true 时以附件形式下载（Content-Disposition: attachment）" }
       responses:
-        "200": { description: 文件内容 }
-        "206": { description: 部分内容 }
+        "200": { description: 完整文件内容；响应头带 Content-Type 与 Accept-Ranges }
+        "206": { description: Range 请求命中的部分内容 }
   /fs/raw/{name}:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名
       parameters:
-        - { name: name, in: path, required: true, schema: { type: string } }
-        - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: download, in: query, schema: { type: boolean } }
+        - { name: name, in: path, required: true, schema: { type: string }, description: 文件名，仅用于让浏览器显示真实文件名，服务端忽略 }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 文件的虚拟路径（实际使用的路径） }
+        - { name: download, in: query, schema: { type: boolean }, description: 为 true 时以附件形式下载 }
       responses:
-        "200": { description: 文件内容 }
-        "206": { description: 部分内容 }
+        "200": { description: 完整文件内容 }
+        "206": { description: Range 请求命中的部分内容 }
   /fs/file:
     put:
-      tags: [files]
+      tags: [文件]
       summary: 上传 / 覆盖文件（请求体为文件内容，自动创建父目录）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string }, description: 目标文件完整路径 }
-        - { name: overwrite, in: query, schema: { type: boolean, default: false } }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 目标文件的完整虚拟路径 }
+        - { name: overwrite, in: query, schema: { type: boolean, default: false }, description: 目标已存在时是否覆盖；为 false 时返回 409 }
       requestBody:
         content:
           application/octet-stream:
             schema: { type: string, format: binary }
       responses:
         "201":
-          description: 已创建
+          description: 上传成功，返回新文件的条目信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Entry" }
-        "409": { description: 文件已存在 }
+        "409": { description: 目标文件已存在且未允许覆盖 }
   /fs/text:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 读取文本文件（最大 4 MiB）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 文本文件的虚拟路径 }
       responses:
         "200":
-          description: OK
+          description: 文本内容
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  content: { type: string }
-                  truncated: { type: boolean }
+                  content: { type: string, description: 文件文本内容（按 UTF-8 解码） }
+                  truncated: { type: boolean, description: 是否因超过 4 MiB 而被截断 }
   /fs/mkdir:
     post:
-      tags: [files]
+      tags: [文件]
       summary: 新建目录
       requestBody:
         required: true
@@ -191,16 +198,16 @@ paths:
               type: object
               required: [path]
               properties:
-                path: { type: string }
+                path: { type: string, description: 新目录的完整虚拟路径 }
       responses:
         "201":
-          description: OK
+          description: 目录创建成功，返回新目录的条目信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Entry" }
   /fs/rename:
     post:
-      tags: [files]
+      tags: [文件]
       summary: 重命名
       requestBody:
         required: true
@@ -210,17 +217,17 @@ paths:
               type: object
               required: [path, name]
               properties:
-                path: { type: string }
+                path: { type: string, description: 要重命名的文件或目录的虚拟路径 }
                 name: { type: string, description: 新名称（不含路径） }
       responses:
         "200":
-          description: OK
+          description: 重命名成功，返回更新后的条目信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Entry" }
   /fs/move:
     post:
-      tags: [files]
+      tags: [文件]
       summary: 移动（可跨授权目录）
       requestBody:
         required: true
@@ -231,7 +238,7 @@ paths:
         "200": { $ref: "#/components/responses/BatchResult" }
   /fs/copy:
     post:
-      tags: [files]
+      tags: [文件]
       summary: 复制
       requestBody:
         required: true
@@ -242,7 +249,7 @@ paths:
         "200": { $ref: "#/components/responses/BatchResult" }
   /fs/delete:
     post:
-      tags: [files]
+      tags: [文件]
       summary: 删除（目录递归删除）
       requestBody:
         required: true
@@ -252,22 +259,22 @@ paths:
               type: object
               required: [paths]
               properties:
-                paths: { type: array, items: { type: string } }
+                paths: { type: array, items: { type: string }, description: 要删除的虚拟路径列表，目录会被递归删除 }
       responses:
         "200": { $ref: "#/components/responses/BatchResult" }
   /fs/search:
     get:
-      tags: [files]
+      tags: [文件]
       summary: 模糊搜索文件名
       description: 基于后台索引的模糊匹配（子序列匹配 + 连续/词首加权），结果按相关度排序，仅返回当前用户可读目录中的文件。
       parameters:
-        - { name: q, in: query, required: true, schema: { type: string } }
-        - { name: path, in: query, schema: { type: string, default: "/" }, description: 仅在该目录下搜索 }
-        - { name: kind, in: query, schema: { $ref: "#/components/schemas/Kind" } }
-        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 500 } }
+        - { name: q, in: query, required: true, schema: { type: string }, description: 搜索关键字（支持中文；按子序列模糊匹配） }
+        - { name: path, in: query, schema: { type: string, default: "/" }, description: 仅在该目录（含子目录）下搜索，省略时为全部授权目录 }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/Kind" }, description: 只返回该类型的条目，省略时不限类型 }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 500 }, description: 最多返回的结果条数，上限 500 }
       responses:
         "200":
-          description: OK
+          description: 按相关度排序的搜索结果
           content:
             application/json:
               schema:
@@ -275,42 +282,43 @@ paths:
                 properties:
                   results:
                     type: array
+                    description: 命中的条目，按相关度从高到低
                     items:
                       allOf:
                         - $ref: "#/components/schemas/Entry"
                         - type: object
                           properties:
-                            score: { type: integer }
+                            score: { type: integer, description: 匹配得分，越高越相关 }
                             matches: { type: array, items: { type: integer }, description: 名称中命中的字符下标（按 Unicode 字符计） }
                   total: { type: integer, description: 命中总数（可能大于返回数量） }
-                  indexing: { type: boolean, description: 索引是否正在构建 }
-                  took_ms: { type: number }
+                  indexing: { type: boolean, description: 索引是否正在构建（此时结果可能不完整） }
+                  took_ms: { type: number, description: 本次搜索耗时（毫秒） }
 
   /media/thumb:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: 预览图（图片/视频/音频封面），JPEG
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: size, in: query, schema: { type: integer, enum: [128, 256, 512, 1024], default: 256 } }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 媒体文件的虚拟路径 }
+        - { name: size, in: query, schema: { type: integer, enum: [128, 256, 512, 1024], default: 256 }, description: 预览图边长（像素），取最接近的可用档位 }
       responses:
-        "200": { description: image/jpeg }
-        "404": { description: 无法生成预览图 }
+        "200": { description: "JPEG 预览图（Content-Type: image/jpeg）" }
+        "404": { description: 无法生成预览图（格式不支持或文件不可读） }
   /media/info:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: 媒体信息（ffprobe）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 媒体文件的虚拟路径 }
       responses:
         "200":
-          description: OK
+          description: 探测到的媒体信息（含视频/音频/字幕轨道）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MediaInfo" }
   /media/transcode:
     post:
-      tags: [media]
+      tags: [媒体]
       summary: 创建 HLS 实时转码会话
       description: 返回 HLS 播放列表地址。分片按需实时转码，支持任意位置拖动。
       requestBody:
@@ -321,78 +329,78 @@ paths:
               type: object
               required: [path]
               properties:
-                path: { type: string }
-                quality: { type: string, enum: [original, 1080p, 720p, 480p], default: 720p }
-                audio_track: { type: integer, default: 0, description: 音轨序号（MediaInfo.audio 下标） }
+                path: { type: string, description: 视频文件的虚拟路径 }
+                quality: { type: string, enum: [original, 1080p, 720p, 480p], default: 720p, description: 输出画质，original 表示保持原始分辨率 }
+                audio_track: { type: integer, default: 0, description: 音轨序号（MediaInfo.audio 下标），省略为第 1 条 }
       responses:
         "200":
-          description: OK
+          description: 会话创建成功，返回播放列表地址
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  playlist: { type: string, description: "如 /api/v1/media/hls/{id}/index.m3u8" }
-                  duration: { type: number }
+                  id: { type: string, description: 转码会话 ID，用于请求播放列表与分片 }
+                  playlist: { type: string, description: "播放列表路径，如 /api/v1/media/hls/{id}/index.m3u8" }
+                  duration: { type: number, description: 视频总时长（秒） }
   /media/hls/{id}/index.m3u8:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: HLS 播放列表
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string }, description: 转码会话 ID }
       responses:
-        "200": { description: application/vnd.apple.mpegurl }
+        "200": { description: "HLS 播放列表（m3u8，Content-Type: application/vnd.apple.mpegurl）" }
   /media/hls/{id}/{segment}.ts:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: HLS 分片（按需转码）
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-        - { name: segment, in: path, required: true, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: string }, description: 转码会话 ID }
+        - { name: segment, in: path, required: true, schema: { type: integer }, description: 分片序号，从 0 开始 }
       responses:
-        "200": { description: video/mp2t }
+        "200": { description: "MPEG-TS 分片数据（按需转码后返回，Content-Type: video/mp2t）" }
   /media/hls/{id}:
     delete:
-      tags: [media]
+      tags: [媒体]
       summary: 停止转码会话
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string }, description: 转码会话 ID }
       responses:
-        "204": { description: OK }
+        "204": { description: 会话已停止，无响应体 }
   /media/audio:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: 音频实时转码为 MP3 流（用于浏览器不支持的格式，如 APE/WMA/DSD）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: start, in: query, schema: { type: number }, description: 起始秒数 }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 音频文件的虚拟路径 }
+        - { name: start, in: query, schema: { type: number }, description: 起始秒数，从该位置开始转码（用于拖动进度） }
       responses:
-        "200": { description: audio/mpeg }
+        "200": { description: "MP3 音频流（chunked 传输，Content-Type: audio/mpeg）" }
   /media/subtitle:
     get:
-      tags: [media]
+      tags: [媒体]
       summary: 字幕转 WebVTT（内嵌字幕或同名外挂 .srt/.ass/.vtt）
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string }, description: 视频路径（内嵌）或字幕文件路径 }
-        - { name: index, in: query, schema: { type: integer }, description: 内嵌字幕序号（MediaInfo.subtitles 下标） }
+        - { name: path, in: query, required: true, schema: { type: string }, description: 视频路径（用于提取内嵌字幕）或字幕文件路径 }
+        - { name: index, in: query, schema: { type: integer }, description: 内嵌字幕序号（MediaInfo.subtitles 下标）；省略时按外挂字幕处理 }
       responses:
-        "200": { description: text/vtt }
+        "200": { description: "WebVTT 字幕内容（Content-Type: text/vtt）" }
 
   /tokens:
     get:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 我的访问令牌
       responses:
         "200":
-          description: OK
+          description: 当前用户的访问令牌列表（不含令牌明文）
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AccessToken" }
     post:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 创建访问令牌（明文可随时通过 /tokens/{id}/secret 再次读取）
       requestBody:
         required: true
@@ -402,12 +410,12 @@ paths:
               type: object
               required: [name]
               properties:
-                name: { type: string }
-                scopes: { type: array, items: { type: string, enum: [read, write] }, default: [read] }
-                expires_in_days: { type: integer, description: 0 或省略表示永不过期 }
+                name: { type: string, description: 令牌名称，便于辨认，最长 128 字符 }
+                scopes: { type: array, items: { type: string, enum: [read, write] }, default: [read], description: 权限范围；read 只读，write 可写。至少包含 read }
+                expires_in_days: { type: integer, description: 有效期天数；0 或省略表示永不过期，最大 3650 }
       responses:
         "201":
-          description: OK
+          description: 令牌创建成功，返回令牌信息与明文
           content:
             application/json:
               schema:
@@ -415,45 +423,45 @@ paths:
                   - $ref: "#/components/schemas/AccessToken"
                   - type: object
                     properties:
-                      token: { type: string }
+                      token: { type: string, description: 令牌明文（lnf_ 前缀） }
   /tokens/{id}/secret:
     get:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 读取访问令牌明文（仅令牌所属用户）
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: integer }, description: 令牌 ID }
       responses:
         "200":
-          description: OK
+          description: "令牌明文。响应带 Cache-Control: no-store，请勿长期缓存。"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
+                  token: { type: string, description: 令牌明文 }
         "404": { description: 令牌不存在或不属于当前用户 }
   /tokens/{id}:
     delete:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 吊销访问令牌
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: integer }, description: 令牌 ID }
       responses:
-        "204": { description: OK }
+        "204": { description: 令牌已吊销，无响应体 }
   /s3keys:
     get:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 我的 S3 访问密钥
       responses:
         "200":
-          description: OK
+          description: 当前用户的 S3 密钥列表（不含 Secret）
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/S3Key" }
     post:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 创建 S3 密钥（Secret 可随时通过 /s3keys/{access_key}/secret 再次读取）
       requestBody:
         content:
@@ -461,11 +469,11 @@ paths:
             schema:
               type: object
               properties:
-                name: { type: string }
-                read_only: { type: boolean, default: false }
+                name: { type: string, description: 备注名称，便于辨认，最长 128 字符 }
+                read_only: { type: boolean, default: false, description: 是否只读；true 时该密钥只能读取 }
       responses:
         "201":
-          description: OK
+          description: 密钥创建成功，返回 Access Key 与 Secret
           content:
             application/json:
               schema:
@@ -473,57 +481,57 @@ paths:
                   - $ref: "#/components/schemas/S3Key"
                   - type: object
                     properties:
-                      secret_key: { type: string }
+                      secret_key: { type: string, description: S3 Secret Key（访问密钥对应的私钥） }
   /s3keys/{access_key}/secret:
     get:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 读取 S3 密钥的 Secret（仅密钥所属用户）
       parameters:
-        - { name: access_key, in: path, required: true, schema: { type: string } }
+        - { name: access_key, in: path, required: true, schema: { type: string }, description: S3 Access Key（访问密钥 ID） }
       responses:
         "200":
-          description: OK
+          description: "S3 Secret Key。响应带 Cache-Control: no-store，请勿长期缓存。"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  secret_key: { type: string }
+                  secret_key: { type: string, description: S3 Secret Key（访问密钥对应的私钥） }
         "404": { description: 密钥不存在或不属于当前用户 }
   /s3keys/{access_key}:
     delete:
-      tags: [tokens]
+      tags: [访问凭据]
       summary: 删除 S3 密钥
       parameters:
-        - { name: access_key, in: path, required: true, schema: { type: string } }
+        - { name: access_key, in: path, required: true, schema: { type: string }, description: S3 Access Key（访问密钥 ID） }
       responses:
-        "204": { description: OK }
+        "204": { description: 密钥已删除，无响应体 }
 
   /system/info:
     get:
-      tags: [system]
+      tags: [系统]
       summary: 系统与服务信息（用于挂载向导）
       responses:
         "200":
-          description: OK
+          description: 版本、主机名、地址与各协议服务的运行状态
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemInfo" }
 
   /admin/users:
     get:
-      tags: [admin]
+      tags: [管理]
       summary: 用户列表
       responses:
         "200":
-          description: OK
+          description: 全部用户及其授权目录（仅管理员可见本地路径）
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/User" }
     post:
-      tags: [admin]
+      tags: [管理]
       summary: 创建用户
       requestBody:
         required: true
@@ -532,16 +540,16 @@ paths:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
         "201":
-          description: OK
+          description: 用户创建成功
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
   /admin/users/{id}:
     put:
-      tags: [admin]
+      tags: [管理]
       summary: 更新用户（password 为空表示不修改）
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: integer }, description: 用户 ID }
       requestBody:
         required: true
         content:
@@ -549,47 +557,47 @@ paths:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
         "200":
-          description: OK
+          description: 用户已更新；角色或状态变化会导致该用户重新登录
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
     delete:
-      tags: [admin]
+      tags: [管理]
       summary: 删除用户
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: id, in: path, required: true, schema: { type: integer }, description: 用户 ID }
       responses:
-        "204": { description: OK }
+        "204": { description: 用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体 }
   /admin/browse:
     get:
-      tags: [admin]
+      tags: [管理]
       summary: 浏览服务器本地目录（用于选择授权目录）
       parameters:
-        - { name: path, in: query, schema: { type: string }, description: 本地绝对路径，省略时返回根/盘符 }
+        - { name: path, in: query, schema: { type: string }, description: 服务器本地绝对路径；省略时返回根目录 / 盘符列表 }
       responses:
         "200":
-          description: OK
+          description: 该本地目录的子目录列表
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  path: { type: string }
-                  parent: { type: string }
-                  dirs: { type: array, items: { type: string }, description: 子目录绝对路径 }
+                  path: { type: string, description: 当前浏览的本地绝对路径 }
+                  parent: { type: string, description: 上一级本地路径；已在顶层时为空字符串 }
+                  dirs: { type: array, items: { type: string }, description: 子目录的绝对路径 }
   /admin/cache:
     get:
-      tags: [admin]
+      tags: [管理]
       summary: 缓存统计
       responses:
         "200":
-          description: OK
+          description: 预览图 / 转码缓存的占用、上限与保留时长，以及当前转码会话
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CacheStats" }
   /admin/cache/clean:
     post:
-      tags: [admin]
+      tags: [管理]
       summary: 清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）
       requestBody:
         required: false
@@ -598,182 +606,200 @@ paths:
             schema:
               type: object
               properties:
-                kind: { type: string, enum: [thumb, transcode, all], default: all }
+                kind: { type: string, enum: [thumb, transcode, all], default: all, description: 要清理的缓存桶；thumb 预览图，transcode 转码分片，all 全部 }
       responses:
         "200":
-          description: OK
+          description: 清理完成，返回删除的文件数与字节数
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  removed_files: { type: integer }
-                  removed_bytes: { type: integer }
+                  removed_files: { type: integer, description: 删除的文件数 }
+                  removed_bytes: { type: integer, description: 释放的字节数 }
   /admin/search/status:
     get:
-      tags: [admin]
+      tags: [管理]
       summary: 搜索索引状态
       responses:
         "200":
-          description: OK
+          description: 索引的构建状态与统计
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IndexStatus" }
   /admin/search/reindex:
     post:
-      tags: [admin]
+      tags: [管理]
       summary: 重建搜索索引
       responses:
-        "202": { description: 已开始 }
+        "202": { description: 已开始后台重建，无响应体 }
 
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+      description: "会话令牌或 API 访问令牌，形如 `Authorization: Bearer <token>`"
   responses:
     BatchResult:
-      description: 批量操作结果
+      description: 批量操作结果，逐个路径给出成功或失败
       content:
         application/json:
           schema:
             type: object
             properties:
-              succeeded: { type: array, items: { type: string } }
+              succeeded: { type: array, items: { type: string }, description: 操作成功的虚拟路径列表 }
               failed:
                 type: array
+                description: 操作失败的条目及原因
                 items:
                   type: object
                   properties:
-                    path: { type: string }
-                    error: { type: string }
+                    path: { type: string, description: 失败的虚拟路径 }
+                    error: { type: string, description: 失败原因 }
   schemas:
     Kind:
       type: string
+      description: 文件类型
       enum: [dir, image, video, audio, text, pdf, archive, other]
     Entry:
       type: object
+      description: 文件或目录条目
       properties:
-        name: { type: string }
+        name: { type: string, description: 文件或目录名 }
         path: { type: string, description: 虚拟路径 }
-        is_dir: { type: boolean }
-        size: { type: integer }
-        mod_time: { type: string, format: date-time }
-        mime: { type: string }
+        is_dir: { type: boolean, description: 是否为目录 }
+        size: { type: integer, description: 文件大小（字节）；目录为 0 }
+        mod_time: { type: string, format: date-time, description: 最后修改时间 }
+        mime: { type: string, description: 由扩展名推断的 MIME 类型 }
         kind: { $ref: "#/components/schemas/Kind" }
-        writable: { type: boolean }
+        writable: { type: boolean, description: 是否可写（目录权限与令牌范围共同决定） }
         thumb: { type: boolean, description: 是否可生成预览图 }
     TransferRequest:
       type: object
+      description: 移动 / 复制的请求体
       required: [sources, dest_dir]
       properties:
-        sources: { type: array, items: { type: string } }
-        dest_dir: { type: string }
-        overwrite: { type: boolean, default: false }
+        sources: { type: array, items: { type: string }, description: 源文件或目录的虚拟路径列表 }
+        dest_dir: { type: string, description: 目标目录的虚拟路径 }
+        overwrite: { type: boolean, default: false, description: 目标已存在时是否覆盖 }
     Mount:
       type: object
+      description: 授权给用户的服务器目录
       properties:
-        id: { type: integer }
+        id: { type: integer, description: 授权目录 ID }
         name: { type: string, description: 在虚拟根目录下显示的名称 }
         path: { type: string, description: 服务器本地绝对路径（仅管理员可见） }
         writable: { type: boolean, description: false 为只读目录，true 为可写目录 }
     User:
       type: object
+      description: 用户
       properties:
-        id: { type: integer }
-        username: { type: string }
-        role: { type: string, enum: [admin, user] }
-        disabled: { type: boolean }
-        mounts: { type: array, items: { $ref: "#/components/schemas/Mount" } }
-        created_at: { type: string, format: date-time }
+        id: { type: integer, description: 用户 ID }
+        username: { type: string, description: 用户名 }
+        role: { type: string, enum: [admin, user], description: 角色，admin 为管理员 }
+        disabled: { type: boolean, description: 是否已禁用（禁用后无法登录，令牌也失效） }
+        mounts: { type: array, items: { $ref: "#/components/schemas/Mount" }, description: 该用户被授权的目录 }
+        created_at: { type: string, format: date-time, description: 创建时间 }
     UserInput:
       type: object
+      description: 创建 / 更新用户的请求体
       properties:
-        username: { type: string }
-        password: { type: string }
-        role: { type: string, enum: [admin, user] }
-        disabled: { type: boolean }
+        username: { type: string, description: 用户名，1-32 位，可用字母、数字、下划线、点与短横线 }
+        password: { type: string, description: 密码；创建时必填且至少 6 位，更新时留空表示不修改 }
+        role: { type: string, enum: [admin, user], description: 角色，admin 为管理员 }
+        disabled: { type: boolean, description: 是否禁用该账户 }
         mounts:
           type: array
+          description: 授权目录列表，整表替换
           items:
             type: object
             required: [name, path]
             properties:
-              name: { type: string }
-              path: { type: string }
-              writable: { type: boolean }
+              name: { type: string, description: 挂载名，即用户虚拟根目录下的文件夹名 }
+              path: { type: string, description: 服务器本地绝对路径 }
+              writable: { type: boolean, description: 是否允许写入 }
     AccessToken:
       type: object
+      description: API 访问令牌（明文加密存储，可随时再次读取）
       properties:
-        id: { type: integer }
-        name: { type: string }
+        id: { type: integer, description: 令牌 ID }
+        name: { type: string, description: 令牌名称 }
         prefix: { type: string, description: "令牌前若干位，用于辨认；完整明文通过 /tokens/{id}/secret 读取" }
-        scopes: { type: array, items: { type: string } }
-        expires_at: { type: string, format: date-time, nullable: true }
-        last_used_at: { type: string, format: date-time, nullable: true }
-        created_at: { type: string, format: date-time }
+        scopes: { type: array, items: { type: string }, description: 权限范围 }
+        expires_at: { type: string, format: date-time, nullable: true, description: 过期时间；null 表示永不过期 }
+        last_used_at: { type: string, format: date-time, nullable: true, description: 最近使用时间；null 表示从未使用 }
+        created_at: { type: string, format: date-time, description: 创建时间 }
     S3Key:
       type: object
+      description: S3 访问密钥
       properties:
-        access_key: { type: string }
-        name: { type: string }
-        read_only: { type: boolean }
-        created_at: { type: string, format: date-time }
+        access_key: { type: string, description: S3 Access Key（访问密钥 ID） }
+        name: { type: string, description: 备注名称 }
+        read_only: { type: boolean, description: 是否只读 }
+        created_at: { type: string, format: date-time, description: 创建时间 }
     MediaInfo:
       type: object
+      description: ffprobe 探测到的媒体信息
       properties:
-        duration: { type: number }
-        format: { type: string }
-        bit_rate: { type: integer }
+        duration: { type: number, description: 总时长（秒） }
+        format: { type: string, description: "容器格式，如 matroska,webm" }
+        bit_rate: { type: integer, description: 总码率（bps） }
         direct_play: { type: boolean, description: 浏览器大概率可直接播放（无需转码） }
         video:
           type: object
           nullable: true
+          description: 视频轨道；纯音频文件为 null
           properties:
-            codec: { type: string }
-            width: { type: integer }
-            height: { type: integer }
-            fps: { type: number }
+            codec: { type: string, description: 视频编码，如 h264、hevc }
+            width: { type: integer, description: 画面宽度（像素） }
+            height: { type: integer, description: 画面高度（像素） }
+            fps: { type: number, description: 帧率 }
         audio:
           type: array
+          description: 音频轨道列表；index 即请求转码时的 audio_track
           items:
             type: object
             properties:
-              index: { type: integer }
-              codec: { type: string }
-              channels: { type: integer }
-              language: { type: string }
-              title: { type: string }
+              index: { type: integer, description: 音轨序号 }
+              codec: { type: string, description: 音频编码，如 aac、ac3 }
+              channels: { type: integer, description: 声道数 }
+              language: { type: string, description: 语言标签（来自容器元数据） }
+              title: { type: string, description: 轨道标题（来自容器元数据） }
         subtitles:
           type: array
+          description: 字幕轨道列表；index 即请求转换时的 index
           items:
             type: object
             properties:
-              index: { type: integer }
-              codec: { type: string }
-              language: { type: string }
-              title: { type: string }
+              index: { type: integer, description: 字幕序号 }
+              codec: { type: string, description: 字幕编码，如 subrip、ass、hdmv_pgs_subtitle }
+              language: { type: string, description: 语言标签（来自容器元数据） }
+              title: { type: string, description: 轨道标题（来自容器元数据） }
               external: { type: string, description: 外挂字幕的虚拟路径（内嵌字幕为空） }
     SystemInfo:
       type: object
+      description: 系统与协议服务信息
       properties:
-        version: { type: string }
-        hostname: { type: string }
-        addresses: { type: array, items: { type: string }, description: 局域网 IP }
-        http_port: { type: integer }
-        ffmpeg: { type: boolean }
+        version: { type: string, description: 服务器版本 }
+        hostname: { type: string, description: 服务器主机名 }
+        addresses: { type: array, items: { type: string }, description: 服务器探测到的局域网 IP 地址 }
+        http_port: { type: integer, description: Web / API / WebDAV 的监听端口 }
+        ffmpeg: { type: boolean, description: 是否检测到 ffmpeg（决定转码与部分预览是否可用） }
         services:
           type: object
+          description: 各协议服务的状态
           properties:
             webdav: { $ref: "#/components/schemas/ServiceStatus" }
             s3: { $ref: "#/components/schemas/ServiceStatus" }
             smb: { $ref: "#/components/schemas/ServiceStatus" }
     ServiceStatus:
       type: object
+      description: 单个协议服务的状态
       properties:
-        enabled: { type: boolean }
-        running: { type: boolean }
-        port: { type: integer }
+        enabled: { type: boolean, description: 是否在 config.yaml 中启用 }
+        running: { type: boolean, description: 当前是否正在运行 }
+        port: { type: integer, description: 监听端口 }
         path: { type: string, description: WebDAV 路径前缀，如 /dav }
         error: { type: string, description: 服务启动错误（仅管理员可见） }
         shares:
@@ -783,34 +809,38 @@ components:
         account: { type: string, description: 仅 SMB：当前用户的 SMB 登录名（配置了用户名前缀时与网页用户名不同） }
     CacheStats:
       type: object
+      description: 缓存统计
       properties:
-        dir: { type: string }
+        dir: { type: string, description: 缓存目录的绝对路径 }
         thumb: { $ref: "#/components/schemas/CacheBucketStats" }
         transcode: { $ref: "#/components/schemas/CacheBucketStats" }
         sessions:
           type: array
+          description: 当前已知的转码会话
           items:
             type: object
             properties:
-              id: { type: string }
-              path: { type: string }
-              quality: { type: string }
-              user: { type: string }
-              running: { type: boolean }
-              last_access: { type: string, format: date-time }
-        last_cleanup: { type: string, format: date-time, nullable: true }
+              id: { type: string, description: 会话 ID }
+              path: { type: string, description: 源视频的虚拟路径 }
+              quality: { type: string, description: 输出画质 }
+              user: { type: string, description: 正在观看的用户名（多用户时用逗号分隔） }
+              running: { type: boolean, description: 当前是否有 ffmpeg 进程在转码 }
+              last_access: { type: string, format: date-time, description: 最近一次访问时间 }
+        last_cleanup: { type: string, format: date-time, nullable: true, description: 上次清理时间；null 表示尚未清理过 }
     CacheBucketStats:
       type: object
+      description: 单个缓存桶的占用情况
       properties:
-        files: { type: integer }
-        bytes: { type: integer }
-        max_bytes: { type: integer }
-        ttl_hours: { type: integer }
+        files: { type: integer, description: 文件数量 }
+        bytes: { type: integer, description: 当前占用字节数 }
+        max_bytes: { type: integer, description: 容量上限（字节），超出后按最近最少使用淘汰 }
+        ttl_hours: { type: integer, description: 保留时长（小时）；0 表示永不过期 }
     IndexStatus:
       type: object
+      description: 搜索索引状态
       properties:
-        indexing: { type: boolean }
-        entries: { type: integer }
-        roots: { type: integer }
-        last_built: { type: string, format: date-time, nullable: true }
-        duration_ms: { type: integer }
+        indexing: { type: boolean, description: 是否正在构建索引 }
+        entries: { type: integer, description: 已索引的条目数 }
+        roots: { type: integer, description: 索引的顶层目录数 }
+        last_built: { type: string, format: date-time, nullable: true, description: 上次构建完成时间；null 表示尚未构建 }
+        duration_ms: { type: integer, description: 上次构建耗时（毫秒） }
