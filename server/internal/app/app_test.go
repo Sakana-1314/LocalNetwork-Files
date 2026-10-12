@@ -1172,7 +1172,8 @@ func TestSystemInfo(t *testing.T) {
 	if info.Services["webdav"]["path"] != "/dav" || info.Services["webdav"]["enabled"] != true {
 		t.Fatalf("webdav: %v", info.Services["webdav"])
 	}
-	if info.Services["s3"]["enabled"] != false || info.Services["s3"]["port"] != float64(9000) {
+	// S3 is disabled in tests and shares the main HTTP port behind /s3.
+	if info.Services["s3"]["enabled"] != false || info.Services["s3"]["path"] != "/s3" {
 		t.Fatalf("s3: %v", info.Services["s3"])
 	}
 	if _, ok := info.Services["s3"]["region"]; ok {

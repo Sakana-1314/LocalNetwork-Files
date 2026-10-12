@@ -122,7 +122,8 @@ jobs:
       - name: Run container and probe HTTP endpoints
         run: |
           set -e
-          docker run -d --name mlist-verify -p 18080:8080 -p 19000:9000 mlist:verify
+          # S3 shares the main port under /s3, so only one port is published.
+          docker run -d --name mlist-verify -p 18080:8080 mlist:verify
           ready=0
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18080/api/openapi.json -o /dev/null; then ready=1; break; fi
@@ -137,6 +138,10 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/fs/list)
           test "$code" = "401" || { echo "expected 401, got $code"; exit 1; }
           echo "auth check ok"
+          echo "--- S3 shares the main port under /s3 (expect 403 without credentials) ---"
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/s3/)
+          test "$code" = "403" || { echo "expected 403 from /s3, got $code"; exit 1; }
+          echo "s3 prefix ok"
           docker logs mlist-verify
           docker rm -f mlist-verify
 

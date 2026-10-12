@@ -7,12 +7,10 @@
 package s3
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -21,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Sakana-1314/MList/server/internal/auth"
 	"github.com/Sakana-1314/MList/server/internal/vfs"
@@ -29,66 +26,45 @@ import (
 
 // defaultRegion is reported by GetBucketLocation. The region in a request's
 // SigV4 credential is whatever the client configured and is not validated;
-// any value is accepted.
-const defaultRegion = "us-east-1"
+// any value is accepted. "auto" matches what the mount guide tells clients to
+// configure, so the value the server reports agrees with the UI.
+const defaultRegion = "auto"
 
+// Prefix is the path S3 is served under on the main HTTP port. Clients must
+// point their endpoint at http://host:port/s3 and use path-style addressing.
+const Prefix = "/s3"
+
+// Server implements the S3-compatible API as an http.Handler mounted under
+// Prefix on the main HTTP port. It owns no listener: the web server routes /s3
+// here, which keeps S3 on the same port (and therefore behind the same
+// reverse proxy, TLS certificate and firewall rule) as everything else.
 type Server struct {
-	// BindHost is the interface to listen on ("" = all), normally the HTTP listen host.
-	BindHost string
-
 	auth      *auth.Service
 	newFS     func(p *auth.Principal) *vfs.FS
 	uploadDir string
 
-	mu      sync.Mutex
-	srv     *http.Server
-	port    int
-	lastErr error
+	enabled bool
+
+	stopOnce sync.Once
+	stop     chan struct{}
 }
 
 func New(a *auth.Service, newFS func(p *auth.Principal) *vfs.FS, dataDir string) *Server {
-	return &Server{auth: a, newFS: newFS, uploadDir: filepath.Join(dataDir, "s3-multipart")}
+	return &Server{auth: a, newFS: newFS, uploadDir: filepath.Join(dataDir, "s3-multipart"), stop: make(chan struct{})}
 }
 
-// Status reports whether the listener is up and the last start error.
-func (s *Server) Status() (running bool, port int, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.srv != nil, s.port, s.lastErr
+// SetEnabled turns the API on or off. Requests are rejected while disabled, so
+// the route can stay mounted unconditionally.
+func (s *Server) SetEnabled(enabled bool) {
+	s.enabled = enabled
+	if enabled {
+		go s.cleanupUploads()
+	}
 }
 
-// Apply starts, restarts or stops the listener to match the desired state.
-func (s *Server) Apply(enabled bool, port int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.srv != nil && (!enabled || port != s.port) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		s.srv.Shutdown(ctx)
-		cancel()
-		s.srv = nil
-	}
-	s.lastErr = nil
-	if !enabled || s.srv != nil {
-		return
-	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(s.BindHost, fmt.Sprint(port)))
-	if err != nil {
-		s.lastErr = err
-		slog.Error("s3: listen failed", "port", port, "err", err)
-		return
-	}
-	srv := &http.Server{Handler: s, ReadHeaderTimeout: 30 * time.Second}
-	s.srv, s.port = srv, port
-	go func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("s3: serve", "err", err)
-		}
-	}()
-	go s.cleanupUploads()
-	slog.Info("s3 service listening", "port", port)
-}
+func (s *Server) Enabled() bool { return s.enabled }
 
-func (s *Server) Close() { s.Apply(false, 0) }
+func (s *Server) Close() { s.stopOnce.Do(func() { close(s.stop) }) }
 
 // ---------- errors ----------
 
@@ -176,7 +152,17 @@ type request struct {
 	key    string
 }
 
+// ServeHTTP handles a request whose path still includes Prefix. The prefix is
+// removed *before* verifying the signature: a client configured with the
+// endpoint http://host:port/s3 signs the full path ("/s3/bucket/key"), so
+// verification must see that same path. splitBucketKey then works on the
+// prefix-free path, exactly as it did when S3 had its own listener.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !s.enabled {
+		writeErr(w, r, &s3Error{403, "AccessDenied", "The S3 API is disabled"})
+		return
+	}
+	full := r.URL.Path
 	w.Header().Set("Server", "MList")
 	w.Header().Set("x-amz-request-id", requestID())
 	sig, err := parseSigV4(r)
@@ -199,16 +185,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := &auth.Principal{User: user, ReadOnly: key.ReadOnly, Via: "s3"}
-	req := &request{w: w, r: r, sig: sig, p: p, fs: s.newFS(p)}
-	var vhost bool
-	req.bucket, req.key, vhost = splitBucketKey(r, req.fs)
+
+	// Signature first, against the path the client actually signed. A client
+	// whose endpoint is http://host:port/s3 signs "/s3/bucket/key", so the
+	// prefix must still be present here; stripping it beforehand would make
+	// every signature mismatch.
 	var ok bool
 	if sig.v2 {
-		prefix := ""
-		if vhost {
-			prefix = "/" + req.bucket
-		}
-		ok = sig.verifyV2(r, secret, prefix)
+		ok = sig.verifyV2(r, secret, v2BucketPrefix(r, s.newFS(p)))
 	} else {
 		ok = sig.verify(r, secret)
 	}
@@ -216,11 +200,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, errSignature)
 		return
 	}
+
+	// Routing, on the other hand, works on the prefix-free path so that the
+	// bucket/key parsing is identical to a server listening on a dedicated port.
+	stripped := *r
+	u := *r.URL
+	u.Path = strings.TrimPrefix(full, Prefix)
+	stripped.URL = &u
+	req := &request{w: w, r: &stripped, sig: sig, p: p, fs: s.newFS(p)}
+	req.bucket, req.key, _ = splitBucketKey(&stripped, req.fs)
 	if !validKey(req.key) {
 		writeErr(w, r, errInvalidObjectName)
 		return
 	}
 	s.route(req)
+}
+
+// v2BucketPrefix is the "/bucket" part Signature V2 includes for virtual-hosted
+// requests; path-style requests sign the path alone.
+func v2BucketPrefix(r *http.Request, fsys *vfs.FS) string {
+	if bucket, _, vhost := splitBucketKey(r, fsys); vhost {
+		return "/" + bucket
+	}
+	return ""
 }
 
 // splitBucketKey supports path-style (/bucket/key) and virtual-hosted style
