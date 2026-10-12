@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { NButton, NIcon, NTooltip } from 'naive-ui'
 import { OpenOutline, RefreshOutline } from '@vicons/ionicons5'
 
@@ -11,30 +11,11 @@ import { OpenOutline, RefreshOutline } from '@vicons/ionicons5'
 const DOC_URL = (import.meta.env.VITE_APIFOX_DOC_URL as string | undefined) ?? 'https://local-files.apifox.cn/'
 
 const frameKey = ref(0)
-const loading = ref(true)
 const base = computed(() => DOC_URL.replace(/\/+$/, ''))
 
-// 第三方 Cookie 被拦截时 iframe 的 load 事件也可能不触发；超时后收起遮罩，
-// 用户仍可用右上角「新窗口打开」。
-let hideTimer: ReturnType<typeof setTimeout> | undefined
-function startTimer(): void {
-  clearTimeout(hideTimer)
-  hideTimer = setTimeout(() => (loading.value = false), 15000)
-}
-
 function reload(): void {
-  loading.value = true
   frameKey.value += 1
-  startTimer()
 }
-
-function onLoaded(): void {
-  clearTimeout(hideTimer)
-  loading.value = false
-}
-
-onMounted(startTimer)
-onBeforeUnmount(() => clearTimeout(hideTimer))
 </script>
 
 <template>
@@ -66,9 +47,7 @@ onBeforeUnmount(() => clearTimeout(hideTimer))
         loading="lazy"
         referrerpolicy="no-referrer-when-downgrade"
         allow="fullscreen; clipboard-write"
-        @load="onLoaded"
       />
-      <div v-if="loading" class="overlay">正在加载 Apifox 文档…</div>
     </div>
   </div>
 </template>
@@ -114,16 +93,5 @@ onBeforeUnmount(() => clearTimeout(hideTimer))
   width: 100%;
   height: 100%;
   border: 0;
-}
-.overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  opacity: 0.65;
-  background: rgba(128, 128, 128, 0.06);
-  pointer-events: none;
 }
 </style>

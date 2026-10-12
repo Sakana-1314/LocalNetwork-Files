@@ -29,9 +29,11 @@ pre {
   white-space: nowrap;
 }
 
+/* Pages are left-aligned and fill the available width; only the outer margin
+   is kept so content never touches the window edge. */
 .page {
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 20px 24px 40px;
 }
 
@@ -45,12 +47,6 @@ pre {
   margin: 0 0 4px;
   font-size: 22px;
   font-weight: 600;
-}
-
-.page-desc {
-  margin: 0 0 20px;
-  opacity: 0.7;
-  font-size: 14px;
 }
 
 .flex-center {

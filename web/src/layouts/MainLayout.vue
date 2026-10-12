@@ -132,11 +132,7 @@ function goSearch(): void {
         </n-button>
         <h1 class="header-title text-ellipsis">{{ title }}</h1>
         <div class="header-spacer" />
-        <n-button v-if="!isMobile" class="header-search" quaternary @click="goSearch">
-          <template #icon><n-icon :component="SearchOutline" /></template>
-          <span class="header-search-text">搜索</span>
-        </n-button>
-        <n-button v-else quaternary circle @click="goSearch">
+        <n-button class="header-search" quaternary circle @click="goSearch">
           <template #icon><n-icon :component="SearchOutline" /></template>
         </n-button>
         <n-tooltip>
@@ -186,13 +182,6 @@ function goSearch(): void {
 }
 .header-spacer {
   flex: 1;
-}
-.header-search {
-  width: 120px;
-  justify-content: flex-start;
-}
-.header-search-text {
-  opacity: 0.65;
 }
 .user-btn {
   padding: 0 8px;

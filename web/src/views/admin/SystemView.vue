@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
 import {
-  NAlert,
   NButton,
   NCard,
   NDataTable,
@@ -118,10 +117,6 @@ onMounted(async () => {
   <div class="page">
     <h2 class="page-title">系统状态</h2>
 
-    <n-alert type="default" :bordered="false" class="mb">
-      服务开关、转码与缓存参数已移入服务器配置文件 <code>config.yaml</code>，修改后重启生效。
-    </n-alert>
-
     <n-grid cols="1 l:3" responsive="screen" :x-gap="16" :y-gap="16">
       <n-grid-item>
         <n-card title="搜索索引" size="small">
@@ -217,7 +212,7 @@ onMounted(async () => {
 
 <style scoped>
 .page {
-  max-width: 1280px;
+  max-width: none;
 }
 .mb {
   margin-bottom: 16px;
