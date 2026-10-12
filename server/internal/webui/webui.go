@@ -13,7 +13,7 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
-const placeholder = `<!doctype html><meta charset="utf-8"><title>LocalNetwork Files</title>
+const placeholder = `<!doctype html><meta charset="utf-8"><title>MList</title>
 <body style="font-family:sans-serif;padding:40px;color-scheme:light dark">
 <h2>前端尚未构建</h2><p>请在 <code>web/</code> 目录执行 <code>pnpm install && pnpm build</code> 后重新编译服务端。</p>
 <p>API 文档: <a href="/api/openapi.json">/api/openapi.json</a></p></body>`

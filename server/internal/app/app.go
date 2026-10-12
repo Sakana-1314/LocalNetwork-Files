@@ -12,18 +12,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/api"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/media"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/search"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/services/s3"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/services/smb"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/services/webdav"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/webui"
+	"github.com/Sakana-1314/MList/server/internal/api"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	"github.com/Sakana-1314/MList/server/internal/cache"
+	"github.com/Sakana-1314/MList/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/media"
+	"github.com/Sakana-1314/MList/server/internal/search"
+	"github.com/Sakana-1314/MList/server/internal/services/s3"
+	"github.com/Sakana-1314/MList/server/internal/services/smb"
+	"github.com/Sakana-1314/MList/server/internal/services/webdav"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/webui"
 )
 
 type App struct {

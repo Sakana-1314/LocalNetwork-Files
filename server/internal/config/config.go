@@ -56,6 +56,18 @@ type SMBConfig struct {
 	ForceUser string `yaml:"force_user"`
 }
 
+// envString reads the first non-empty environment variable. The legacy names
+// are still honoured so that deployments predating the MList rename (old
+// systemd units, compose files) keep starting after an upgrade.
+func envString(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func Default() *Config {
 	c := &Config{
 		Listen:     ":8080",
@@ -89,10 +101,10 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 	}
-	if v := os.Getenv("LNF_LISTEN"); v != "" {
+	if v := envString("MLIST_LISTEN", "LNF_LISTEN"); v != "" {
 		c.Listen = v
 	}
-	if v := os.Getenv("LNF_DATA_DIR"); v != "" {
+	if v := envString("MLIST_DATA_DIR", "LNF_DATA_DIR"); v != "" {
 		c.DataDir = v
 	}
 	c.Services.Normalize()

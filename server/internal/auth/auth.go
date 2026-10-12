@@ -21,7 +21,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
 var (
@@ -30,7 +30,7 @@ var (
 	ErrDisabled           = errors.New("账户已被禁用")
 )
 
-const TokenPrefix = "lnf_"
+const TokenPrefix = "ml_"
 
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password"), bcrypt.DefaultCost)
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -251,7 +252,7 @@ func TestTokensAndKeys(t *testing.T) {
 	u := &User{Username: "u", PasswordHash: "h"}
 	st.CreateUser(u)
 	exp := time.Now().Add(time.Hour).Round(time.Second)
-	tok := &AccessToken{UserID: u.ID, Name: "ci", Prefix: "lnf_abc", TokenEnc: "enc", Scopes: []string{ScopeRead, ScopeWrite}, ExpiresAt: &exp}
+	tok := &AccessToken{UserID: u.ID, Name: "ci", Prefix: "ml_abc", TokenEnc: "enc", Scopes: []string{ScopeRead, ScopeWrite}, ExpiresAt: &exp}
 	if err := st.CreateToken(tok); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +264,7 @@ func TestTokensAndKeys(t *testing.T) {
 		t.Fatalf("encrypted token not stored: %+v", got)
 	}
 	// Lookup by the clear-text prefix, which is what authentication uses.
-	byPrefix, err := st.GetTokensByPrefix("lnf_abc")
+	byPrefix, err := st.GetTokensByPrefix("ml_abc")
 	if err != nil || len(byPrefix) != 1 || byPrefix[0].ID != tok.ID {
 		t.Fatalf("prefix lookup %v %+v", err, byPrefix)
 	}
@@ -340,7 +341,7 @@ func TestLegacyHashedTokensAreDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.db.Exec("INSERT INTO access_tokens (user_id, name, prefix, scopes, hash) VALUES (?,?,?,?,?)",
-		u.ID, "old", "lnf_abc", "read", "deadbeef").Error; err != nil {
+		u.ID, "old", "ml_abc", "read", "deadbeef").Error; err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -357,7 +358,7 @@ func TestLegacyHashedTokensAreDropped(t *testing.T) {
 		t.Fatal("hash column not dropped")
 	}
 	// A token created afterwards works normally.
-	if err := st2.CreateToken(&AccessToken{UserID: u.ID, Name: "new", Prefix: "lnf_xyz", TokenEnc: "enc"}); err != nil {
+	if err := st2.CreateToken(&AccessToken{UserID: u.ID, Name: "new", Prefix: "ml_xyz", TokenEnc: "enc"}); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(mustList(t, st2, u.ID)); n != 1 {
@@ -388,4 +389,76 @@ func itoa(i int) string {
 		return string(rune('0' + i))
 	}
 	return string(rune('0'+i/10)) + string(rune('0'+i%10))
+}
+
+// Upgrading from the pre-rename layout must keep the data: the database file is
+// renamed in place, WAL sidecars included, and running twice is harmless.
+func TestLegacyDatabaseFileIsRenamed(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &User{Username: "keeper", PasswordHash: "h"}
+	if err := st.CreateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	// Re-create the pre-rename layout.
+	if err := os.Rename(filepath.Join(dir, dbFile), filepath.Join(dir, legacyDBFile)); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(filepath.Join(dir, dbFile+suffix)); err == nil {
+			if err := os.Rename(filepath.Join(dir, dbFile+suffix), filepath.Join(dir, legacyDBFile+suffix)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	st2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	if _, err := os.Stat(filepath.Join(dir, legacyDBFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy database file still present: %v", err)
+	}
+	got, err := st2.GetUserByName("keeper")
+	if err != nil || got.Username != "keeper" {
+		t.Fatalf("user lost across the rename: %v", err)
+	}
+}
+
+func TestDatabaseRenameIsIdempotentAndKeepsNewest(t *testing.T) {
+	dir := t.TempDir()
+	// A database already at the new name wins; a stray legacy file is left alone
+	// rather than overwriting it.
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser(&User{Username: "new", PasswordHash: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	if err := os.WriteFile(filepath.Join(dir, legacyDBFile), []byte("not a database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	if _, err := st2.GetUserByName("new"); err != nil {
+		t.Fatalf("existing database was replaced: %v", err)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, legacyDBFile)); err != nil || string(b) != "not a database" {
+		t.Fatalf("legacy file was touched: %q %v", b, err)
+	}
+	if err := migrateDBFile(dir); err != nil {
+		t.Fatalf("second migration run: %v", err)
+	}
 }

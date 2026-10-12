@@ -122,7 +122,7 @@ watch(
   (p) => {
     selected.value = []
     anchor = null
-    document.title = `${baseName(p) || '全部目录'} · LocalNetwork Files`
+    document.title = `${baseName(p) || '全部目录'} · MList`
     void load()
   },
   { immediate: false },
@@ -627,7 +627,7 @@ function onKeydown(e: KeyboardEvent): void {
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  document.title = `${baseName(currentPath.value) || '全部目录'} · LocalNetwork Files`
+  document.title = `${baseName(currentPath.value) || '全部目录'} · MList`
   void load()
 })
 onBeforeUnmount(() => {

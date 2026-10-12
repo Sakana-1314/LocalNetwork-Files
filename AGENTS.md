@@ -1,6 +1,6 @@
 # AGENTS.md
 
-LocalNetwork Files（局域网文件管理）：把服务器上的目录按用户授权，通过 Web / WebDAV / S3 / SMB / REST API 访问。
+MList（局域网文件管理）：把服务器上的目录按用户授权，通过 Web / WebDAV / S3 / SMB / REST API 访问。
 事实标准以代码与各目录内文档为准，本文件不重复实现细节与历史决策。
 
 ## 唯一约定

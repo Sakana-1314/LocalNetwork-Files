@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -35,8 +36,18 @@ type Store struct {
 	subs []func(Event)
 }
 
+// dbFile is the SQLite database name. It was renamed from lnfiles.db when the
+// project became MList; migrateDBFile brings an existing database along.
+const dbFile = "mlist.db"
+
+// legacyDBFile is the database name used before the rename.
+const legacyDBFile = "lnfiles.db"
+
 func Open(dataDir string) (*Store, error) {
-	dsn := filepath.Join(dataDir, "lnfiles.db") + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	if err := migrateDBFile(dataDir); err != nil {
+		return nil, err
+	}
+	dsn := filepath.Join(dataDir, dbFile) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, err
@@ -49,6 +60,42 @@ func Open(dataDir string) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// migrateDBFile renames lnfiles.db (and its WAL sidecars) to mlist.db so that
+// upgrading an existing deployment keeps users, mounts and credentials. It is
+// a no-op when the new file already exists, so it is safe to run on every
+// start and cannot clobber a database that was already migrated.
+func migrateDBFile(dataDir string) error {
+	newPath := filepath.Join(dataDir, dbFile)
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	oldPath := filepath.Join(dataDir, legacyDBFile)
+	if _, err := os.Stat(oldPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // fresh install
+		}
+		return err
+	}
+	// Rename the WAL sidecars first: renaming the main file beforehand would
+	// make the database look migrated while its WAL is still under the old name.
+	for _, suffix := range []string{"-wal", "-shm"} {
+		src := oldPath + suffix
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := os.Rename(src, newPath+suffix); err != nil {
+			return fmt.Errorf("rename %s: %w", filepath.Base(src), err)
+		}
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("rename %s: %w", legacyDBFile, err)
+	}
+	slog.Info("store: renamed the legacy database file", "from", legacyDBFile, "to", dbFile)
+	return nil
 }
 
 // dropHashedTokens removes access tokens created before the token was stored

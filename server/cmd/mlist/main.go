@@ -1,4 +1,4 @@
-// Command lnfiles runs the LocalNetwork Files server.
+// Command mlist runs the MList server.
 package main
 
 import (
@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/app"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
+	"github.com/Sakana-1314/MList/server/internal/app"
+	"github.com/Sakana-1314/MList/server/internal/config"
 )
 
 var version = "dev"

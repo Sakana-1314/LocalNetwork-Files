@@ -28,10 +28,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/auth"
-	s3svc "github.com/Sakana-1314/LocalNetwork-Files/server/internal/services/s3"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/auth"
+	s3svc "github.com/Sakana-1314/MList/server/internal/services/s3"
+	"github.com/Sakana-1314/MList/server/internal/store"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 type env struct {

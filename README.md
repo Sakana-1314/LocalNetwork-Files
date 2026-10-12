@@ -1,4 +1,4 @@
-# LocalNetwork Files
+# MList
 
 局域网文件管理系统：把服务器上的目录按用户授权，通过 **Web / WebDAV / S3 / SMB / REST API** 访问；
 内置视频实时转码串流（HLS，可任意拖动进度）、预览图生成与缓存生命周期管理、模糊搜索。
@@ -15,7 +15,7 @@
   缓存以文件内容为标识（大小 + 首尾各 64 KiB 的哈希），移动、重命名或更换挂载目录都不会让预览失效；
   相同内容的文件共用缓存。
 - **用户与权限**：管理员按目录授权并设置**只读 / 可读写**，所有协议共用同一套检查。
-- **访问令牌**：带 `read` / `write` 范围与有效期的 API 令牌（`lnf_` 前缀），明文加密存储、可随时在设置中再次查看；
+- **访问令牌**：带 `read` / `write` 范围与有效期的 API 令牌（`ml_` 前缀），明文加密存储、可随时在设置中再次查看；
   「API 文档」页面内嵌 Apifox 在线文档。
 - **协议与挂载**：WebDAV（`/dav`）、S3 兼容接口（每个授权目录一个 bucket）、SMB（托管 Samba）。
 - **模糊搜索**：常驻内存的文件名索引，fzf 风格子序列匹配打分，只返回当前用户有权访问的文件。
@@ -26,13 +26,13 @@
 镜像已发布在 GitHub Container Registry（公开，无需登录即可拉取），支持 linux/amd64 与 linux/arm64：
 
 ```bash
-docker pull ghcr.io/sakana-1314/localnetwork-files:latest
+docker pull ghcr.io/sakana-1314/mlist:latest
 
-docker run -d --name lnfiles \
+docker run -d --name mlist \
   -p 8080:8080 -p 9000:9000 -p 445:445 \
-  -v lnfiles-data:/data \
+  -v mlist-data:/data \
   -v /srv/media:/media \
-  ghcr.io/sakana-1314/localnetwork-files:latest
+  ghcr.io/sakana-1314/mlist:latest
 ```
 
 镜像名必须**全小写**。标签：`latest`、`main`、`sha-<短提交>`，版本标签 `1.2`、`1.2.3`。
@@ -40,7 +40,7 @@ docker run -d --name lnfiles \
 - `8080` Web / REST API / WebDAV，`9000` S3，`445` SMB。
 - 默认账户 `admin` / `admin123`，**首次登录后立即改密码**，再到「用户管理」授权 `/media` 下的目录。
 - 容器默认以 root 运行（`smbd` 监听 445、自动创建 SMB 系统账户都需要 root）；不用 SMB 时可用普通用户运行。
-- 内置配置 `/etc/lnfiles/config.yaml`，可挂载自己的覆盖：`-v ./config.yaml:/etc/lnfiles/config.yaml:ro`。
+- 内置配置 `/etc/mlist/config.yaml`，可挂载自己的覆盖：`-v ./config.yaml:/etc/mlist/config.yaml:ro`。
 
 数据保存在 `/data`（数据库、密钥、Samba 状态），请务必持久化并纳入备份。
 
@@ -53,17 +53,17 @@ ffmpeg / ffprobe 与 libheif / libvips 为可选项（缺失时对应功能自�
 cd server
 make all                              # = make web（pnpm install && pnpm build）+ make build
 cp config.example.yaml config.yaml
-make run                              # 或 ./bin/lnfiles -config config.yaml
+make run                              # 或 ./bin/mlist -config config.yaml
 ```
 
 浏览器打开 `http://<服务器IP>:8080`。其它目标：`make test`（`go test -race ./...`）、`make vet`、
 `make dist`（交叉编译 linux/amd64、linux/arm64、darwin/arm64、windows/amd64）、`make clean`。
 版本号取自 `git describe`，可用 `make build VERSION=1.2.3` 指定。
 
-开发模式：终端 1 运行 `cd server && go run ./cmd/lnfiles`；终端 2 运行 `cd web && pnpm install && pnpm dev`
+开发模式：终端 1 运行 `cd server && go run ./cmd/mlist`；终端 2 运行 `cd web && pnpm install && pnpm dev`
 （前端热更新，`/api` 与 `/dav` 代理到 `127.0.0.1:8080`）。未构建前端时后端仍可运行。
 
-自建镜像（构建上下文是**仓库根目录**）：`docker build -f server/Dockerfile -t lnfiles .`
+自建镜像（构建上下文是**仓库根目录**）：`docker build -f server/Dockerfile -t mlist .`
 
 ### 镜像体积
 
@@ -97,7 +97,7 @@ Pull Request **只构建不推送**；也支持手动触发。
 端点、确认 API 返回 401，并报告镜像体积。
 
 推送使用仓库自带的 `GITHUB_TOKEN`，无需额外密钥。ghcr.io 要求镜像名全小写，工作流用
-`${GITHUB_REPOSITORY,,}` 自动转换（仓库名 `LocalNetwork-Files` 含大写）。首次推送后若包是私有的，
+`${GITHUB_REPOSITORY,,}` 自动转换（仓库名 `MList` 含大写）。首次推送后若包是私有的，
 需在 **Packages → 目标包 → Package settings** 中改为 Public（或让使用者用 PAT 登录 ghcr.io）。
 
 ## 配置
@@ -106,8 +106,8 @@ Pull Request **只构建不推送**；也支持手动触发。
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `listen` | `:8080` | Web / API / WebDAV 监听地址（`LNF_LISTEN`） |
-| `data_dir` | `./data` | 数据库、密钥、Samba 状态（`LNF_DATA_DIR`） |
+| `listen` | `:8080` | Web / API / WebDAV 监听地址（`MLIST_LISTEN`） |
+| `data_dir` | `./data` | 数据库、密钥、Samba 状态（`MLIST_DATA_DIR`） |
 | `cache_dir` | `<data_dir>/cache` | 预览图与转码分片 |
 | `ffmpeg` / `ffprobe` | `ffmpeg` / `ffprobe` | 可执行文件路径 |
 | `session_ttl` | `168h` | 网页登录有效期 |
@@ -146,7 +146,7 @@ Pull Request **只构建不推送**；也支持手动触发。
   ```bash
   aws --endpoint-url http://192.168.1.10:9000 s3 cp ./a.mp4 s3://movies/2024/a.mp4
   # rclone: type = s3 / provider = Other / endpoint = http://192.168.1.10:9000 / force_path_style = true
-  rclone mount lnfiles:movies /mnt/movies --vfs-cache-mode writes
+  rclone mount mlist:movies /mnt/movies --vfs-cache-mode writes
   ```
 
 ## OpenAPI
@@ -166,7 +166,7 @@ APIFOX_TOKEN=afxp_xxxxxxxx ./server/scripts/sync-apifox.sh   # 项目 ID 默认 
 缺少 `write` 范围的令牌只能只读操作。虚拟路径 `/` 下一级是授权目录名。
 
 ```bash
-TOKEN=lnf_xxxxxxxx                  # 在「设置 → 访问令牌」中创建
+TOKEN=ml_xxxxxxxx                  # 在「设置 → 访问令牌」中创建
 H="Authorization: Bearer $TOKEN"
 BASE=http://192.168.1.10:8080/api/v1
 
@@ -215,10 +215,10 @@ ffmpeg 即将产出的范围时，会从该时间点重新开始转码。关键�
 systemd 部署：
 
 ```bash
-sudo install -Dm755 server/bin/lnfiles /usr/local/bin/lnfiles
-sudo install -Dm640 server/config.example.yaml /etc/lnfiles/config.yaml
-sudo install -Dm644 server/deploy/lnfiles.service /etc/systemd/system/lnfiles.service
-sudo systemctl daemon-reload && sudo systemctl enable --now lnfiles   # 数据在 /var/lib/lnfiles
+sudo install -Dm755 server/bin/mlist /usr/local/bin/mlist
+sudo install -Dm640 server/config.example.yaml /etc/mlist/config.yaml
+sudo install -Dm644 server/deploy/mlist.service /etc/systemd/system/mlist.service
+sudo systemctl daemon-reload && sudo systemctl enable --now mlist   # 数据在 /var/lib/mlist
 ```
 
 - 设计用于**可信局域网**，服务本身只提供 HTTP。跨网络访问请放在 HTTPS 反向代理（Caddy、Nginx）之后或使用

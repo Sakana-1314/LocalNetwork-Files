@@ -4,7 +4,7 @@ import { ref, watch } from 'vue'
 export type ThemePref = 'auto' | 'light' | 'dark'
 export type ViewMode = 'list' | 'grid'
 
-const KEY = 'lnf_prefs'
+const KEY = 'ml_prefs'
 
 interface PrefsData {
   theme: ThemePref

@@ -1,4 +1,4 @@
-# LocalNetwork Files 配置示例
+# MList 配置示例
 #
 # 复制为 config.yaml 后按需修改：cp config.example.yaml config.yaml
 # 启动时通过 -config 指定路径（默认读取当前目录下的 config.yaml，文件不存在时全部使用默认值）。
@@ -6,11 +6,11 @@
 # 所有配置都在本文件里，修改后重启进程生效（不在 Web 界面中编辑）。
 
 # HTTP 监听地址（Web 界面、REST API、WebDAV 共用此端口）。
-# 可被环境变量 LNF_LISTEN 覆盖。
+# 可被环境变量 MLIST_LISTEN 覆盖。
 listen: ":8080"
 
 # 数据目录：SQLite 数据库、签名密钥、S3 分片上传临时文件、Samba 状态等。
-# 相对路径以启动时的工作目录为准。可被环境变量 LNF_DATA_DIR 覆盖。
+# 相对路径以启动时的工作目录为准。可被环境变量 MLIST_DATA_DIR 覆盖。
 data_dir: "./data"
 
 # 缓存目录：预览图与 HLS 转码分片。留空则使用 <data_dir>/cache。
@@ -42,7 +42,7 @@ smb:
   # 无登录权限（nologin、无家目录）的系统账户，需要以 root 运行。
   # 关闭时需要管理员自行创建同名系统账户。
   create_system_users: false
-  # 系统账户名前缀，避免与已有系统用户冲突，例如 "lnf_" 会把用户 alice 映射为 lnf_alice。
+  # 系统账户名前缀，避免与已有系统用户冲突，例如 "ml_" 会把用户 alice 映射为 ml_alice。
   # 账户名会被转换为小写，且需满足 ^[a-z_][a-z0-9_.-]{0,31}$。
   user_prefix: ""
   # 让 Samba 以该系统用户的身份读写文件，使通过 SMB 创建的文件属主与

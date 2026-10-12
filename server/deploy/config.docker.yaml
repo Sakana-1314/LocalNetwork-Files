@@ -1,5 +1,5 @@
-# 容器内使用的配置（打包进镜像的 /etc/lnfiles/config.yaml）。
-# 如需修改，可挂载自己的文件覆盖：-v ./config.yaml:/etc/lnfiles/config.yaml:ro
+# 容器内使用的配置（打包进镜像的 /etc/mlist/config.yaml）。
+# 如需修改，可挂载自己的文件覆盖：-v ./config.yaml:/etc/mlist/config.yaml:ro
 listen: ":8080"
 data_dir: /data
 ffmpeg: ffmpeg

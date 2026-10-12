@@ -18,8 +18,8 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/unicode"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
+	"github.com/Sakana-1314/MList/server/internal/cache"
+	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
 var ErrUnsupportedSubtitle = errors.New("该字幕为图形字幕，无法转换为 WebVTT")
