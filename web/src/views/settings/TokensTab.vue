@@ -33,6 +33,20 @@ const form = reactive<{ name: string; scopes: TokenScope[]; days: number | null 
 
 const secretOpen = ref(false)
 const secretItems = ref<{ label: string; value: string }[]>([])
+const revealing = ref<number | null>(null)
+
+/** Read the token back from the server: the plaintext is stored, not hashed. */
+async function reveal(t: AccessToken): Promise<void> {
+  revealing.value = t.id
+  try {
+    secretItems.value = [{ label: `访问令牌 · ${t.name}`, value: await tokensApi.reveal(t.id) }]
+    secretOpen.value = true
+  } catch {
+    /* 错误已提示 */
+  } finally {
+    revealing.value = null
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -135,16 +149,19 @@ const columns = computed<DataTableColumns<AccessToken>>(() => {
   cols.push({
     title: '',
     key: 'actions',
-    width: 72,
+    width: 132,
     render: (r) =>
-      h(
-        NPopconfirm,
-        { onPositiveClick: () => revoke(r), positiveText: '吊销', negativeText: '取消' },
-        {
-          trigger: () => h(NButton, { size: 'small', type: 'error', quaternary: true }, () => '吊销'),
-          default: () => `吊销令牌「${r.name}」？使用它的客户端将立即失去访问权限。`,
-        },
-      ),
+      h(NSpace, { size: 4, justify: 'end' }, () => [
+        h(NButton, { size: 'small', quaternary: true, loading: revealing.value === r.id, onClick: () => reveal(r) }, () => '查看'),
+        h(
+          NPopconfirm,
+          { onPositiveClick: () => revoke(r), positiveText: '吊销', negativeText: '取消' },
+          {
+            trigger: () => h(NButton, { size: 'small', type: 'error', quaternary: true }, () => '吊销'),
+            default: () => `吊销令牌「${r.name}」？使用它的客户端将立即失去访问权限。`,
+          },
+        ),
+      ]),
   })
   return cols
 })
@@ -187,7 +204,7 @@ const columns = computed<DataTableColumns<AccessToken>>(() => {
       </template>
     </n-modal>
 
-    <secret-dialog v-model:show="secretOpen" title="令牌已创建" :items="secretItems" />
+    <secret-dialog v-model:show="secretOpen" title="访问令牌" :items="secretItems" />
   </div>
 </template>
 

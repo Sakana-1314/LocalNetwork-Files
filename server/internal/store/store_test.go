@@ -183,8 +183,8 @@ func TestDeleteUserCascades(t *testing.T) {
 	other := &User{Username: "o", PasswordHash: "h", Mounts: []Mount{{Name: "m", Path: abs("o")}}}
 	st.CreateUser(u)
 	st.CreateUser(other)
-	st.CreateToken(&AccessToken{UserID: u.ID, Name: "t", Hash: "h1", Scopes: []string{ScopeRead}})
-	st.CreateToken(&AccessToken{UserID: other.ID, Name: "t", Hash: "h2", Scopes: []string{ScopeRead}})
+	st.CreateToken(&AccessToken{UserID: u.ID, Name: "t", TokenEnc: "e1", Scopes: []string{ScopeRead}})
+	st.CreateToken(&AccessToken{UserID: other.ID, Name: "t", TokenEnc: "e2", Scopes: []string{ScopeRead}})
 	st.CreateS3Key(&S3Key{AccessKey: "AK1", UserID: u.ID, SecretEnc: "x"})
 	st.CreateS3Key(&S3Key{AccessKey: "AK2", UserID: other.ID, SecretEnc: "x"})
 	st.Subscribe(ev.add)
@@ -198,7 +198,7 @@ func TestDeleteUserCascades(t *testing.T) {
 	if _, err := st.GetUser(u.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("user still there")
 	}
-	if _, err := st.GetTokenByHash("h1"); !errors.Is(err, ErrNotFound) {
+	if _, err := st.GetToken(u.ID, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatal("token not cascaded")
 	}
 	if _, err := st.GetS3Key("AK1"); !errors.Is(err, ErrNotFound) {
@@ -210,7 +210,7 @@ func TestDeleteUserCascades(t *testing.T) {
 		t.Fatal("mounts not cascaded")
 	}
 	// Other user's data untouched.
-	if _, err := st.GetTokenByHash("h2"); err != nil {
+	if _, err := st.GetToken(other.ID, 2); err != nil {
 		t.Fatal("other token deleted")
 	}
 	if _, err := st.GetS3Key("AK2"); err != nil {
@@ -251,23 +251,28 @@ func TestTokensAndKeys(t *testing.T) {
 	u := &User{Username: "u", PasswordHash: "h"}
 	st.CreateUser(u)
 	exp := time.Now().Add(time.Hour).Round(time.Second)
-	tok := &AccessToken{UserID: u.ID, Name: "ci", Prefix: "lnf_abc", Hash: "hash", Scopes: []string{ScopeRead, ScopeWrite}, ExpiresAt: &exp}
+	tok := &AccessToken{UserID: u.ID, Name: "ci", Prefix: "lnf_abc", TokenEnc: "enc", Scopes: []string{ScopeRead, ScopeWrite}, ExpiresAt: &exp}
 	if err := st.CreateToken(tok); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateToken(&AccessToken{UserID: u.ID, Hash: "hash"}); err == nil {
-		t.Fatal("duplicate hash accepted")
-	}
-	got, err := st.GetTokenByHash("hash")
+	got, err := st.GetToken(u.ID, tok.ID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got.TokenEnc != "enc" {
+		t.Fatalf("encrypted token not stored: %+v", got)
+	}
+	// Lookup by the clear-text prefix, which is what authentication uses.
+	byPrefix, err := st.GetTokensByPrefix("lnf_abc")
+	if err != nil || len(byPrefix) != 1 || byPrefix[0].ID != tok.ID {
+		t.Fatalf("prefix lookup %v %+v", err, byPrefix)
 	}
 	if !reflect.DeepEqual(got.Scopes, []string{"read", "write"}) || !got.HasScope(ScopeWrite) || got.HasScope("admin") ||
 		got.ExpiresAt == nil || !got.ExpiresAt.Equal(exp) || got.LastUsedAt != nil {
 		t.Fatalf("token %+v", got)
 	}
 	st.TouchToken(got.ID)
-	got, _ = st.GetTokenByHash("hash")
+	got, _ = st.GetToken(u.ID, tok.ID)
 	if got.LastUsedAt == nil {
 		t.Fatal("touch")
 	}
@@ -285,10 +290,14 @@ func TestTokensAndKeys(t *testing.T) {
 		t.Fatal("double delete")
 	}
 
-	ro := &AccessToken{UserID: u.ID, Hash: "h2", Scopes: []string{ScopeRead}}
+	ro := &AccessToken{UserID: u.ID, TokenEnc: "e2", Scopes: []string{ScopeRead}}
 	st.CreateToken(ro)
-	if got, _ := st.GetTokenByHash("h2"); got.HasScope(ScopeWrite) {
+	if got, _ := st.GetToken(u.ID, ro.ID); got.HasScope(ScopeWrite) {
 		t.Fatal("read-only token has write")
+	}
+	// A token cannot be read through another user's id.
+	if _, err := st.GetToken(u.ID+1, ro.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("owner-scoped lookup: %v", err)
 	}
 
 	if err := st.CreateS3Key(&S3Key{AccessKey: "AK", UserID: u.ID, Name: "k", SecretEnc: "enc", ReadOnly: true}); err != nil {
@@ -310,6 +319,53 @@ func TestTokensAndKeys(t *testing.T) {
 	if _, err := st.GetS3Key("AK"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("key still there")
 	}
+}
+
+// Tokens created before the switch to encrypted storage cannot be recovered:
+// their hashed rows and the column itself must disappear on open.
+func TestLegacyHashedTokensAreDropped(t *testing.T) {
+	st, dir := openTest(t)
+	u := &User{Username: "u", PasswordHash: "h"}
+	if err := st.CreateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate the old schema: an extra hash column holding a hashed token.
+	if err := st.db.Exec("ALTER TABLE access_tokens ADD COLUMN hash TEXT NOT NULL DEFAULT ''").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.Exec("INSERT INTO access_tokens (user_id, name, prefix, scopes, hash) VALUES (?,?,?,?,?)",
+		u.ID, "old", "lnf_abc", "read", "deadbeef").Error; err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	st2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	if n := len(mustList(t, st2, u.ID)); n != 0 {
+		t.Fatalf("legacy token survived: %d", n)
+	}
+	if st2.db.Migrator().HasColumn(&AccessToken{}, "hash") {
+		t.Fatal("hash column not dropped")
+	}
+	// A token created afterwards works normally.
+	if err := st2.CreateToken(&AccessToken{UserID: u.ID, Name: "new", Prefix: "lnf_xyz", TokenEnc: "enc"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(mustList(t, st2, u.ID)); n != 1 {
+		t.Fatalf("new token missing: %d", n)
+	}
+}
+
+func mustList(t *testing.T, st *Store, userID uint) []AccessToken {
+	t.Helper()
+	ts, err := st.ListTokens(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
 }
 
 func TestSplitScopes(t *testing.T) {

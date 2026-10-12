@@ -50,6 +50,22 @@ func (a *API) createToken(c *gin.Context) {
 	}{t, plain})
 }
 
+// revealToken returns the plaintext of one of the caller's own tokens.
+func (a *API) revealToken(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		fail(c, badRequest("id 无效"))
+		return
+	}
+	secret, err := a.Auth.TokenSecret(principal(c).User.ID, uint(id))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"token": secret})
+}
+
 func (a *API) deleteToken(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -92,6 +108,17 @@ func (a *API) createS3Key(c *gin.Context) {
 		*store.S3Key
 		SecretKey string `json:"secret_key"`
 	}{k, secret})
+}
+
+// revealS3Key returns the secret of one of the caller's own S3 keys.
+func (a *API) revealS3Key(c *gin.Context) {
+	secret, err := a.Auth.S3KeySecret(principal(c).User.ID, c.Param("key"))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"secret_key": secret})
 }
 
 func (a *API) deleteS3Key(c *gin.Context) {

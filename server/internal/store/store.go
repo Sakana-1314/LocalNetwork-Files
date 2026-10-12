@@ -4,6 +4,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -43,7 +44,34 @@ func Open(dataDir string) (*Store, error) {
 	if err := db.AutoMigrate(&User{}, &Mount{}, &AccessToken{}, &S3Key{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.dropHashedTokens(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// dropHashedTokens removes access tokens created before the token was stored
+// encrypted. Their plaintext only ever existed in the response of the creating
+// request, so they cannot be migrated and have to be recreated; the leftover
+// hash column is dropped as well.
+func (s *Store) dropHashedTokens() error {
+	if !s.db.Migrator().HasColumn(&AccessToken{}, "hash") {
+		return nil
+	}
+	var n int64
+	s.db.Model(&AccessToken{}).Count(&n)
+	if err := s.db.Exec("DELETE FROM access_tokens").Error; err != nil {
+		return fmt.Errorf("drop legacy tokens: %w", err)
+	}
+	// GORM's DropColumn is a no-op for SQLite, so issue the statement directly.
+	if err := s.db.Exec("ALTER TABLE access_tokens DROP COLUMN hash").Error; err != nil {
+		slog.Warn("store: could not drop the legacy token hash column", "err", err)
+	}
+	if n > 0 {
+		slog.Warn("store: cleared access tokens created by an older version; create new ones in 设置 → 访问令牌", "removed", n)
+	}
+	return nil
 }
 
 func (s *Store) Close() error {
@@ -222,12 +250,21 @@ func (s *Store) ListTokens(userID uint) ([]AccessToken, error) {
 	return ts, err
 }
 
-func (s *Store) GetTokenByHash(hash string) (*AccessToken, error) {
+// GetToken loads one token of a user (owner-scoped, for revealing it).
+func (s *Store) GetToken(userID, id uint) (*AccessToken, error) {
 	var t AccessToken
-	if err := s.db.Where("hash = ?", hash).First(&t).Error; err != nil {
+	if err := s.db.Where("user_id = ? AND id = ?", userID, id).First(&t).Error; err != nil {
 		return nil, notFound(err)
 	}
 	return &t, nil
+}
+
+// GetTokensByPrefix returns every token starting with prefix. The caller
+// decodes the stored ciphertext and compares it in full.
+func (s *Store) GetTokensByPrefix(prefix string) ([]AccessToken, error) {
+	var ts []AccessToken
+	err := s.db.Where("prefix = ?", prefix).Find(&ts).Error
+	return ts, err
 }
 
 func (s *Store) TouchToken(id uint) {

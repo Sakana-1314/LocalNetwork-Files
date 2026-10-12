@@ -8,8 +8,8 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -180,14 +180,29 @@ func (s *Service) Resolve(token string) (*Principal, error) {
 	return &Principal{User: u, Via: "session"}, nil
 }
 
-func hashToken(t string) string {
-	sum := sha256.Sum256([]byte(t))
-	return hex.EncodeToString(sum[:])
-}
-
+// resolveAPIToken finds the token by its clear-text prefix and confirms it by
+// decrypting the stored copy. Tokens are never hashed, so they can be shown to
+// their owner again at any time.
 func (s *Service) resolveAPIToken(token string) (*Principal, error) {
-	t, err := s.store.GetTokenByHash(hashToken(token))
-	if err != nil {
+	if len(token) < len(TokenPrefix)+6 {
+		return nil, ErrUnauthorized
+	}
+	cands, err := s.store.GetTokensByPrefix(token[:len(TokenPrefix)+6])
+	if err != nil || len(cands) == 0 {
+		return nil, ErrUnauthorized
+	}
+	var t *store.AccessToken
+	for i := range cands {
+		plain, err := s.decrypt(cands[i].TokenEnc)
+		if err != nil {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(plain), []byte(token)) == 1 {
+			t = &cands[i]
+			break
+		}
+	}
+	if t == nil {
 		return nil, ErrUnauthorized
 	}
 	if t.ExpiresAt != nil && time.Now().After(*t.ExpiresAt) {
@@ -206,7 +221,7 @@ func (s *Service) resolveAPIToken(token string) (*Principal, error) {
 	return &Principal{User: u, ReadOnly: !t.HasScope(store.ScopeWrite), Via: "token"}, nil
 }
 
-// CreateToken generates a new API token and returns its plaintext once.
+// CreateToken generates a new API token and stores it encrypted.
 func (s *Service) CreateToken(userID uint, name string, scopes []string, expiresInDays int) (*store.AccessToken, string, error) {
 	plain := TokenPrefix + randomString(40)
 	valid := []string{}
@@ -218,9 +233,13 @@ func (s *Service) CreateToken(userID uint, name string, scopes []string, expires
 	if !contains(valid, store.ScopeRead) {
 		valid = append([]string{store.ScopeRead}, valid...)
 	}
+	enc, err := s.encrypt(plain)
+	if err != nil {
+		return nil, "", err
+	}
 	t := &store.AccessToken{
 		UserID: userID, Name: strings.TrimSpace(name), Prefix: plain[:len(TokenPrefix)+6],
-		Hash: hashToken(plain), Scopes: valid,
+		TokenEnc: enc, Scopes: valid,
 	}
 	if expiresInDays > 0 {
 		exp := time.Now().Add(time.Duration(expiresInDays) * 24 * time.Hour)
@@ -230,6 +249,27 @@ func (s *Service) CreateToken(userID uint, name string, scopes []string, expires
 		return nil, "", err
 	}
 	return t, plain, nil
+}
+
+// TokenSecret returns the plaintext of one of the user's own tokens.
+func (s *Service) TokenSecret(userID, id uint) (string, error) {
+	t, err := s.store.GetToken(userID, id)
+	if err != nil {
+		return "", err
+	}
+	return s.decrypt(t.TokenEnc)
+}
+
+// S3KeySecret returns the secret of one of the user's own S3 keys.
+func (s *Service) S3KeySecret(userID uint, accessKey string) (string, error) {
+	k, err := s.store.GetS3Key(accessKey)
+	if err != nil {
+		return "", err
+	}
+	if k.UserID != userID {
+		return "", store.ErrNotFound
+	}
+	return s.decrypt(k.SecretEnc)
 }
 
 // CreateS3Key generates an S3 access key pair, storing the secret encrypted.
