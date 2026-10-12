@@ -25,7 +25,7 @@ const seeking = ref(false)
 const src = computed(() =>
   mode.value === 'direct' ? fsApi.rawUrl(props.entry.path) : mediaApi.audioStreamUrl(props.entry.path, offset.value),
 )
-const cover = computed(() => (props.entry.thumb && !coverFailed.value ? mediaApi.thumbUrl(props.entry.path, 512) : ''))
+const cover = computed(() => (!coverFailed.value ? mediaApi.thumbUrl(props.entry, 512) : ''))
 const duration = computed(() => info.value?.duration ?? 0)
 
 function onError(): void {

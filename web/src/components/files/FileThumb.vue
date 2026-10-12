@@ -19,7 +19,7 @@ watch(
     loaded.value = false
   },
 )
-const src = computed(() => (props.entry.thumb && !failed.value ? mediaApi.thumbUrl(props.entry.path, props.size) : ''))
+const src = computed(() => (!failed.value ? mediaApi.thumbUrl(props.entry, props.size) : ''))
 </script>
 
 <template>

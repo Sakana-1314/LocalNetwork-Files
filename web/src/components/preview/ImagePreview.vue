@@ -34,7 +34,7 @@ function load(): void {
   hiRes.value = false
   const raw = fsApi.rawUrl(props.entry.path)
   // 先显示 1024 预览图，原图加载完成后替换
-  src.value = props.entry.thumb ? mediaApi.thumbUrl(props.entry.path, 1024) : raw
+  src.value = props.entry.thumb ? mediaApi.thumbUrl(props.entry, 1024) : raw
   if (preloader) preloader.onload = preloader.onerror = null
   if (props.entry.thumb) {
     const img = new Image()

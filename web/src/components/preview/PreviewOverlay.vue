@@ -112,7 +112,7 @@ watch(
       const e = props.items[index.value + d]
       if (e && e.kind === 'image' && e.thumb) {
         const img = new Image()
-        img.src = mediaApi.thumbUrl(e.path, 1024)
+        img.src = mediaApi.thumbUrl(e, 1024)
       }
     }
   },

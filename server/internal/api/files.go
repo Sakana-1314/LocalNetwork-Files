@@ -23,6 +23,7 @@ func (a *API) fsList(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	a.signEntries(entries)
 	c.JSON(http.StatusOK, gin.H{"path": vfs.CleanPath(p), "writable": writable, "entries": entries})
 }
 
@@ -32,6 +33,7 @@ func (a *API) fsStat(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	a.signEntry(e)
 	c.JSON(http.StatusOK, e)
 }
 
@@ -208,5 +210,9 @@ func (a *API) fsSearch(c *gin.Context) {
 	if kind == "all" {
 		kind = ""
 	}
-	c.JSON(http.StatusOK, a.Search.Search(a.fs(c), c.DefaultQuery("path", "/"), q, kind, limit))
+	resp := a.Search.Search(a.fs(c), c.DefaultQuery("path", "/"), q, kind, limit)
+	for i := range resp.Results {
+		a.signEntry(&resp.Results[i].Entry)
+	}
+	c.JSON(http.StatusOK, resp)
 }

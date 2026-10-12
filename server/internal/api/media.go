@@ -4,6 +4,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -14,14 +15,31 @@ import (
 	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
+// mediaThumb serves a preview by content digest. The URL carries no path: a
+// listing hands the client Entry.Thumb plus its signature, and this resolves the
+// digest to the current file. Previews are generated on first use.
+//
+// The signature is the only credential (it never expires), so the route is
+// reachable without a session — that is what lets <img> tags work behind a
+// reverse proxy without leaking tokens into URLs.
 func (a *API) mediaThumb(c *gin.Context) {
-	loc, fi, err := a.fs(c).LocalFile(c.Query("path"))
+	digest, sig := c.Query("d"), c.Query("s")
+	if !a.Auth.VerifyThumbSignature(digest, sig) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "签名无效"})
+		return
+	}
+	real, ok := a.thumbs.Lookup(digest)
+	if !ok {
+		fail(c, media.ErrNoThumb)
+		return
+	}
+	fi, err := os.Stat(real)
 	if err != nil {
-		fail(c, err)
+		fail(c, media.ErrNoThumb)
 		return
 	}
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "256"))
-	p, err := a.Media.Thumbnail(c.Request.Context(), loc.Real, fi, size)
+	p, err := a.Media.Thumbnail(c.Request.Context(), real, fi, size)
 	if err != nil {
 		fail(c, err)
 		return

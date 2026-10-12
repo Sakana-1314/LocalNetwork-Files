@@ -15,8 +15,10 @@ export interface Entry {
   mime?: string
   kind: Kind
   writable: boolean
-  /** 是否可生成预览图 */
-  thumb: boolean
+  /** 预览图内容的摘要；为空表示不可预览。不是路径。 */
+  thumb: string
+  /** 服务端对 thumb 的签名，用于请求预览图 */
+  thumb_sig: string
 }
 
 export interface ListResponse {

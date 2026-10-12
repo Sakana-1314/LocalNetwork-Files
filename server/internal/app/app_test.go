@@ -1261,7 +1261,35 @@ func TestMedia(t *testing.T) {
 	writeFile(t, filepath.Join(e.ro, "pic.png"), buf.String())
 	writeFile(t, filepath.Join(e.ro, "note.txt"), "text")
 
-	rec := e.do("GET", "/api/v1/media/thumb?size=128&path="+q("/只读/pic.png"), alice, nil)
+	// A listing hands out the content digest plus its signature; the preview is
+	// then fetched by digest alone, with no path in the URL.
+	rec := e.do("GET", "/api/v1/fs/list?path="+q("/只读"), alice, nil)
+	expect(t, rec, 200)
+	list := decode[struct {
+		Entries []struct {
+			Name     string `json:"name"`
+			Thumb    string `json:"thumb"`
+			ThumbSig string `json:"thumb_sig"`
+		} `json:"entries"`
+	}](t, rec)
+	byName := map[string]struct{ thumb, sig string }{}
+	for _, en := range list.Entries {
+		byName[en.Name] = struct{ thumb, sig string }{en.Thumb, en.ThumbSig}
+	}
+	pic := byName["pic.png"]
+	if pic.thumb == "" || pic.sig == "" {
+		t.Fatalf("pic.png carries no preview digest: %+v", pic)
+	}
+	// The digest is not a path: it must not leak the file location.
+	if strings.Contains(pic.thumb, "pic.png") || strings.Contains(pic.thumb, "/") {
+		t.Fatalf("digest leaks the path: %q", pic.thumb)
+	}
+	if txt := byName["note.txt"]; txt.thumb != "" {
+		t.Fatalf("non-previewable file carries a digest: %+v", txt)
+	}
+
+	thumbURL := "/api/v1/media/thumb?size=128&d=" + q(pic.thumb) + "&s=" + q(pic.sig)
+	rec = e.do("GET", thumbURL, "", nil) // no session: the signature is the credential
 	expect(t, rec, 200)
 	if rec.Header().Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("thumb content type %q", rec.Header().Get("Content-Type"))
@@ -1270,8 +1298,12 @@ func TestMedia(t *testing.T) {
 	if err != nil || th.Bounds().Dx() > 128 || th.Bounds().Dy() > 128 {
 		t.Fatalf("thumb: %v %v", err, th)
 	}
-	expect(t, e.do("GET", "/api/v1/media/thumb?path="+q("/只读/note.txt"), alice, nil), 404)
-	expect(t, e.do("GET", "/api/v1/media/thumb?path="+q("/只读/none.png"), alice, nil), 404)
+	// Bad signature, unknown digest and tampered digest must not produce an image.
+	expect(t, e.do("GET", "/api/v1/media/thumb?d="+q(pic.thumb)+"&s=bogus", alice, nil), 403)
+	expect(t, e.do("GET", "/api/v1/media/thumb?d=deadbeef&s="+q(pic.sig), alice, nil), 403)
+	expect(t, e.do("GET", "/api/v1/media/thumb?d="+q(pic.thumb), alice, nil), 403)
+	// A correctly signed but unknown digest is a clean 404, not an error.
+	expect(t, e.do("GET", "/api/v1/media/thumb?d=deadbeef&s="+q(e.a.auth.ThumbSignature("deadbeef")), alice, nil), 404)
 
 	if !e.a.media.HasFFmpeg() {
 		t.Skip("ffmpeg/ffprobe not installed")
@@ -1309,7 +1341,17 @@ func TestMedia(t *testing.T) {
 	}
 	expect(t, e.do("GET", "/api/v1/media/info?path="+q("/只读/note.txt"), alice, nil), 415)
 
-	thumb := e.do("GET", "/api/v1/media/thumb?path="+q("/可写/clip.mp4"), alice, nil)
+	// The video preview also comes from the digest a listing handed out.
+	rec = e.do("GET", "/api/v1/fs/stat?path="+q("/可写/clip.mp4"), alice, nil)
+	expect(t, rec, 200)
+	clipMeta := decode[struct {
+		Thumb    string `json:"thumb"`
+		ThumbSig string `json:"thumb_sig"`
+	}](t, rec)
+	if clipMeta.Thumb == "" || clipMeta.ThumbSig == "" {
+		t.Fatalf("video carries no preview digest: %+v", clipMeta)
+	}
+	thumb := e.do("GET", "/api/v1/media/thumb?d="+q(clipMeta.Thumb)+"&s="+q(clipMeta.ThumbSig), alice, nil)
 	expect(t, thumb, 200)
 	if _, err := jpeg.Decode(thumb.Body); err != nil {
 		t.Fatalf("video thumb: %v", err)

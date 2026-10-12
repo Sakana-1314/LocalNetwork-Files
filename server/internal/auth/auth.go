@@ -307,6 +307,24 @@ func (s *Service) LookupS3Key(accessKey string) (*store.S3Key, *store.User, stri
 	return k, u, secret, nil
 }
 
+// ThumbSignature signs a preview digest so that /media/thumb can be reached
+// with a digest alone. It deliberately carries no timestamp: preview URLs keep
+// working for the lifetime of the content, which is what the UI wants.
+func (s *Service) ThumbSignature(digest string) string {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("mlist-thumb\x00"))
+	mac.Write([]byte(digest))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:16])
+}
+
+// VerifyThumbSignature reports whether sig is the signature of digest.
+func (s *Service) VerifyThumbSignature(digest, sig string) bool {
+	if digest == "" || sig == "" {
+		return false
+	}
+	return hmac.Equal([]byte(s.ThumbSignature(digest)), []byte(sig))
+}
+
 func (s *Service) aead() (cipher.AEAD, error) {
 	mac := hmac.New(sha256.New, s.secret)
 	mac.Write([]byte("lnf-s3-secret"))

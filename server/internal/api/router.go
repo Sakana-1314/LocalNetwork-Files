@@ -54,14 +54,23 @@ type Deps struct {
 	Version  string
 }
 
+// maxThumbEntries bounds the digest -> file index used by /media/thumb. It is
+// a cache: entries not in it simply return 404 and are refilled by the next
+// directory listing.
+const maxThumbEntries = 20000
+
 type API struct {
 	Deps
 	limiter *loginLimiter
+	thumbs  *thumbIndex
 }
 
 // Register mounts the API routes on r.
 func Register(r *gin.Engine, d Deps) {
-	a := &API{Deps: d, limiter: newLoginLimiter()}
+	a := &API{Deps: d, limiter: newLoginLimiter(), thumbs: newThumbIndex(maxThumbEntries)}
+	// Every digest handed to a client is remembered here so /media/thumb can
+	// resolve it later without a path in the URL.
+	vfs.OnDigest = a.thumbs.Put
 
 	spec := openapiJSON()
 	r.GET("/api/openapi.json", func(c *gin.Context) { c.Data(http.StatusOK, "application/json", spec) })
@@ -69,6 +78,9 @@ func Register(r *gin.Engine, d Deps) {
 	v1 := r.Group("/api/v1")
 	v1.POST("/auth/login", a.login)
 	v1.POST("/auth/logout", a.logout)
+	// Previews are identified by content digest plus a non-expiring signature,
+	// so they load in <img> without a session or an access_token in the URL.
+	v1.GET("/media/thumb", a.mediaThumb)
 
 	g := v1.Group("", a.authenticate)
 	g.GET("/auth/me", a.me)
@@ -90,7 +102,6 @@ func Register(r *gin.Engine, d Deps) {
 	g.POST("/fs/delete", a.fsDelete)
 	g.GET("/fs/search", a.fsSearch)
 
-	g.GET("/media/thumb", a.mediaThumb)
 	g.GET("/media/info", a.mediaInfo)
 	g.POST("/media/transcode", a.mediaTranscode)
 	g.GET("/media/hls/:id/:file", a.mediaHLS)

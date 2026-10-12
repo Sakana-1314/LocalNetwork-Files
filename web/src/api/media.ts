@@ -1,12 +1,17 @@
 import { buildUrl, http, withToken, type RequestOptions } from './http'
 import { normMediaInfo } from './normalize'
-import type { MediaInfo, TranscodeRequest, TranscodeResponse } from './types'
+import type { Entry, MediaInfo, TranscodeRequest, TranscodeResponse } from './types'
 
 export type ThumbSize = 128 | 256 | 512 | 1024
 
 export const mediaApi = {
-  thumbUrl(path: string, size: ThumbSize = 256): string {
-    return withToken(buildUrl('/media/thumb', { path, size }))
+  /**
+   * 预览图地址：只带内容摘要与签名（签名不过期），因此无需 access_token，
+   * 也不会把文件路径暴露在 URL 里。不可预览时返回空串。
+   */
+  thumbUrl(entry: Pick<Entry, 'thumb' | 'thumb_sig'>, size: ThumbSize = 256): string {
+    if (!entry.thumb) return ''
+    return buildUrl('/media/thumb', { d: entry.thumb, s: entry.thumb_sig, size })
   },
   async info(path: string, opts?: RequestOptions): Promise<MediaInfo> {
     return normMediaInfo(await http.get<MediaInfo>('/media/info', { ...opts, query: { path } }))

@@ -297,13 +297,22 @@ paths:
   /media/thumb:
     get:
       tags: [媒体]
-      summary: 预览图（图片/视频/音频封面），JPEG
+      summary: 按内容摘要取预览图（图片/视频/音频封面），JPEG
+      description: |
+        只接收内容摘要与签名，不接收文件路径：目录列表、搜索结果的 `thumb` 是内容摘要，
+        `thumb_sig` 是服务端对它的签名，两者拼出的 URL 可直接放入 `<img>`。
+
+        签名**不会过期**，且本接口不要求登录；摘要会在缓存失效后由下一次列表请求重新提供。
+        URL 泄露即等同于泄露该文件的预览图，请勿转发。
+      security: []
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string }, description: 媒体文件的虚拟路径 }
+        - { name: d, in: query, required: true, schema: { type: string }, description: 内容摘要（Entry.thumb） }
+        - { name: s, in: query, required: true, schema: { type: string }, description: 对摘要的签名（Entry.thumb_sig） }
         - { name: size, in: query, schema: { type: integer, enum: [128, 256, 512, 1024], default: 256 }, description: 预览图边长（像素），取最接近的可用档位 }
       responses:
         "200": { description: "JPEG 预览图（Content-Type: image/jpeg）" }
-        "404": { description: 无法生成预览图（格式不支持或文件不可读） }
+        "403": { description: 签名无效或缺失 }
+        "404": { description: 摘要未知（服务端无记录或文件已变化），或该文件无法生成预览图 }
   /media/info:
     get:
       tags: [媒体]
@@ -674,7 +683,8 @@ components:
         mime: { type: string, description: 由扩展名推断的 MIME 类型 }
         kind: { $ref: "#/components/schemas/Kind" }
         writable: { type: boolean, description: 是否可写（目录权限与令牌范围共同决定） }
-        thumb: { type: boolean, description: 是否可生成预览图 }
+        thumb: { type: string, description: 预览图内容的摘要；为空表示不可预览。不是路径，用于请求 /media/thumb }
+        thumb_sig: { type: string, description: 服务端对 thumb 的签名，作为 /media/thumb 的 s 参数 }
     TransferRequest:
       type: object
       description: 移动 / 复制的请求体
