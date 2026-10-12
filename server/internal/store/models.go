@@ -84,9 +84,3 @@ type S3Key struct {
 	ReadOnly  bool      `gorm:"not null;default:false" json:"read_only"`
 	CreatedAt time.Time `json:"created_at"`
 }
-
-// KV stores small JSON documents such as the runtime settings.
-type KV struct {
-	Key   string `gorm:"primaryKey;size:64"`
-	Value string `gorm:"type:text"`
-}

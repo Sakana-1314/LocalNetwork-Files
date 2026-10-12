@@ -2,7 +2,6 @@
 package store
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -26,18 +25,13 @@ type Event int
 
 const (
 	EventUsersChanged Event = iota + 1
-	EventSettingsChanged
 )
 
 type Store struct {
 	db *gorm.DB
 
-	mu       sync.RWMutex
-	settings Settings
-	subs     []func(Event)
-	// saveMu keeps the persisted and in-memory settings in the same order
-	// when several saves race.
-	saveMu sync.Mutex
+	mu   sync.RWMutex
+	subs []func(Event)
 }
 
 func Open(dataDir string) (*Store, error) {
@@ -46,14 +40,10 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&User{}, &Mount{}, &AccessToken{}, &S3Key{}, &KV{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Mount{}, &AccessToken{}, &S3Key{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	s := &Store{db: db}
-	if err := s.loadSettings(); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &Store{db: db}, nil
 }
 
 func (s *Store) Close() error {
@@ -278,57 +268,3 @@ func (s *Store) DeleteS3Key(userID uint, accessKey string) error {
 	}
 	return res.Error
 }
-
-// ---------- settings ----------
-
-const settingsKey = "settings"
-
-func (s *Store) loadSettings() error {
-	st := DefaultSettings()
-	var kv KV
-	err := s.db.First(&kv, "key = ?", settingsKey).Error
-	switch {
-	case err == nil:
-		if err := json.Unmarshal([]byte(kv.Value), &st); err != nil {
-			return fmt.Errorf("decode settings: %w", err)
-		}
-	case !errors.Is(err, gorm.ErrRecordNotFound):
-		return err
-	}
-	st.Normalize()
-	s.settings = st
-	return nil
-}
-
-func (s *Store) Settings() Settings {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.settings
-}
-
-func (s *Store) SaveSettings(st Settings) (Settings, error) {
-	st.Normalize()
-	b, _ := json.Marshal(st)
-	s.saveMu.Lock()
-	if err := s.db.Save(&KV{Key: settingsKey, Value: string(b)}).Error; err != nil {
-		s.saveMu.Unlock()
-		return st, err
-	}
-	s.mu.Lock()
-	s.settings = st
-	s.mu.Unlock()
-	s.saveMu.Unlock()
-	s.publish(EventSettingsChanged)
-	return st, nil
-}
-
-// GetKV / SetKV store small opaque values.
-func (s *Store) GetKV(key string) (string, error) {
-	var kv KV
-	if err := s.db.First(&kv, "key = ?", key).Error; err != nil {
-		return "", notFound(err)
-	}
-	return kv.Value, nil
-}
-
-func (s *Store) SetKV(key, value string) error { return s.db.Save(&KV{Key: key, Value: value}).Error }

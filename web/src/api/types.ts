@@ -225,37 +225,6 @@ export interface SystemInfo {
   }
 }
 
-export type Encoder = 'libx264' | 'h264_videotoolbox' | 'h264_nvenc' | 'h264_qsv' | 'h264_vaapi'
-export type Preset = 'ultrafast' | 'superfast' | 'veryfast' | 'faster' | 'fast' | 'medium'
-
-export interface Settings {
-  cache: {
-    thumb_ttl_hours: number
-    thumb_max_mb: number
-    transcode_ttl_hours: number
-    transcode_max_mb: number
-    cleanup_interval_minutes: number
-  }
-  transcode: {
-    encoder: Encoder
-    preset: Preset
-    max_sessions: number
-    segment_seconds: number
-  }
-  search: {
-    reindex_interval_minutes: number
-    watch: boolean
-  }
-  services: {
-    webdav_enabled: boolean
-    s3_enabled: boolean
-    s3_port: number
-    smb_enabled: boolean
-    smb_port: number
-    smb_workgroup: string
-  }
-}
-
 export interface CacheBucketStats {
   files: number
   bytes: number
@@ -284,8 +253,6 @@ export type CacheKind = 'thumb' | 'transcode' | 'all'
 
 export interface CleanRequest {
   kind?: CacheKind
-  /** false 时清空全部 */
-  expired_only?: boolean
 }
 
 export interface CleanResult {

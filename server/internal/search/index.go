@@ -22,6 +22,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
 )
@@ -222,7 +223,8 @@ func (ri *rootIndex) count() int {
 // ---------- indexer ----------
 
 type Indexer struct {
-	store *store.Store
+	store  *store.Store
+	search config.SearchSettings
 
 	mu        sync.RWMutex
 	indexes   map[string]*rootIndex // top-level root -> index
@@ -251,8 +253,8 @@ type Indexer struct {
 	flushEvery time.Duration
 }
 
-func New(st *store.Store) *Indexer {
-	return &Indexer{store: st, indexes: map[string]*rootIndex{}, pending: map[string]struct{}{},
+func New(st *store.Store, cfg config.SearchSettings) *Indexer {
+	return &Indexer{store: st, search: cfg, indexes: map[string]*rootIndex{}, pending: map[string]struct{}{},
 		kick: make(chan struct{}, 1), stop: make(chan struct{}), flushEvery: 1500 * time.Millisecond}
 }
 
@@ -262,7 +264,7 @@ func (x *Indexer) Start() {
 	go x.flushLoop()
 	go func() {
 		for {
-			mins := x.store.Settings().Search.ReindexIntervalMinutes
+			mins := x.search.ReindexIntervalMinutes
 			var tick <-chan time.Time
 			if mins > 0 {
 				tick = time.After(time.Duration(mins) * time.Minute)
@@ -291,15 +293,6 @@ func (x *Indexer) Stop() {
 			w.close()
 		}
 	})
-}
-
-// SettingsChanged re-arms the periodic timer and toggles watching.
-func (x *Indexer) SettingsChanged() {
-	select {
-	case x.kick <- struct{}{}:
-	default:
-	}
-	go x.syncWatcher()
 }
 
 // topRoots computes the distinct mount directories, dropping those nested in another.

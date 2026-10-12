@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/vfs"
 )
@@ -42,12 +43,14 @@ func openStore(t testing.TB) *store.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	s := st.Settings()
-	s.Search.Watch = false
-	if _, err := st.SaveSettings(s); err != nil {
-		t.Fatal(err)
-	}
 	return st
+}
+
+// testSearchConfig never starts the fsnotify watcher from tests.
+func testSearchConfig() config.SearchSettings {
+	c := config.Default().Search
+	c.Watch = false
+	return c
 }
 
 func addUser(t testing.TB, st *store.Store, name string, mounts ...store.Mount) *store.User {
@@ -106,7 +109,7 @@ func newFixture(t *testing.T) *fixture {
 	f.alice = addUser(t, f.st, "alice", store.Mount{Name: "data", Path: f.data, Writable: true})
 	f.bob = addUser(t, f.st, "bob", store.Mount{Name: "shared", Path: filepath.Join(f.data, "shared"), Writable: true},
 		store.Mount{Name: "other", Path: f.oth})
-	f.x = New(f.st)
+	f.x = New(f.st, testSearchConfig())
 	f.x.Rebuild()
 	return f
 }
@@ -387,7 +390,7 @@ func TestFlushLoop(t *testing.T) {
 }
 
 func TestStopIdempotent(t *testing.T) {
-	x := New(openStore(t))
+	x := New(openStore(t), testSearchConfig())
 	x.Stop()
 	x.Stop()
 }
@@ -450,7 +453,7 @@ func TestTopRootsNestedWithSiblingPrefix(t *testing.T) {
 	addUser(t, st, "u2", store.Mount{Name: "ab", Path: filepath.Join(base, "a-b")})
 	addUser(t, st, "u3", store.Mount{Name: "ac", Path: filepath.Join(base, "a", "c")})
 	addUser(t, st, "u4", store.Mount{Name: "missing", Path: filepath.Join(base, "missing")})
-	x := New(st)
+	x := New(st, testSearchConfig())
 	got := x.topRoots()
 	want := []string{filepath.Join(base, "a"), filepath.Join(base, "a-b")}
 	if !reflect.DeepEqual(got, want) {
@@ -596,7 +599,7 @@ func syntheticIndexer(tb testing.TB, n int) (*Indexer, *vfs.FS) {
 			benchExts[rnd(len(benchExts))])
 		ri.add(d, fakeInfo{name: name})
 	}
-	x := New(nil)
+	x := New(nil, testSearchConfig())
 	x.indexes[root] = ri
 	return x, vfs.New([]store.Mount{{Name: "m", Path: root}}, false, nil)
 }

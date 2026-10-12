@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
 )
 
@@ -100,7 +101,7 @@ type testEnv struct {
 	dir   string
 }
 
-func newEnv(t testing.TB, mutate func(*store.Settings)) *testEnv {
+func newEnv(t testing.TB, mutate func(*config.Config)) *testEnv {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(dir)
@@ -108,18 +109,15 @@ func newEnv(t testing.TB, mutate func(*store.Settings)) *testEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	cfg := config.Default()
 	if mutate != nil {
-		s := st.Settings()
-		mutate(&s)
-		if _, err := st.SaveSettings(s); err != nil {
-			t.Fatal(err)
-		}
+		mutate(cfg)
 	}
-	cm, err := cache.New(filepath.Join(dir, "cache"), st)
+	cm, err := cache.New(filepath.Join(dir, "cache"), cfg.Cache)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := New("ffmpeg", "ffprobe", cm, st)
+	svc := New("ffmpeg", "ffprobe", cm, cfg.Transcode)
 	t.Cleanup(func() {
 		svc.Close()
 		cm.Stop()

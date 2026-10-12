@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 )
 
 func TestSegmentCount(t *testing.T) {
@@ -39,6 +39,8 @@ type hlsSettings struct {
 	encoder     string
 	maxSessions int
 	segSeconds  int
+	// ttlHours is the transcode cache TTL; 0 means never expires.
+	ttlHours int
 }
 
 func hlsEnv(t *testing.T, o hlsSettings) *testEnv {
@@ -51,11 +53,12 @@ func hlsEnv(t *testing.T, o hlsSettings) *testEnv {
 	if o.segSeconds == 0 {
 		o.segSeconds = 6
 	}
-	return newEnv(t, func(s *store.Settings) {
+	return newEnv(t, func(s *config.Config) {
 		s.Transcode.Encoder = o.encoder
 		s.Transcode.MaxSessions = o.maxSessions
 		s.Transcode.SegmentSeconds = o.segSeconds
 		s.Transcode.Preset = "veryfast"
+		s.Cache.TranscodeTTLHours = o.ttlHours
 	})
 }
 
@@ -720,7 +723,7 @@ func TestHLSPlayableOverHTTP(t *testing.T) {
 }
 
 func TestHLSCacheEviction(t *testing.T) {
-	env := hlsEnv(t, hlsSettings{})
+	env := hlsEnv(t, hlsSettings{ttlHours: 1})
 	src := fixture(t, "evict.mp4", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:duration=13",
 		"-c:v", "libx264", "-preset", "ultrafast")
 	active := createSession(t, env, 1, src, "720p", 0)
@@ -731,11 +734,17 @@ func TestHLSCacheEviction(t *testing.T) {
 		}
 		env.svc.StopSession(se.ID, 1)
 	}
+	// Age both the in-memory access time and the session directory: the cache
+	// tracks "last used" through the directory mtime.
+	old := time.Now().Add(-2 * time.Hour)
 	idle.mu.Lock()
-	idle.lastAccess = time.Now().Add(-time.Hour)
+	idle.lastAccess = old
 	idle.mu.Unlock()
+	if err := os.Chtimes(idle.Dir, old, old); err != nil {
+		t.Fatal(err)
+	}
 
-	env.cache.Cleanup(nil, false) // purge everything that is not in use
+	env.cache.Cleanup(nil) // expired sessions that are not in use
 	if exists(idle.Dir) || !exists(active.segPath(0)) {
 		t.Fatalf("idle dir exists=%v, active segment exists=%v", exists(idle.Dir), exists(active.segPath(0)))
 	}
@@ -750,10 +759,13 @@ func TestHLSCacheEviction(t *testing.T) {
 		t.Fatal(err)
 	}
 	active.mu.Lock()
-	active.lastAccess = time.Now().Add(-time.Hour)
+	active.lastAccess = old
 	active.mu.Unlock()
+	if err := os.Chtimes(active.Dir, old, old); err != nil {
+		t.Fatal(err)
+	}
 	running := env.svc.Sessions()[0].Running
-	env.cache.Cleanup(nil, false)
+	env.cache.Cleanup(nil)
 	if running && !exists(active.Dir) {
 		t.Fatal("session with a running ffmpeg was evicted")
 	}

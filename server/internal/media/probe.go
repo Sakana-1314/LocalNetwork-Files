@@ -17,7 +17,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/cache"
-	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/store"
+	"github.com/Sakana-1314/LocalNetwork-Files/server/internal/config"
 )
 
 var ErrNoFFmpeg = errors.New("服务器未安装 ffmpeg")
@@ -26,7 +26,7 @@ type Service struct {
 	ffmpeg, ffprobe string
 	hasFFmpeg       bool
 	cache           *cache.Manager
-	store           *store.Store
+	transcode       config.TranscodeSettings
 
 	sf       singleflight.Group
 	thumbSem chan struct{}
@@ -38,8 +38,8 @@ type Service struct {
 	hls *hlsManager
 }
 
-func New(ffmpegBin, ffprobeBin string, c *cache.Manager, st *store.Store) *Service {
-	s := &Service{cache: c, store: st, thumbSem: make(chan struct{}, 4), probeCache: map[string]*MediaInfo{}}
+func New(ffmpegBin, ffprobeBin string, c *cache.Manager, ts config.TranscodeSettings) *Service {
+	s := &Service{cache: c, transcode: ts, thumbSem: make(chan struct{}, 4), probeCache: map[string]*MediaInfo{}}
 	if p, err := exec.LookPath(ffmpegBin); err == nil {
 		s.ffmpeg = p
 	}

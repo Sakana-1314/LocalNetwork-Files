@@ -113,8 +113,6 @@ func Register(r *gin.Engine, d Deps) {
 	adm.PUT("/users/:id", a.requireWrite, a.adminUpdateUser)
 	adm.DELETE("/users/:id", a.requireWrite, a.adminDeleteUser)
 	adm.GET("/browse", a.adminBrowse)
-	adm.GET("/settings", a.adminGetSettings)
-	adm.PUT("/settings", a.requireWrite, a.adminPutSettings)
 	adm.GET("/cache", a.adminCacheStats)
 	adm.POST("/cache/clean", a.requireWrite, a.adminCacheClean)
 	adm.GET("/search/status", a.adminSearchStatus)

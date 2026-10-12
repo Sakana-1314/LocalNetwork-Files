@@ -28,7 +28,7 @@ type watcher struct {
 
 // syncWatcher starts/stops watching according to settings and re-registers roots.
 func (x *Indexer) syncWatcher() {
-	want := x.store.Settings().Search.Watch && watchSupported
+	want := x.search.Watch && watchSupported
 	x.mu.Lock()
 	if x.stopped {
 		x.mu.Unlock()
