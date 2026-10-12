@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,9 +90,12 @@ func TestEmbeddedSubtitles(t *testing.T) {
 	// subtitle fixture from text, so fake the probe result for a real file.
 	for _, codec := range []string{"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"} {
 		fi := stat(t, mkv)
-		key := fmt.Sprintf("%s|%d|%d", mkv, fi.ModTime().UnixNano(), fi.Size())
+		fp, err := env.svc.Fingerprint(mkv, fi.Size(), fi.ModTime())
+		if err != nil {
+			t.Fatal(err)
+		}
 		env.svc.probeMu.Lock()
-		env.svc.probeCache[key] = &MediaInfo{Duration: 3, Subtitles: []SubtitleStream{{Codec: codec}}}
+		env.svc.probeCache[fp] = &MediaInfo{Duration: 3, Subtitles: []SubtitleStream{{Codec: codec}}}
 		env.svc.probeMu.Unlock()
 		if _, err := env.svc.EmbeddedSubtitle(context.Background(), mkv, fi, 0); !errors.Is(err, ErrUnsupportedSubtitle) {
 			t.Fatalf("%s: %v", codec, err)

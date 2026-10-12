@@ -54,17 +54,55 @@ type Manager struct {
 // earlyCleanupEvery rate-limits cleanups triggered by Added.
 var earlyCleanupEvery = time.Minute
 
+// layoutVersion is the on-disk cache key scheme. It is bumped whenever the
+// keys change meaning, because entries written by an older version can never
+// be looked up again: with a TTL of 0 they would linger forever.
+const layoutVersion = "2"
+
 func New(dir string, cfg config.CacheSettings) (*Manager, error) {
 	for _, b := range buckets {
 		if err := os.MkdirAll(filepath.Join(dir, string(b)), 0o755); err != nil {
 			return nil, err
 		}
 	}
+	dropStaleLayout(dir)
 	m := &Manager{dir: dir, cfg: cfg, stop: make(chan struct{}), kick: make(chan struct{}, 1), size: map[Bucket]int64{}}
 	for _, b := range buckets {
 		_, m.size[b] = m.scan(b)
 	}
 	return m, nil
+}
+
+// dropStaleLayout removes entries written with an older key scheme once per
+// cache directory. The stamp is only written on success, so a failure is
+// retried on the next start.
+func dropStaleLayout(dir string) {
+	stamp := filepath.Join(dir, ".layout")
+	if b, err := os.ReadFile(stamp); err == nil && strings.TrimSpace(string(b)) == layoutVersion {
+		return
+	}
+	for _, b := range buckets {
+		des, err := os.ReadDir(filepath.Join(dir, string(b)))
+		if err != nil {
+			continue
+		}
+		for _, de := range des {
+			// Only entries are removed; dot-directories like the stamp are kept.
+			if strings.HasPrefix(de.Name(), ".") {
+				continue
+			}
+			p := filepath.Join(dir, string(b), de.Name())
+			if err := os.RemoveAll(p); err != nil {
+				slog.Warn("cache: drop stale layout entry failed", "path", p, "err", err)
+				return
+			}
+		}
+	}
+	if err := os.WriteFile(stamp, []byte(layoutVersion+"\n"), 0o644); err != nil {
+		slog.Warn("cache: write layout stamp failed", "err", err)
+		return
+	}
+	slog.Info("cache: dropped entries from an older key scheme", "layout", layoutVersion)
 }
 
 func (m *Manager) Dir() string               { return m.dir }

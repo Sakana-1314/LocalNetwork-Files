@@ -54,7 +54,11 @@ func (s *Service) Thumbnail(ctx context.Context, real string, fi os.FileInfo, si
 	if !vfs.Thumbable(name, fi.IsDir(), s.hasFFmpeg) {
 		return "", ErrNoThumb
 	}
-	key := cacheKey("thumb", real, fi.ModTime().UnixNano(), fi.Size(), size)
+	fp, err := s.Fingerprint(real, fi.Size(), fi.ModTime())
+	if err != nil {
+		return "", err
+	}
+	key := cacheKey("thumb", fp, size)
 	out := s.cache.ThumbPath(key, ".jpg")
 	failMark := out + ".fail"
 	if _, err := os.Stat(out); err == nil {
@@ -64,7 +68,7 @@ func (s *Service) Thumbnail(ctx context.Context, real string, fi os.FileInfo, si
 	if _, err := os.Stat(failMark); err == nil {
 		return "", ErrNoThumb
 	}
-	_, err, _ := s.sf.Do("thumb:"+key, func() (any, error) {
+	_, err, _ = s.sf.Do("thumb:"+key, func() (any, error) {
 		// Detached from the first caller: concurrent requests share this work.
 		gctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		defer cancel()
