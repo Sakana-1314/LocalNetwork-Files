@@ -151,12 +151,12 @@ func newHLSManager(s *Service) *hlsManager {
 }
 
 type SessionInfo struct {
-	ID         string    `json:"id"`
-	Path       string    `json:"path"`
-	Quality    string    `json:"quality"`
-	User       string    `json:"user"`
-	Running    bool      `json:"running"`
-	LastAccess time.Time `json:"last_access"`
+	ID         string    `json:"id"`          // 会话 ID
+	Path       string    `json:"path"`        // 源视频的虚拟路径
+	Quality    string    `json:"quality"`     // 输出画质
+	User       string    `json:"user"`        // 正在观看的用户名（多用户时用逗号分隔）
+	Running    bool      `json:"running"`     // 当前是否有 ffmpeg 进程在转码
+	LastAccess time.Time `json:"last_access"` // 最近一次访问时间
 }
 
 // Sessions lists known transcode sessions.

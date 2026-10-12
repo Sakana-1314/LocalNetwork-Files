@@ -509,12 +509,12 @@ func (x *Indexer) apply(real string) {
 }
 
 type Status struct {
-	Indexing   bool       `json:"indexing"`
-	Entries    int        `json:"entries"`
-	Roots      int        `json:"roots"`
-	LastBuilt  *time.Time `json:"last_built"`
-	DurationMS int64      `json:"duration_ms"`
-	Watching   bool       `json:"watching"`
+	Indexing   bool       `json:"indexing"`    // 是否正在构建索引
+	Entries    int        `json:"entries"`     // 已索引的条目数
+	Roots      int        `json:"roots"`       // 索引的顶层目录数
+	LastBuilt  *time.Time `json:"last_built"`  // 上次构建完成时间；null 表示尚未构建
+	DurationMS int64      `json:"duration_ms"` // 上次构建耗时（毫秒）
+	Watching   bool       `json:"watching"`    // 是否启用了文件系统监听
 }
 
 func (x *Indexer) Status() Status {

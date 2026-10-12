@@ -4,7 +4,6 @@ package api
 
 import (
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
 
 	"github.com/Sakana-1314/MList/server/internal/auth"
 	"github.com/Sakana-1314/MList/server/internal/cache"
@@ -23,18 +21,22 @@ import (
 	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
-//go:embed openapi.yaml
-var openapiYAML []byte
+// openapiJSON is the OpenAPI document generated from the Go annotations by
+// `make docs` (swaggo/swag v2). Do not edit it by hand: CI regenerates the spec
+// and fails when the committed file differs from the annotations.
+//
+//go:embed openapi.json
+var openapiJSONDoc []byte
 
-// ServiceStatus describes a protocol service for the mount guide / admin UI.
+// ServiceStatus 描述单个协议服务的状态，用于挂载向导与管理界面。
 type ServiceStatus struct {
-	Enabled bool              `json:"enabled"`
-	Running bool              `json:"running"`
-	Port    int               `json:"port,omitempty"`
-	Path    string            `json:"path,omitempty"`
-	Error   string            `json:"error,omitempty"`
-	Shares  map[string]string `json:"shares,omitempty"`
-	Account string            `json:"account,omitempty"`
+	Enabled bool              `json:"enabled"`           // 是否在 config.yaml 中启用
+	Running bool              `json:"running"`           // 当前是否正在运行
+	Port    int               `json:"port,omitempty"`    // 监听端口
+	Path    string            `json:"path,omitempty"`    // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
+	Error   string            `json:"error,omitempty"`   // 服务启动错误（仅管理员可见）
+	Shares  map[string]string `json:"shares,omitempty"`  // 仅 SMB：当前用户的挂载名 → SMB 共享名
+	Account string            `json:"account,omitempty"` // 仅 SMB：当前用户的 SMB 登录名
 }
 
 // Services is implemented by the application to expose protocol service state.
@@ -91,8 +93,8 @@ func Register(r *gin.Engine, d Deps) {
 	g.GET("/fs/raw", a.fsRaw)
 	g.HEAD("/fs/raw", a.fsRaw)
 	// Same as /fs/raw; the trailing name is ignored and only makes browsers show the real file name.
-	g.GET("/fs/raw/:name", a.fsRaw)
-	g.HEAD("/fs/raw/:name", a.fsRaw)
+	g.GET("/fs/raw/:name", a.fsRawNamed)
+	g.HEAD("/fs/raw/:name", a.fsRawNamed)
 	g.GET("/fs/text", a.fsText)
 	g.PUT("/fs/file", a.fsPut)
 	g.POST("/fs/mkdir", a.fsMkdir)
@@ -104,7 +106,8 @@ func Register(r *gin.Engine, d Deps) {
 
 	g.GET("/media/info", a.mediaInfo)
 	g.POST("/media/transcode", a.mediaTranscode)
-	g.GET("/media/hls/:id/:file", a.mediaHLS)
+	g.GET("/media/hls/:id/index.m3u8", a.mediaHLSPlaylist)
+	g.GET("/media/hls/:id/:file", a.mediaHLSSegment)
 	g.DELETE("/media/hls/:id", a.mediaHLSStop)
 	g.GET("/media/audio", a.mediaAudio)
 	g.GET("/media/subtitle", a.mediaSubtitle)
@@ -133,17 +136,7 @@ func Register(r *gin.Engine, d Deps) {
 
 }
 
-func openapiJSON() []byte {
-	var doc map[string]any
-	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
-		panic("invalid embedded openapi.yaml: " + err.Error())
-	}
-	b, err := json.Marshal(doc)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
+func openapiJSON() []byte { return openapiJSONDoc }
 
 // ---------- errors ----------
 
@@ -202,7 +195,7 @@ func fail(c *gin.Context, err error) {
 	if st >= 500 {
 		slog.Error("request failed", "method", c.Request.Method, "path", c.Request.URL.Path, "err", err)
 	}
-	c.AbortWithStatusJSON(st, gin.H{"error": publicMessage(err)})
+	c.AbortWithStatusJSON(st, ErrorResponse{Error: publicMessage(err)})
 }
 
 func bind(c *gin.Context, v any) bool {

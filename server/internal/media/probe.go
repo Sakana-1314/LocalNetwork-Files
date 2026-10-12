@@ -62,10 +62,10 @@ func (s *Service) HasFFmpeg() bool { return s.hasFFmpeg }
 func (s *Service) Close() { s.hls.closeAll() }
 
 type VideoStream struct {
-	Codec  string  `json:"codec"`
-	Width  int     `json:"width"`
-	Height int     `json:"height"`
-	FPS    float64 `json:"fps"`
+	Codec  string  `json:"codec"`  // 视频编码，如 h264、hevc
+	Width  int     `json:"width"`  // 画面宽度（像素）
+	Height int     `json:"height"` // 画面高度（像素）
+	FPS    float64 `json:"fps"`    // 帧率
 
 	index   int    // absolute stream index (for -map 0:<index>)
 	pixFmt  string // e.g. yuv420p, yuv420p10le
@@ -73,31 +73,32 @@ type VideoStream struct {
 }
 
 type AudioStream struct {
-	Index    int    `json:"index"`
-	Codec    string `json:"codec"`
-	Channels int    `json:"channels"`
-	Language string `json:"language"`
-	Title    string `json:"title"`
+	Index    int    `json:"index"`    // 音轨序号
+	Codec    string `json:"codec"`    // 音频编码，如 aac、ac3
+	Channels int    `json:"channels"` // 声道数
+	Language string `json:"language"` // 语言标签（来自容器元数据）
+	Title    string `json:"title"`    // 轨道标题（来自容器元数据）
 
 	startTime float64 // stream start (source timeline, seconds)
 }
 
 type SubtitleStream struct {
-	Index    int    `json:"index"`
-	Codec    string `json:"codec"`
-	Language string `json:"language"`
-	Title    string `json:"title"`
-	External string `json:"external,omitempty"`
+	Index    int    `json:"index"`              // 字幕序号
+	Codec    string `json:"codec"`              // 字幕编码，如 subrip、ass、hdmv_pgs_subtitle
+	Language string `json:"language"`           // 语言标签（来自容器元数据）
+	Title    string `json:"title"`              // 轨道标题（来自容器元数据）
+	External string `json:"external,omitempty"` // 外挂字幕的虚拟路径；内嵌字幕为空
 }
 
 type MediaInfo struct {
-	Duration   float64          `json:"duration"`
-	Format     string           `json:"format"`
-	BitRate    int64            `json:"bit_rate"`
-	DirectPlay bool             `json:"direct_play"`
-	Video      *VideoStream     `json:"video"`
-	Audio      []AudioStream    `json:"audio"`
-	Subtitles  []SubtitleStream `json:"subtitles"`
+	Duration   float64          `json:"duration"`    // 总时长（秒）
+	Format     string           `json:"format"`      // 容器格式，如 matroska,webm
+	BitRate    int64            `json:"bit_rate"`    // 总码率（bps）
+	DirectPlay bool             `json:"direct_play"` // 浏览器大概率可直接播放（无需转码）
+	Video      *VideoStream     `json:"video"`       // 视频轨道；纯音频文件为 null
+	Audio      []AudioStream    `json:"audio"`       // 音频轨道列表；index 即请求转码时的 audio_track
+	Subtitles  []SubtitleStream `json:"subtitles"`   // 字幕轨道列表；index 即请求转换时的 index
+
 	// HasCover is true for audio files with embedded artwork (attached_pic).
 	HasCover bool `json:"-"`
 

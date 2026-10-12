@@ -22,10 +22,19 @@ import (
 // The signature is the only credential (it never expires), so the route is
 // reachable without a session — that is what lets <img> tags work behind a
 // reverse proxy without leaking tokens into URLs.
+// @Summary  按内容摘要取预览图（图片/视频/音频封面），JPEG
+// @Tags     媒体
+// @Param    d query string true "内容摘要（Entry.thumb）"
+// @Param    s query string true "服务端对摘要的签名（Entry.thumb_sig）"
+// @Param    size query integer false "预览图边长（像素），取最接近的可用档位" default(256) Enums(128, 256, 512, 1024)
+// @Success  200 {string} binary "JPEG 预览图（Content-Type: image/jpeg）"
+// @Failure  403 {object} ErrorResponse "签名无效或缺失"
+// @Failure  404 {object} ErrorResponse "摘要未知（服务端无记录或文件已变化），或该文件无法生成预览图"
+// @Router   /media/thumb [get]
 func (a *API) mediaThumb(c *gin.Context) {
 	digest, sig := c.Query("d"), c.Query("s")
 	if !a.Auth.VerifyThumbSignature(digest, sig) {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "签名无效"})
+		c.AbortWithStatusJSON(http.StatusForbidden, ErrorResponse{Error: "签名无效"})
 		return
 	}
 	real, ok := a.thumbs.Lookup(digest)
@@ -58,6 +67,15 @@ func probeError(c *gin.Context, err error) error {
 	return err
 }
 
+// @Summary  媒体信息（ffprobe）
+// @Tags     媒体
+// @Produce  json
+// @Param    path query string true "媒体文件的虚拟路径"
+// @Success  200 {object} media.MediaInfo "探测到的媒体信息（含视频/音频/字幕轨道）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /media/info [get]
 func (a *API) mediaInfo(c *gin.Context) {
 	vp := vfs.CleanPath(c.Query("path"))
 	loc, fi, err := a.fs(c).LocalFile(vp)
@@ -82,12 +100,18 @@ func (a *API) mediaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+// @Summary  创建 HLS 实时转码会话
+// @Tags     媒体
+// @Accept   json
+// @Produce  json
+// @Param    body body TranscodeRequest true "源文件、画质与音轨"
+// @Success  200 {object} TranscodeResponse "会话创建成功，返回播放列表地址"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /media/transcode [post]
 func (a *API) mediaTranscode(c *gin.Context) {
-	var req struct {
-		Path       string `json:"path" binding:"required"`
-		Quality    string `json:"quality"`
-		AudioTrack int    `json:"audio_track"`
-	}
+	var req TranscodeRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -103,35 +127,52 @@ func (a *API) mediaTranscode(c *gin.Context) {
 		fail(c, probeError(c, err))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"id": se.ID, "playlist": "/api/v1/media/hls/" + se.ID + "/index.m3u8", "duration": se.Duration,
-		"quality": se.Quality,
+	c.JSON(http.StatusOK, TranscodeResponse{
+		ID: se.ID, Playlist: "/api/v1/media/hls/" + se.ID + "/index.m3u8",
+		Duration: se.Duration, Quality: se.Quality,
 	})
 }
 
-func (a *API) mediaHLS(c *gin.Context) {
-	id, file := c.Param("id"), c.Param("file")
-	uid := principal(c).User.ID
-	if file == "index.m3u8" {
-		query := ""
-		if t := c.Query("access_token"); t != "" {
-			query = "access_token=" + url.QueryEscape(t)
-		}
-		pl, err := a.Media.Playlist(id, uid, query)
-		if err != nil {
-			fail(c, err)
-			return
-		}
-		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, "application/vnd.apple.mpegurl", []byte(pl))
+// @Summary  HLS 播放列表
+// @Tags     媒体
+// @Param    id path string true "转码会话 ID"
+// @Success  200 {string} binary "HLS 播放列表（m3u8，Content-Type: application/vnd.apple.mpegurl）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "会话不存在或已停止"
+// @Security bearerAuth
+// @Router   /media/hls/{id}/index.m3u8 [get]
+func (a *API) mediaHLSPlaylist(c *gin.Context) {
+	id := c.Param("id")
+	query := ""
+	if t := c.Query("access_token"); t != "" {
+		query = "access_token=" + url.QueryEscape(t)
+	}
+	pl, err := a.Media.Playlist(id, principal(c).User.ID, query)
+	if err != nil {
+		fail(c, err)
 		return
 	}
+	c.Header("Cache-Control", "no-cache")
+	c.Data(http.StatusOK, "application/vnd.apple.mpegurl", []byte(pl))
+}
+
+// @Summary  HLS 分片（按需转码）
+// @Tags     媒体
+// @Param    id path string true "转码会话 ID"
+// @Param    file path string true "分片文件名，形如 0.ts"
+// @Success  200 {string} binary "MPEG-TS 分片数据（按需转码后返回，Content-Type: video/mp2t）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "会话不存在、已停止或分片不存在"
+// @Security bearerAuth
+// @Router   /media/hls/{id}/{file} [get]
+func (a *API) mediaHLSSegment(c *gin.Context) {
+	id, file := c.Param("id"), c.Param("file")
 	n, err := strconv.Atoi(strings.TrimSuffix(file, ".ts"))
 	if err != nil || !strings.HasSuffix(file, ".ts") {
 		fail(c, media.ErrSessionNotFound)
 		return
 	}
-	p, err := a.Media.Segment(c.Request.Context(), id, uid, n)
+	p, err := a.Media.Segment(c.Request.Context(), id, principal(c).User.ID, n)
 	if err != nil {
 		if c.Request.Context().Err() != nil {
 			return
@@ -144,6 +185,13 @@ func (a *API) mediaHLS(c *gin.Context) {
 	http.ServeFile(c.Writer, c.Request, p)
 }
 
+// @Summary  停止转码会话
+// @Tags     媒体
+// @Param    id path string true "转码会话 ID"
+// @Success  204 "会话已停止，无响应体"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Security bearerAuth
+// @Router   /media/hls/{id} [delete]
 func (a *API) mediaHLSStop(c *gin.Context) {
 	if err := a.Media.StopSession(c.Param("id"), principal(c).User.ID); err != nil {
 		fail(c, err)
@@ -152,6 +200,15 @@ func (a *API) mediaHLSStop(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary  音频实时转码为 MP3 流（用于浏览器不支持的格式，如 APE/WMA/DSD）
+// @Tags     媒体
+// @Param    path query string true "音频文件的虚拟路径"
+// @Param    start query number false "起始秒数，从该位置开始转码（用于拖动进度）"
+// @Success  200 {string} binary "MP3 音频流（chunked 传输，Content-Type: audio/mpeg）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /media/audio [get]
 func (a *API) mediaAudio(c *gin.Context) {
 	loc, _, err := a.fs(c).LocalFile(c.Query("path"))
 	if err != nil {
@@ -173,6 +230,15 @@ func (a *API) mediaAudio(c *gin.Context) {
 	a.Media.StreamAudio(c.Request.Context(), loc.Real, start, c.Writer)
 }
 
+// @Summary  字幕转 WebVTT（内嵌字幕或同名外挂 .srt/.ass/.vtt）
+// @Tags     媒体
+// @Param    path query string true "视频路径（用于提取内嵌字幕）或字幕文件路径"
+// @Param    index query integer false "内嵌字幕序号（MediaInfo.subtitles 下标）；省略时按外挂字幕处理"
+// @Success  200 {string} binary "WebVTT 字幕内容（Content-Type: text/vtt）"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  404 {object} ErrorResponse "文件不存在"
+// @Security bearerAuth
+// @Router   /media/subtitle [get]
 func (a *API) mediaSubtitle(c *gin.Context) {
 	loc, fi, err := a.fs(c).LocalFile(c.Query("path"))
 	if err != nil {

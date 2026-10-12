@@ -151,8 +151,10 @@ Pull Request **只构建不推送**；也支持手动触发。
 
 ## OpenAPI
 
-规范在 `GET /api/openapi.json`（源文件 `server/internal/api/openapi.yaml`），界面「API 文档」以 iframe 内嵌
-Apifox 在线文档 <https://local-files.apifox.cn>。改动 `openapi.yaml` 后同步到 Apifox：
+规范在 `GET /api/openapi.json`，由 Go 注解生成（生成物 `server/internal/api/openapi.json`，
+**禁止手写**）：改动 handler 注解或结构体字段注释后运行 `cd server && make docs` 重新生成，
+CI 会比对生成物与注解是否一致。界面「API 文档」以 iframe 内嵌 Apifox 在线文档
+<https://local-files.apifox.cn>，同步方式：
 
 ```bash
 APIFOX_TOKEN=afxp_xxxxxxxx ./server/scripts/sync-apifox.sh   # 项目 ID 默认 8912512，可用 APIFOX_PROJECT_ID 覆盖

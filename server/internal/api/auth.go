@@ -41,7 +41,7 @@ func (a *API) fs(c *gin.Context) *vfs.FS { return a.NewFS(principal(c)) }
 
 func (a *API) requireAdmin(c *gin.Context) {
 	if !principal(c).User.IsAdmin() {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "需要管理员权限"})
+		c.AbortWithStatusJSON(http.StatusForbidden, ErrorResponse{Error: "需要管理员权限"})
 		return
 	}
 	c.Next()
@@ -51,7 +51,7 @@ func (a *API) requireAdmin(c *gin.Context) {
 // (file endpoints are protected by the read-only VFS).
 func (a *API) requireWrite(c *gin.Context) {
 	if principal(c).ReadOnly {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "该访问令牌没有 write 权限"})
+		c.AbortWithStatusJSON(http.StatusForbidden, ErrorResponse{Error: "该访问令牌没有 write 权限"})
 		return
 	}
 	c.Next()
@@ -80,17 +80,23 @@ func (a *API) setSessionCookie(c *gin.Context, tok string, exp time.Time) {
 	})
 }
 
+// @Summary  用户名密码登录
+// @Tags     认证
+// @Accept   json
+// @Produce  json
+// @Param    body body LoginRequest true "登录凭据"
+// @Success  200 {object} LoginResponse "登录成功，返回会话令牌与用户信息（同时写入会话 Cookie）"
+// @Failure  401 {object} ErrorResponse "用户名或密码错误"
+// @Failure  429 {object} ErrorResponse "登录失败次数过多，请 10 分钟后再试"
+// @Router   /auth/login [post]
 func (a *API) login(c *gin.Context) {
-	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-	}
+	var req LoginRequest
 	if !bind(c, &req) {
 		return
 	}
 	ip := c.ClientIP()
 	if a.limiter.blocked(ip) {
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "登录失败次数过多，请 10 分钟后再试"})
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, ErrorResponse{Error: "登录失败次数过多，请 10 分钟后再试"})
 		return
 	}
 	u, err := a.Auth.Authenticate(strings.TrimSpace(req.Username), req.Password)
@@ -106,26 +112,43 @@ func (a *API) login(c *gin.Context) {
 		return
 	}
 	a.setSessionCookie(c, tok, exp)
-	c.JSON(http.StatusOK, gin.H{"token": tok, "expires_at": exp, "user": userView(u, u.IsAdmin())})
+	c.JSON(http.StatusOK, LoginResponse{Token: tok, ExpiresAt: exp, User: userView(u, u.IsAdmin())})
 }
 
+// @Summary 退出登录（清除会话 Cookie）
+// @Tags    认证
+// @Success 204 "已退出登录，无响应体"
+// @Router  /auth/logout [post]
 func (a *API) logout(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary  当前用户
+// @Tags     认证
+// @Produce  json
+// @Success  200 {object} store.User "当前登录用户及其授权目录"
+// @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Security bearerAuth
+// @Router   /auth/me [get]
 func (a *API) me(c *gin.Context) {
 	u := principal(c).User
 	c.JSON(http.StatusOK, userView(u, u.IsAdmin()))
 }
 
-// changePassword updates the password. Existing sessions are invalidated, so a
-// fresh session token is returned (and set as cookie).
+// 修改密码会使该用户此前的所有会话失效，因此会签发并写回新的会话令牌。
+//
+// @Summary  修改自己的密码
+// @Tags     认证
+// @Accept   json
+// @Produce  json
+// @Param    body body PasswordRequest true "原密码与新密码"
+// @Success  200 {object} PasswordResponse "修改成功。旧会话全部失效，返回新的会话令牌（同时写入 Cookie），客户端应替换本地保存的令牌。"
+// @Failure  400 {object} ErrorResponse "原密码错误或新密码不足 6 位"
+// @Security bearerAuth
+// @Router   /auth/password [put]
 func (a *API) changePassword(c *gin.Context) {
-	var req struct {
-		OldPassword string `json:"old_password"`
-		NewPassword string `json:"new_password" binding:"required"`
-	}
+	var req PasswordRequest
 	if !bind(c, &req) {
 		return
 	}
@@ -148,5 +171,5 @@ func (a *API) changePassword(c *gin.Context) {
 		return
 	}
 	a.setSessionCookie(c, tok, exp)
-	c.JSON(http.StatusOK, gin.H{"token": tok, "expires_at": exp})
+	c.JSON(http.StatusOK, PasswordResponse{Token: tok, ExpiresAt: exp})
 }

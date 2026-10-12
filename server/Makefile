@@ -13,7 +13,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 windows/amd64
 GO ?= go
 CONFIG := $(if $(wildcard config.yaml),-config config.yaml,)
 
-.PHONY: all web build test vet run dist clean
+.PHONY: all web build test vet run dist docs clean
 
 all: web build
 
@@ -28,6 +28,11 @@ test:
 
 vet:
 	$(GO) vet ./...
+
+# 由 Go 注解重新生成 OpenAPI 规范（server/internal/api/openapi.json）。
+# openapi.json 是生成物，禁止手写；CI 会用 scripts/check-openapi.sh 校验。
+docs:
+	./scripts/gen-openapi.sh
 
 run: build
 	./$(BIN) $(CONFIG)

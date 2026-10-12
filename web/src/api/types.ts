@@ -1,5 +1,5 @@
 /**
- * 与 server/internal/api/openapi.yaml 中 components.schemas 一一对应的类型定义。
+ * 与 server/internal/api/openapi.json（由 Go 注解生成）中 components.schemas 一一对应的类型定义。
  * 注意：后端为 Go，nil 切片会序列化为 null，api 模块中会统一归一化为空数组。
  */
 

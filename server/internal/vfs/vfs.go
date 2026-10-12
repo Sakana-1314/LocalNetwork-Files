@@ -242,19 +242,18 @@ func (f *FS) changed(real string) {
 // ---------- reading ----------
 
 type Entry struct {
-	Name     string    `json:"name"`
-	Path     string    `json:"path"`
-	IsDir    bool      `json:"is_dir"`
-	Size     int64     `json:"size"`
-	ModTime  time.Time `json:"mod_time"`
-	Mime     string    `json:"mime"`
-	Kind     string    `json:"kind"`
-	Writable bool      `json:"writable"`
-	// Thumb is the content digest of the preview source (empty when the file
-	// cannot be previewed). It is not a path, so listing a directory never
-	// reveals where the file lives.
+	Name     string    `json:"name"`                                                      // 文件或目录名
+	Path     string    `json:"path"`                                                      // 虚拟路径
+	IsDir    bool      `json:"is_dir"`                                                    // 是否为目录
+	Size     int64     `json:"size"`                                                      // 文件大小（字节）；目录为 0
+	ModTime  time.Time `json:"mod_time"`                                                  // 最后修改时间
+	Mime     string    `json:"mime"`                                                      // 由扩展名推断的 MIME 类型
+	Kind     string    `json:"kind" enums:"dir,image,video,audio,text,pdf,archive,other"` // 文件类型，用于选择预览方式
+	Writable bool      `json:"writable"`                                                  // 是否可写（目录权限与令牌范围共同决定）
+	// Thumb 是预览源文件的内容摘要（不可预览时为空串）。它不是路径，
+	// 因此列目录不会暴露文件在服务器上的位置。
 	Thumb string `json:"thumb"`
-	// ThumbSig is the server signature over Thumb, filled in by the API layer.
+	// ThumbSig 是服务端对 Thumb 的签名，供 /media/thumb 校验。
 	ThumbSig string `json:"thumb_sig"`
 }
 

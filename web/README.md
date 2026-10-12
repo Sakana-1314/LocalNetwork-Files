@@ -1,7 +1,7 @@
 # MList · Web 前端
 
 Vite + Vue 3（`<script setup lang="ts">`）+ TypeScript（strict）+ Vue Router + Pinia + Naive UI。
-接口契约见 `../server/internal/api/openapi.yaml`（Base URL `/api/v1`）。
+接口契约见 `../server/internal/api/openapi.json`（由 Go 注解生成，Base URL `/api/v1`）。
 「API 文档」页以 iframe 内嵌 Apifox 在线文档（默认 `https://local-files.apifox.cn/`，可用 `VITE_APIFOX_DOC_URL` 覆盖）；
 改动规范后用 `../server/scripts/sync-apifox.sh` 同步。
 

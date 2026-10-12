@@ -31,15 +31,17 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 | `internal/services/webdav` | `golang.org/x/net/webdav` 适配 vfs，挂在主 HTTP 端口的 `/dav` |
 | `internal/services/s3` | S3 兼容接口（SigV4、path/virtual-host 风格、分片上传），独立端口，按配置启动 |
 | `internal/services/smb` | 托管 Samba `smbd` 子进程：由用户授权目录生成 `smb.conf`（`conf.go` 纯函数）、SIGHUP 重载、端口变化重启、退出状态上报、`smbpasswd` 同步密码 |
-| `internal/api` | Gin REST 接口（`/api/v1`）、认证中间件（Bearer / `access_token` / Cookie）、登录限流、内嵌 `openapi.yaml`（`/api/openapi.json`） |
+| `internal/api` | Gin REST 接口（`/api/v1`）、认证中间件（Bearer / `access_token` / Cookie）、登录限流、内嵌由 Go 注解生成的 `openapi.json`（`/api/openapi.json`） |
 | `internal/app` | 组装各子系统、订阅用户 / 授权目录变化刷新搜索与 Samba、HTTP 服务与优雅退出 |
 | `internal/webui` | `go:embed` 前端产物（`dist/`，由 `web/` 的 `pnpm build` 生成），SPA 路由回退到 `index.html` |
 
 ## 开发说明
 
 - **新增文件操作必须走 `vfs`**，不要在 API / 协议层直接拼接磁盘路径，否则会绕过权限检查。
-- 新增 / 修改接口时同步更新 `internal/api/openapi.yaml`，前端类型与 Apifox 在线文档都以它为准；
-  改完用 `APIFOX_TOKEN=xxx ./server/scripts/sync-apifox.sh` 推送（「API 文档」页面内嵌 Apifox）。
+- 新增 / 修改接口时，在 handler 上方补写中文注解（`@Summary`/`@Tags`/`@Param`/`@Success` 等），
+  字段描述写在结构体字段的行尾注释里，然后运行 `make docs` 重新生成 `internal/api/openapi.json`。
+  该文件是生成物，**禁止手写**：CI 会用 `scripts/check-openapi.sh` 重新生成并比对，不一致即失败。
+  前端类型与 Apifox 在线文档都以它为准，推送用 `APIFOX_TOKEN=xxx ./server/scripts/sync-apifox.sh`。
 - 新增配置项：加到 `config.Config` 的对应分组，在 `Normalize` 中给出默认值与范围，并在 `config.example.yaml` 中写明中文注释；
   配置只在启动时读取，改动需重启生效。
 - 依赖 ffmpeg 的测试在找不到 ffmpeg 时应跳过；CI 会安装 ffmpeg。

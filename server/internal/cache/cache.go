@@ -226,10 +226,10 @@ func (m *Manager) scan(b Bucket) ([]entry, int64) {
 }
 
 type BucketStats struct {
-	Files    int   `json:"files"`
-	Bytes    int64 `json:"bytes"`
-	MaxBytes int64 `json:"max_bytes"`
-	TTLHours int   `json:"ttl_hours"`
+	Files    int   `json:"files"`     // 文件数量
+	Bytes    int64 `json:"bytes"`     // 当前占用字节数
+	MaxBytes int64 `json:"max_bytes"` // 容量上限（字节），超出后按最近最少使用淘汰
+	TTLHours int   `json:"ttl_hours"` // 保留时长（小时）；0 表示永不过期
 }
 
 func (m *Manager) limits(b Bucket) (ttl time.Duration, max int64) {
@@ -261,8 +261,8 @@ func (m *Manager) Stats() (map[Bucket]BucketStats, *time.Time) {
 }
 
 type CleanResult struct {
-	RemovedFiles int   `json:"removed_files"`
-	RemovedBytes int64 `json:"removed_bytes"`
+	RemovedFiles int   `json:"removed_files"` // 删除的文件数
+	RemovedBytes int64 `json:"removed_bytes"` // 释放的字节数
 }
 
 // Cleanup enforces the TTL and size limits on the given buckets (all when
