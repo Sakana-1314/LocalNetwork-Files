@@ -229,7 +229,11 @@ func TestThumbnailAudioCover(t *testing.T) {
 	if _, err := env.svc.Thumbnail(context.Background(), noCover, fi, 128); !errors.Is(err, ErrNoThumb) {
 		t.Fatalf("no cover: got %v, want ErrNoThumb", err)
 	}
-	key := cacheKey("thumb", noCover, fi.ModTime().UnixNano(), fi.Size(), 128)
+	fp, err := env.svc.Fingerprint(noCover, fi.Size(), fi.ModTime())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := cacheKey("thumb", fp, 128)
 	mark := env.cache.ThumbPath(key, ".jpg") + ".fail"
 	if _, err := os.Stat(mark); err != nil {
 		t.Fatalf("failure marker missing: %v", err)

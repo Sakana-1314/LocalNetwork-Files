@@ -85,7 +85,11 @@ func (s *Service) EmbeddedSubtitle(ctx context.Context, real string, fi os.FileI
 	case "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub", "dvb_teletext", "arib_caption":
 		return "", ErrUnsupportedSubtitle
 	}
-	key := cacheKey("sub", real, fi.ModTime().UnixNano(), fi.Size(), index)
+	fp, err := s.Fingerprint(real, fi.Size(), fi.ModTime())
+	if err != nil {
+		return "", err
+	}
+	key := cacheKey("sub", fp, index)
 	return s.convertSubtitle(ctx, key, func(string) ([]string, error) {
 		return []string{"-i", real, "-map", "0:s:" + strconv.Itoa(index)}, nil
 	})
@@ -98,7 +102,11 @@ func (s *Service) ExternalSubtitle(ctx context.Context, real string, fi os.FileI
 	if vfs.Ext(fi.Name()) == "vtt" {
 		return real, nil
 	}
-	key := cacheKey("extsub", real, fi.ModTime().UnixNano(), fi.Size())
+	fp, err := s.Fingerprint(real, fi.Size(), fi.ModTime())
+	if err != nil {
+		return "", err
+	}
+	key := cacheKey("extsub", fp)
 	return s.convertSubtitle(ctx, key, func(tmpBase string) ([]string, error) {
 		f, err := os.Open(real)
 		if err != nil {

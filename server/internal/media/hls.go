@@ -213,9 +213,13 @@ func (s *Service) CreateSession(ctx context.Context, userID uint, username, real
 	if audio < 0 || audio >= len(mi.Audio) {
 		audio = 0
 	}
+	fp, err := s.Fingerprint(real, fi.Size(), fi.ModTime())
+	if err != nil {
+		return nil, err
+	}
 	ts := s.transcode
 	// The encoder is part of the key: segments of different encoders are not mixed.
-	id := cacheKey("hls", real, fi.ModTime().UnixNano(), fi.Size(), quality, audio, ts.SegmentSeconds, ts.Encoder)[:24]
+	id := cacheKey("hls", fp, quality, audio, ts.SegmentSeconds, ts.Encoder)[:24]
 
 	m := s.hls
 	m.mu.Lock()

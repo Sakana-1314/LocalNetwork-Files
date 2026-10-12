@@ -35,11 +35,14 @@ type Service struct {
 	probeCache map[string]*MediaInfo
 	probeOrder []string
 
+	fpMemo *fingerprintMemo
+
 	hls *hlsManager
 }
 
 func New(ffmpegBin, ffprobeBin string, c *cache.Manager, ts config.TranscodeSettings) *Service {
-	s := &Service{cache: c, transcode: ts, thumbSem: make(chan struct{}, 4), probeCache: map[string]*MediaInfo{}}
+	s := &Service{cache: c, transcode: ts, thumbSem: make(chan struct{}, 4),
+		probeCache: map[string]*MediaInfo{}, fpMemo: newFingerprintMemo()}
 	if p, err := exec.LookPath(ffmpegBin); err == nil {
 		s.ffmpeg = p
 	}
@@ -125,12 +128,16 @@ type ffprobeOut struct {
 	} `json:"streams"`
 }
 
-// Probe runs ffprobe (cached by path+mtime+size).
+// Probe runs ffprobe (cached by content fingerprint).
 func (s *Service) Probe(ctx context.Context, real string, mtime time.Time, size int64) (*MediaInfo, error) {
 	if !s.hasFFmpeg {
 		return nil, ErrNoFFmpeg
 	}
-	key := fmt.Sprintf("%s|%d|%d", real, mtime.UnixNano(), size)
+	fp, err := s.Fingerprint(real, size, mtime)
+	if err != nil {
+		return nil, err
+	}
+	key := fp
 	s.probeMu.Lock()
 	if mi, ok := s.probeCache[key]; ok {
 		s.probeMu.Unlock()
