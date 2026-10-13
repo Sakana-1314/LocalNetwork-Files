@@ -4,10 +4,13 @@ export const API_BASE = '/api/v1'
 
 export class ApiError extends Error {
   readonly status: number
-  constructor(status: number, message: string) {
+  /** 解析后的错误响应体（JSON），用于读取 error 之外的字段 */
+  readonly data?: unknown
+  constructor(status: number, message: string, data?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.data = data
   }
 }
 
@@ -71,20 +74,24 @@ export function authHeaders(): Record<string, string> {
 
 /** 解析错误响应体 {error: string} */
 export async function readErrorMessage(res: Response): Promise<string> {
+  return (await readError(res)).message
+}
+
+async function readError(res: Response): Promise<{ message: string; data?: unknown }> {
   try {
     const text = await res.text()
     if (text) {
       try {
         const data = JSON.parse(text) as { error?: unknown }
-        if (data && typeof data.error === 'string' && data.error) return data.error
+        if (data && typeof data.error === 'string' && data.error) return { message: data.error, data }
       } catch {
-        if (text.length < 300) return text
+        if (text.length < 300) return { message: text }
       }
     }
   } catch {
     /* ignore */
   }
-  return defaultStatusMessage(res.status)
+  return { message: defaultStatusMessage(res.status) }
 }
 
 export function defaultStatusMessage(status: number): string {
@@ -161,9 +168,9 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
   }
 
   if (!res.ok) {
-    const message = await readErrorMessage(res)
+    const { message, data } = await readError(res)
     if (!opts.silent) hooks.onError(message)
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, data)
   }
 
   if (res.status === 204) return undefined as T

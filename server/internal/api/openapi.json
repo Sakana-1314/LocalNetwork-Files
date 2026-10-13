@@ -56,6 +56,111 @@
         },
         "type": "object"
       },
+      "api.BucketConflictResponse": {
+        "properties": {
+          "conflicts": {
+            "description": "冲突条目（最多 100 条）",
+            "items": {
+              "$ref": "#/components/schemas/vfs.Conflict"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "error": {
+            "description": "错误信息",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.BucketCreated": {
+        "properties": {
+          "bucket": {
+            "$ref": "#/components/schemas/api.BucketView",
+            "description": "桶信息"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/vfs.SyncResult",
+            "description": "合并目录的结果"
+          }
+        },
+        "type": "object"
+      },
+      "api.BucketDir": {
+        "properties": {
+          "active": {
+            "description": "是否为当前读写的主目录（第一个可用目录）",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "目录当前是否存在且可访问",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "服务器本地绝对路径",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "api.BucketInput": {
+        "properties": {
+          "name": {
+            "description": "桶名称，即用户虚拟根目录下显示的名称，最长 128 字符，不能含 / 或 \\",
+            "type": "string"
+          },
+          "paths": {
+            "description": "服务器本地绝对路径，按优先级排列；多个目录互为备份，不能相互嵌套",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "required": [
+          "name",
+          "paths"
+        ],
+        "type": "object"
+      },
+      "api.BucketView": {
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "dirs": {
+            "description": "各目录的可用状态",
+            "items": {
+              "$ref": "#/components/schemas/api.BucketDir"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "id": {
+            "description": "桶 ID",
+            "type": "integer"
+          },
+          "name": {
+            "description": "桶名称，即用户虚拟根目录下显示的名称",
+            "type": "string"
+          },
+          "paths": {
+            "description": "桶对应的服务器本地绝对路径，按优先级排列；多个目录互为备份",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "users": {
+            "description": "被授权的用户数",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "api.CacheCleanRequest": {
         "properties": {
           "kind": {
@@ -176,6 +281,22 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "api.GrantInput": {
+        "properties": {
+          "bucket_id": {
+            "description": "桶 ID",
+            "type": "integer"
+          },
+          "writable": {
+            "description": "是否可写；false 为只读",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bucket_id"
+        ],
         "type": "object"
       },
       "api.IndexStatus": {
@@ -669,10 +790,10 @@
             "description": "是否禁用该账户",
             "type": "boolean"
           },
-          "mounts": {
-            "description": "授权目录列表，整表替换",
+          "grants": {
+            "description": "授权桶列表，整表替换；更新时省略表示不修改",
             "items": {
-              "$ref": "#/components/schemas/store.Mount"
+              "$ref": "#/components/schemas/api.GrantInput"
             },
             "type": "array",
             "uniqueItems": false
@@ -895,22 +1016,18 @@
         },
         "type": "object"
       },
-      "store.Mount": {
+      "store.Grant": {
         "properties": {
-          "id": {
-            "description": "授权目录 ID",
+          "bucket_id": {
+            "description": "桶 ID",
             "type": "integer"
           },
           "name": {
-            "description": "在虚拟根目录下显示的名称",
-            "type": "string"
-          },
-          "path": {
-            "description": "服务器本地绝对路径（仅管理员可见）",
+            "description": "桶名称（只读，由服务端填充）",
             "type": "string"
           },
           "writable": {
-            "description": "false 为只读目录，true 为可写目录",
+            "description": "false 为只读，true 为可写",
             "type": "boolean"
           }
         },
@@ -947,17 +1064,17 @@
             "description": "是否已禁用（禁用后无法登录，令牌也失效）",
             "type": "boolean"
           },
-          "id": {
-            "description": "用户 ID",
-            "type": "integer"
-          },
-          "mounts": {
-            "description": "该用户被授权的目录",
+          "grants": {
+            "description": "该用户被授权的桶",
             "items": {
-              "$ref": "#/components/schemas/store.Mount"
+              "$ref": "#/components/schemas/store.Grant"
             },
             "type": "array",
             "uniqueItems": false
+          },
+          "id": {
+            "description": "用户 ID",
+            "type": "integer"
           },
           "role": {
             "description": "角色，admin 为管理员",
@@ -969,6 +1086,27 @@
           },
           "username": {
             "description": "用户名",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "vfs.Conflict": {
+        "properties": {
+          "dirs": {
+            "description": "含有该条目的服务器目录",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "path": {
+            "description": "冲突条目在桶内的相对路径，以 / 开头",
+            "type": "string"
+          },
+          "reason": {
+            "description": "冲突原因",
             "type": "string"
           }
         },
@@ -1028,6 +1166,27 @@
           }
         },
         "type": "object"
+      },
+      "vfs.SyncResult": {
+        "properties": {
+          "bytes": {
+            "description": "复制的字节数",
+            "type": "integer"
+          },
+          "conflicts": {
+            "description": "无法自动合并的冲突（同名的文件与目录）",
+            "items": {
+              "$ref": "#/components/schemas/vfs.Conflict"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "copied": {
+            "description": "复制的文件数",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1044,7 +1203,7 @@
     "url": "https://github.com/Sakana-1314/MList"
   },
   "info": {
-    "description": "局域网文件管理系统 HTTP API。\n**认证方式**（任选其一）：\n- `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「账号设置 → 访问令牌」中创建的 API 访问令牌（`ml_` 前缀）。\n- 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。\n- 浏览器登录后自动携带的会话 Cookie。\n\n**路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的目录（挂载名），例如 `/电影/2024/a.mkv`。\n\n**预览图**：`GET /media/thumb` 只接收内容摘要与签名，不接收文件路径，且不要求登录，因此可直接放进 `<img>` 标签。\n\n**错误**：非 2xx 响应体为 `{\"error\": \"message\"}`。",
+    "description": "局域网文件管理系统 HTTP API。\n**认证方式**（任选其一）：\n- `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「账号设置 → 访问令牌」中创建的 API 访问令牌（`ml_` 前缀）。\n- 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。\n- 浏览器登录后自动携带的会话 Cookie。\n\n**路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的桶（桶名），例如 `/电影/2024/a.mkv`。\n\n**预览图**：`GET /media/thumb` 只接收内容摘要与签名，不接收文件路径，且不要求登录，因此可直接放进 `<img>` 标签。\n\n**错误**：非 2xx 响应体为 `{\"error\": \"message\"}`。",
     "title": "MList API",
     "version": "1.0.0"
   },
@@ -1052,7 +1211,7 @@
   "paths": {
     "/admin/browse": {
       "get": {
-        "description": "浏览服务器本地文件系统，用于在界面上选择授权目录。\n省略 path 时返回顶层目录或盘符列表。需要管理员权限。",
+        "description": "浏览服务器本地文件系统，用于在界面上选择桶的目录。\n省略 path 时返回顶层目录或盘符列表。需要管理员权限。",
         "parameters": [
           {
             "description": "服务器本地绝对路径；省略时返回根目录 / 盘符列表",
@@ -1091,6 +1250,307 @@
           }
         ],
         "summary": "浏览服务器目录",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/buckets": {
+      "get": {
+        "description": "返回全部桶、各桶的目录及其可用状态，以及被授权的用户数。需要管理员权限。",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/api.BucketView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "全部桶"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "列出桶",
+        "tags": [
+          "管理"
+        ]
+      },
+      "post": {
+        "description": "创建一个桶并指定其对应的服务器目录。多个目录互为备份，内容通过复制保持一致。\n若多个目录都不为空，会自动合并，使每个文件在每个目录中都有一份；\n同一路径在不同目录中内容不同（或一边是文件一边是目录）时拒绝创建，并返回冲突列表。需要管理员权限。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.BucketInput",
+                "description": "桶名称与目录",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "桶名称与目录",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BucketCreated"
+                }
+              }
+            },
+            "description": "桶已创建，目录已合并"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "名称或目录无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BucketConflictResponse"
+                }
+              }
+            },
+            "description": "名称已被使用，或目录间存在同名冲突"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建桶",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/buckets/{id}": {
+      "delete": {
+        "description": "删除桶及其全部用户授权。服务器上的目录与文件不会被删除。需要管理员权限。",
+        "parameters": [
+          {
+            "description": "桶 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "桶已删除，无响应体"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "桶不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "删除桶",
+        "tags": [
+          "管理"
+        ]
+      },
+      "put": {
+        "description": "修改桶名称或目录列表（整表替换，第一个可用目录为主目录）。\n新增的目录会与现有目录合并，存在同名冲突时拒绝修改；移出的目录不会被删除，只是不再同步。需要管理员权限。",
+        "parameters": [
+          {
+            "description": "桶 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api.BucketInput",
+                "description": "桶名称与目录",
+                "summary": "body"
+              }
+            }
+          },
+          "description": "桶名称与目录",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BucketCreated"
+                }
+              }
+            },
+            "description": "桶已更新，新增目录已合并"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "名称或目录无效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "桶不存在"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.BucketConflictResponse"
+                }
+              }
+            },
+            "description": "名称已被使用，或目录间存在同名冲突"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "更新桶",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/buckets/{id}/sync": {
+      "post": {
+        "description": "立即在桶的各目录之间补齐缺失或较旧的文件（以最新修改的副本为准），不会删除任何文件。\n通过 SMB 或直接在服务器上做的修改，以及目录离线期间的变化，都靠同步补齐；服务也会定期自动同步。需要管理员权限。",
+        "parameters": [
+          {
+            "description": "桶 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vfs.SyncResult"
+                }
+              }
+            },
+            "description": "同步完成"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api.ErrorResponse"
+                }
+              }
+            },
+            "description": "桶不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "同步桶",
         "tags": [
           "管理"
         ]
@@ -1264,7 +1724,7 @@
     },
     "/admin/users": {
       "get": {
-        "description": "返回全部用户及其授权目录；仅管理员可见本地路径。需要管理员权限。",
+        "description": "返回全部用户及其授权桶；仅管理员可见本地路径。需要管理员权限。",
         "responses": {
           "200": {
             "content": {
@@ -1277,7 +1737,7 @@
                 }
               }
             },
-            "description": "全部用户及其授权目录（仅管理员可见本地路径）"
+            "description": "全部用户及其授权桶（仅管理员可见本地路径）"
           },
           "401": {
             "content": {
@@ -1311,18 +1771,18 @@
         ]
       },
       "post": {
-        "description": "创建用户并设置其授权目录与角色。\n用户名 1 至 32 位，可用字母、数字、下划线、点和横线；密码至少 6 位。需要管理员权限。",
+        "description": "创建用户并设置其授权桶与角色。\n用户名 1 至 32 位，可用字母、数字、下划线、点和横线；密码至少 6 位。需要管理员权限。",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/api.UserInput",
-                "description": "用户信息与授权目录",
+                "description": "用户信息与授权桶",
                 "summary": "body"
               }
             }
           },
-          "description": "用户信息与授权目录",
+          "description": "用户信息与授权桶",
           "required": true
         },
         "responses": {
@@ -1370,7 +1830,7 @@
     },
     "/admin/users/{id}": {
       "delete": {
-        "description": "同时删除该用户的授权目录、访问令牌与 S3 密钥。\n不允许删除最后一个管理员或当前登录用户。需要管理员权限。",
+        "description": "同时删除该用户的授权桶、访问令牌与 S3 密钥。\n不允许删除最后一个管理员或当前登录用户。需要管理员权限。",
         "parameters": [
           {
             "description": "用户 ID",
@@ -1384,7 +1844,7 @@
         ],
         "responses": {
           "204": {
-            "description": "用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体"
+            "description": "用户及其授权桶、访问令牌、S3 密钥均已删除，无响应体"
           },
           "400": {
             "content": {
@@ -1428,7 +1888,7 @@
         ]
       },
       "put": {
-        "description": "更新用户信息与授权目录（整表替换）。\npassword 留空表示不修改密码；角色或启用状态变化会让该用户重新登录。需要管理员权限。",
+        "description": "更新用户信息与授权桶（整表替换）。\npassword 留空表示不修改密码；角色或启用状态变化会让该用户重新登录。需要管理员权限。",
         "parameters": [
           {
             "description": "用户 ID",
@@ -1445,12 +1905,12 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/api.UserInput",
-                "description": "用户信息与授权目录（整表替换）",
+                "description": "用户信息与授权桶（整表替换）",
                 "summary": "body"
               }
             }
           },
-          "description": "用户信息与授权目录（整表替换）",
+          "description": "用户信息与授权桶（整表替换）",
           "required": true
         },
         "responses": {
@@ -3390,7 +3850,7 @@
       "name": "系统"
     },
     {
-      "description": "用户与授权目录、缓存与搜索索引，需要管理员权限",
+      "description": "用户与授权桶、桶与目录、缓存与搜索索引，需要管理员权限",
       "name": "管理"
     }
   ]

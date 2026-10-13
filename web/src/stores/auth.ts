@@ -9,7 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const token = computed(() => tokenRef.value)
   const isLoggedIn = computed(() => !!token.value && !!user.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
-  const mountNames = computed(() => (user.value?.mounts ?? []).map((m) => m.name))
+  const mountNames = computed(() => (user.value?.grants ?? []).map((m) => m.name))
 
   let mePromise: Promise<User | null> | null = null
 

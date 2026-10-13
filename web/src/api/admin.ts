@@ -1,6 +1,22 @@
 import { http } from './http'
-import { arr, normUser } from './normalize'
-import type { BrowseResponse, CacheStats, CleanRequest, CleanResult, IndexStatus, User, UserInput } from './types'
+import { arr, normBucket, normSync, normUser } from './normalize'
+import type {
+  BrowseResponse,
+  BucketInput,
+  BucketSaved,
+  BucketView,
+  CacheStats,
+  CleanRequest,
+  CleanResult,
+  IndexStatus,
+  SyncResult,
+  User,
+  UserInput,
+} from './types'
+
+function normSaved(r: BucketSaved): BucketSaved {
+  return { bucket: normBucket(r.bucket), sync: normSync(r.sync) }
+}
 
 export const adminApi = {
   async users(): Promise<User[]> {
@@ -14,6 +30,22 @@ export const adminApi = {
   },
   deleteUser(id: number): Promise<void> {
     return http.del<void>(`/admin/users/${id}`)
+  },
+  async buckets(): Promise<BucketView[]> {
+    return arr(await http.get<BucketView[]>('/admin/buckets')).map(normBucket)
+  },
+  /** 冲突时抛出 status=409 的 ApiError，data.conflicts 为冲突列表 */
+  async createBucket(input: BucketInput): Promise<BucketSaved> {
+    return normSaved(await http.post<BucketSaved>('/admin/buckets', input, { silent: true }))
+  },
+  async updateBucket(id: number, input: BucketInput): Promise<BucketSaved> {
+    return normSaved(await http.put<BucketSaved>(`/admin/buckets/${id}`, input, { silent: true }))
+  },
+  deleteBucket(id: number): Promise<void> {
+    return http.del<void>(`/admin/buckets/${id}`)
+  },
+  async syncBucket(id: number): Promise<SyncResult> {
+    return normSync(await http.post<SyncResult>(`/admin/buckets/${id}/sync`))
   },
   async browse(path?: string): Promise<BrowseResponse> {
     const r = await http.get<BrowseResponse>('/admin/browse', { query: { path } })

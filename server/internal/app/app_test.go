@@ -178,12 +178,34 @@ type mountIn struct {
 	Writable bool   `json:"writable"`
 }
 
+// bucket returns the id of the bucket called name, creating it over paths.
+func (e *tenv) bucket(name string, paths ...string) uint {
+	e.t.Helper()
+	rec := e.do("GET", "/api/v1/admin/buckets", e.admin, nil)
+	expect(e.t, rec, 200)
+	for _, b := range decode[[]obj](e.t, rec) {
+		if b["name"] == name {
+			return uint(b["id"].(float64))
+		}
+	}
+	rec = e.do("POST", "/api/v1/admin/buckets", e.admin, obj{"name": name, "paths": paths})
+	expect(e.t, rec, 201)
+	return uint(decode[obj](e.t, rec)["bucket"].(obj)["id"].(float64))
+}
+
+// grants turns mounts into the grants of a user request, creating buckets.
+func (e *tenv) grants(mounts ...mountIn) []obj {
+	e.t.Helper()
+	out := []obj{}
+	for _, m := range mounts {
+		out = append(out, obj{"bucket_id": e.bucket(m.Name, m.Path), "writable": m.Writable})
+	}
+	return out
+}
+
 func (e *tenv) createUser(name, pw, role string, mounts ...mountIn) uint {
 	e.t.Helper()
-	if mounts == nil {
-		mounts = []mountIn{}
-	}
-	rec := e.do("POST", "/api/v1/admin/users", e.admin, obj{"username": name, "password": pw, "role": role, "mounts": mounts})
+	rec := e.do("POST", "/api/v1/admin/users", e.admin, obj{"username": name, "password": pw, "role": role, "grants": e.grants(mounts...)})
 	expect(e.t, rec, 201)
 	return uint(decode[obj](e.t, rec)["id"].(float64))
 }
@@ -274,7 +296,7 @@ func TestMeHidesMountPaths(t *testing.T) {
 		t.Fatalf("/auth/me leaks local paths to a non-admin: %s", rec.Body.String())
 	}
 	me := decode[obj](t, rec)
-	if me["role"] != "user" || len(me["mounts"].([]any)) != 2 {
+	if me["role"] != "user" || len(me["grants"].([]any)) != 2 {
 		t.Fatalf("me: %v", me)
 	}
 	for _, k := range []string{"password_hash", "PasswordHash", "token_version", "TokenVersion"} {
@@ -288,14 +310,13 @@ func TestMeHidesMountPaths(t *testing.T) {
 	if strings.Contains(rec.Body.String(), e.dir) {
 		t.Fatalf("login response leaks local paths: %s", rec.Body.String())
 	}
-	// Admins see their own mount paths.
-	e.do("PUT", "/api/v1/admin/users/1", e.admin, obj{"username": "admin", "role": "admin",
-		"mounts": []mountIn{{Name: "r", Path: e.ro}}})
-	rec = e.do("GET", "/api/v1/auth/me", e.admin, nil)
+	// Paths are only exposed through the admin bucket endpoints.
+	rec = e.do("GET", "/api/v1/admin/buckets", e.admin, nil)
 	expect(t, rec, 200)
 	if !strings.Contains(rec.Body.String(), e.ro) {
-		t.Fatalf("admin should see mount path: %s", rec.Body.String())
+		t.Fatalf("admin should see bucket paths: %s", rec.Body.String())
 	}
+	expect(t, e.do("GET", "/api/v1/admin/buckets", alice, nil), 403)
 }
 
 func TestChangePassword(t *testing.T) {
@@ -323,17 +344,13 @@ func TestAdminUsers(t *testing.T) {
 	users := "/api/v1/admin/users"
 
 	// validation
+	roID := e.bucket("只读", e.ro)
 	expect(t, e.do("POST", users, e.admin, obj{"username": "bob", "password": "bob-pw1",
-		"mounts": []mountIn{{Name: "x", Path: filepath.Join(e.dir, "missing")}}}), 400)
+		"grants": []obj{{"bucket_id": 999}}}), 400)
 	expect(t, e.do("POST", users, e.admin, obj{"username": "bob", "password": "bob-pw1",
-		"mounts": []mountIn{{Name: "x", Path: "relative/dir"}}}), 400)
-	writeFile(t, filepath.Join(e.dir, "afile"), "x")
+		"grants": []obj{{"bucket_id": roID}, {"bucket_id": roID, "writable": true}}}), 400)
 	expect(t, e.do("POST", users, e.admin, obj{"username": "bob", "password": "bob-pw1",
-		"mounts": []mountIn{{Name: "x", Path: filepath.Join(e.dir, "afile")}}}), 400)
-	expect(t, e.do("POST", users, e.admin, obj{"username": "bob", "password": "bob-pw1",
-		"mounts": []mountIn{{Name: "x", Path: e.ro}, {Name: "X", Path: e.rw}}}), 400)
-	expect(t, e.do("POST", users, e.admin, obj{"username": "bob", "password": "bob-pw1",
-		"mounts": []mountIn{{Name: "a/b", Path: e.ro}}}), 400)
+		"grants": []obj{{"writable": true}}}), 400)
 	expect(t, e.do("POST", users, e.admin, obj{"username": "alice", "password": "whatever1"}), 409)
 	for _, name := range []string{"Alice", "ALICE", "Admin"} {
 		rec := e.do("POST", users, e.admin, obj{"username": name, "password": "whatever1"})
@@ -352,8 +369,8 @@ func TestAdminUsers(t *testing.T) {
 	if len(list) != 2 || list[1]["username"] != "alice" {
 		t.Fatalf("users: %v", list)
 	}
-	if !strings.Contains(rec.Body.String(), e.rw) || strings.Contains(rec.Body.String(), "password") {
-		t.Fatalf("admin list should show mount paths and no password data: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "可写") || strings.Contains(rec.Body.String(), "password") {
+		t.Fatalf("admin list should show grants and no password data: %s", rec.Body.String())
 	}
 	aliceID := uint(list[1]["id"].(float64))
 
@@ -376,19 +393,20 @@ func TestAdminUsers(t *testing.T) {
 	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "admin"}), 409)
 	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "ADMIN"}), 409)
 	// changing the case of one's own name is allowed
-	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "Alice", "role": "user",
-		"mounts": []mountIn{{Name: "只读", Path: e.ro}, {Name: "可写", Path: e.rw, Writable: true}}}), 200)
-	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user",
-		"mounts": []mountIn{{Name: "只读", Path: e.ro}, {Name: "可写", Path: e.rw, Writable: true}}}), 200)
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "Alice", "role": "user"}), 200)
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user"}), 200)
+	if rec := e.do("GET", "/api/v1/fs/list?path=/", alice, nil); len(decode[obj](t, rec)["entries"].([]any)) != 2 {
+		t.Fatal("omitting grants must keep them")
+	}
 	expect(t, e.do("PUT", users+"/999", e.admin, obj{"username": "zed"}), 404)
 	expect(t, e.do("PUT", users+"/abc", e.admin, obj{"username": "zed"}), 400)
 
-	// update keeps the password when empty; mounts are replaced
+	// update keeps the password when empty; grants are replaced
 	rec = e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user",
-		"mounts": []mountIn{{Name: "只读", Path: e.ro}}})
+		"grants": e.grants(mountIn{Name: "只读", Path: e.ro})})
 	expect(t, rec, 200)
-	if n := len(decode[obj](t, rec)["mounts"].([]any)); n != 1 {
-		t.Fatalf("mounts after update = %d", n)
+	if gs := decode[obj](t, rec)["grants"].([]any); len(gs) != 1 || gs[0].(obj)["name"] != "只读" {
+		t.Fatalf("grants after update = %v", gs)
 	}
 	expect(t, e.do("GET", "/api/v1/auth/me", alice, nil), 200) // no role/disabled change: session still valid
 	rec = e.do("GET", "/api/v1/fs/list?path=/", alice, nil)
@@ -1448,4 +1466,107 @@ func TestMedia(t *testing.T) {
 	expect(t, e.do("DELETE", "/api/v1/media/hls/"+id, alice, nil), 204)
 	expect(t, e.do("DELETE", "/api/v1/media/hls/"+id, alice, nil), 204)
 	expect(t, e.do("GET", "/api/v1/media/hls/"+id+"/0.ts", alice, nil), 200)
+}
+
+func TestAdminBuckets(t *testing.T) {
+	e := newEnv(t)
+	buckets := "/api/v1/admin/buckets"
+	a, b, c := filepath.Join(e.dir, "a"), filepath.Join(e.dir, "b"), filepath.Join(e.dir, "c")
+	writeFile(t, filepath.Join(a, "docs", "1.txt"), "one")
+	writeFile(t, filepath.Join(a, "same.txt"), "same")
+	writeFile(t, filepath.Join(b, "docs", "2.txt"), "two")
+	writeFile(t, filepath.Join(b, "same.txt"), "same")
+	writeFile(t, filepath.Join(c, "docs", "1.txt"), "different")
+
+	// validation
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "x", "paths": []string{filepath.Join(e.dir, "missing")}}), 400)
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "x", "paths": []string{"relative"}}), 400)
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "x", "paths": []string{}}), 400)
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "a/b", "paths": []string{a}}), 400)
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "x", "paths": []string{a, filepath.Join(a, "docs")}}), 400)
+
+	// Conflicting content is refused and nothing is copied.
+	rec := e.do("POST", buckets, e.admin, obj{"name": "资料", "paths": []string{a, b, c}})
+	expect(t, rec, 409)
+	cs := decode[obj](t, rec)["conflicts"].([]any)
+	if len(cs) != 1 || cs[0].(obj)["path"] != "/docs/1.txt" {
+		t.Fatalf("conflicts %v", cs)
+	}
+	if _, err := os.Stat(filepath.Join(a, "docs", "2.txt")); err == nil {
+		t.Fatal("refused merge must not copy anything")
+	}
+
+	// Non-conflicting directories are merged.
+	rec = e.do("POST", buckets, e.admin, obj{"name": "资料", "paths": []string{a, b}})
+	expect(t, rec, 201)
+	created := decode[obj](t, rec)
+	id := uint(created["bucket"].(obj)["id"].(float64))
+	if n := created["sync"].(obj)["copied"].(float64); n != 2 {
+		t.Fatalf("copied %v", created["sync"])
+	}
+	for _, d := range []string{a, b} {
+		for _, f := range []string{"docs/1.txt", "docs/2.txt", "same.txt"} {
+			if _, err := os.Stat(filepath.Join(d, f)); err != nil {
+				t.Fatalf("%s missing in %s", f, d)
+			}
+		}
+	}
+	expect(t, e.do("POST", buckets, e.admin, obj{"name": "资料", "paths": []string{c}}), 409)
+
+	// Writes through the API land in both directories.
+	e.createUser("alice", "alice-pw", "user", mountIn{Name: "资料", Path: a, Writable: true})
+	alice := e.login("alice", "alice-pw")
+	expect(t, e.do("PUT", "/api/v1/fs/file?path="+q("/资料/new/up.txt"), alice, "uploaded"), 201)
+	if got, _ := os.ReadFile(filepath.Join(b, "new", "up.txt")); string(got) != "uploaded" {
+		t.Fatalf("backup copy: %q", got)
+	}
+	expect(t, e.do("POST", "/api/v1/fs/delete", alice, obj{"paths": []string{"/资料/docs"}}), 200)
+	if _, err := os.Stat(filepath.Join(b, "docs")); !os.IsNotExist(err) {
+		t.Fatal("delete not replicated")
+	}
+
+	// Out-of-band changes are repaired by a sync.
+	writeFile(t, filepath.Join(b, "smb.txt"), "via smb")
+	rec = e.do("POST", fmt.Sprintf("%s/%d/sync", buckets, id), e.admin, nil)
+	expect(t, rec, 200)
+	if got, _ := os.ReadFile(filepath.Join(a, "smb.txt")); string(got) != "via smb" {
+		t.Fatalf("sync: %q", got)
+	}
+
+	// Adding a conflicting directory is refused; reordering is not a merge.
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", buckets, id), e.admin, obj{"name": "资料", "paths": []string{a, b, c}}), 200)
+	writeFile(t, filepath.Join(e.dir, "d", "same.txt"), "not the same")
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", buckets, id), e.admin,
+		obj{"name": "资料", "paths": []string{a, b, filepath.Join(e.dir, "d")}}), 409)
+	rec = e.do("PUT", fmt.Sprintf("%s/%d", buckets, id), e.admin, obj{"name": "文档", "paths": []string{b, a}})
+	expect(t, rec, 200)
+
+	// The listing shows directory status and users; the offline primary falls back.
+	must(t, os.Rename(b, b+".off"))
+	rec = e.do("GET", buckets, e.admin, nil)
+	expect(t, rec, 200)
+	list := decode[[]obj](t, rec)
+	if len(list) != 1 || list[0]["name"] != "文档" || list[0]["users"].(float64) != 1 {
+		t.Fatalf("list %v", list)
+	}
+	dirs := list[0]["dirs"].([]any)
+	if dirs[0].(obj)["available"] != false || dirs[1].(obj)["active"] != true {
+		t.Fatalf("dirs %v", dirs)
+	}
+	rec = e.do("GET", "/api/v1/fs/list?path="+q("/文档"), alice, nil)
+	expect(t, rec, 200)
+	if !strings.Contains(rec.Body.String(), "smb.txt") {
+		t.Fatalf("fallback listing %s", rec.Body.String())
+	}
+	must(t, os.Rename(b+".off", b))
+
+	// Deleting the bucket revokes access but keeps the files.
+	expect(t, e.do("DELETE", fmt.Sprintf("%s/%d", buckets, id), e.admin, nil), 204)
+	expect(t, e.do("DELETE", fmt.Sprintf("%s/%d", buckets, id), e.admin, nil), 404)
+	if rec := e.do("GET", "/api/v1/fs/list?path=/", alice, nil); len(decode[obj](t, rec)["entries"].([]any)) != 0 {
+		t.Fatal("grant survived bucket deletion")
+	}
+	if _, err := os.Stat(filepath.Join(a, "smb.txt")); err != nil {
+		t.Fatal("bucket deletion removed files")
+	}
 }

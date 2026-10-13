@@ -19,6 +19,7 @@ import {
 import { RefreshOutline } from '@vicons/ionicons5'
 import type { CacheBucketStats, CacheSession, CacheStats, IndexStatus } from '@/api/types'
 import { adminApi } from '@/api/admin'
+import BucketsCard from '@/components/admin/BucketsCard.vue'
 import { usePolling } from '@/composables/usePolling'
 import { formatDate, formatNumber, formatRelative, formatSize } from '@/utils/format'
 
@@ -115,7 +116,9 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <h2 class="page-title">系统状态</h2>
+    <h2 class="page-title">系统管理</h2>
+
+    <buckets-card class="mb" />
 
     <n-grid cols="1 l:3" responsive="screen" :x-gap="16" :y-gap="16">
       <n-grid-item>

@@ -26,7 +26,7 @@
 // @description - 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。
 // @description - 浏览器登录后自动携带的会话 Cookie。
 // @description
-// @description **路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的目录（挂载名），例如 `/电影/2024/a.mkv`。
+// @description **路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的桶（桶名），例如 `/电影/2024/a.mkv`。
 // @description
 // @description **预览图**：`GET /media/thumb` 只接收内容摘要与签名，不接收文件路径，且不要求登录，因此可直接放进 `<img>` 标签。
 // @description
@@ -48,7 +48,7 @@
 // @tag.name        系统
 // @tag.description 系统与服务状态（用于挂载向导）
 // @tag.name        管理
-// @tag.description 用户与授权目录、缓存与搜索索引，需要管理员权限
+// @tag.description 用户与授权桶、桶与目录、缓存与搜索索引，需要管理员权限
 // @securityDefinitions.apikey bearerAuth
 // @in                         header
 // @name                       Authorization

@@ -53,12 +53,12 @@ func newEnv(t *testing.T) *env {
 	mounts := func(rw, ro string) []store.Mount {
 		return []store.Mount{{Name: "rw", Path: rw, Writable: true}, {Name: "只读", Path: ro}}
 	}
-	u := &store.User{Username: "alice", PasswordHash: hash, Role: store.RoleUser, Mounts: mounts(e.rw, e.ro)}
+	u := &store.User{Username: "alice", PasswordHash: hash, Role: store.RoleUser, Grants: grantMounts(t, st, mounts(e.rw, e.ro)...)}
 	if err := st.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
-	// bob has a mount with the same name pointing elsewhere (lock namespaces must not collide).
-	b := &store.User{Username: "bob", PasswordHash: hash, Role: store.RoleUser, Mounts: mounts(mk("bob-rw"), mk("bob-ro"))}
+	// bob is granted the same buckets (lock namespaces are per user and must not collide).
+	b := &store.User{Username: "bob", PasswordHash: hash, Role: store.RoleUser, Grants: grantMounts(t, st, mounts(e.rw, e.ro)...)}
 	if err := st.CreateUser(b); err != nil {
 		t.Fatal(err)
 	}
@@ -383,11 +383,11 @@ func TestWebDAVLocks(t *testing.T) {
 	if resp.StatusCode != 201 && resp.StatusCode != 204 {
 		t.Fatalf("PUT with token: %d", resp.StatusCode)
 	}
-	// Another user with an identically named mount is unaffected.
+	// Another user of the same bucket is unaffected.
 	req, _ := http.NewRequest("PUT", e.srv.URL+"/dav/rw/locked.txt", strings.NewReader("bob"))
 	req.SetBasicAuth("bob", "secret-pw")
 	r2, err := http.DefaultClient.Do(req)
-	if err != nil || r2.StatusCode != 201 {
+	if err != nil || (r2.StatusCode != 201 && r2.StatusCode != 204) {
 		t.Fatalf("bob PUT blocked by alice's lock: %v %d", err, r2.StatusCode)
 	}
 	r2.Body.Close()
@@ -492,4 +492,33 @@ func TestWebDAVLargeDir(t *testing.T) {
 		t.Fatalf("readdir: %v %d", err, len(fis))
 	}
 	t.Logf("PROPFIND depth 1 with 5000 entries: %v", time.Since(start))
+}
+
+// grantMounts creates a bucket for every mount (reusing one with the same
+// name) and returns the matching grants.
+func grantMounts(t testing.TB, st *store.Store, mounts ...store.Mount) []store.Grant {
+	t.Helper()
+	bs, err := st.ListBuckets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []store.Grant
+	for _, m := range mounts {
+		var id uint
+		for _, b := range bs {
+			if b.Name == m.Name {
+				id = b.ID
+			}
+		}
+		if id == 0 {
+			b := &store.Bucket{Name: m.Name, Paths: m.Dirs()}
+			if err := st.CreateBucket(b); err != nil {
+				t.Fatal(err)
+			}
+			bs = append(bs, *b)
+			id = b.ID
+		}
+		out = append(out, store.Grant{BucketID: id, Writable: m.Writable})
+	}
+	return out
 }

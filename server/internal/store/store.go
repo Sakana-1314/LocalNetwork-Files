@@ -20,12 +20,23 @@ import (
 var (
 	ErrNotFound = errors.New("not found")
 	ErrConflict = errors.New("already exists")
+	ErrInvalid  = errors.New("invalid")
 )
+
+// invalidError carries a user-facing message and matches ErrInvalid.
+type invalidError string
+
+func (e invalidError) Error() string        { return string(e) }
+func (e invalidError) Is(target error) bool { return target == ErrInvalid }
+
+func invalidf(format string, args ...any) error { return invalidError(fmt.Sprintf(format, args...)) }
 
 // Event is published after data that other subsystems depend on changes.
 type Event int
 
 const (
+	// EventUsersChanged covers users, their grants and buckets: anything that
+	// changes which directories are exposed to whom.
 	EventUsersChanged Event = iota + 1
 )
 
@@ -52,11 +63,14 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&User{}, &Mount{}, &AccessToken{}, &S3Key{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Bucket{}, &Grant{}, &AccessToken{}, &S3Key{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	s := &Store{db: db}
 	if err := s.dropHashedTokens(); err != nil {
+		return nil, err
+	}
+	if err := s.migrateMounts(); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -201,105 +215,146 @@ func (s *Store) CountUsers() (int64, error) {
 	return n, err
 }
 
+func (s *Store) usersQuery() *gorm.DB {
+	return s.db.Preload("Grants", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).Preload("Grants.Bucket")
+}
+
+// resolve fills the derived grant names and the runtime mounts of a loaded user.
+func resolve(u *User) {
+	u.Mounts = nil
+	grants := u.Grants[:0]
+	for _, g := range u.Grants {
+		if g.Bucket == nil {
+			continue
+		}
+		g.Name = g.Bucket.Name
+		grants = append(grants, g)
+		ps := g.Bucket.Paths
+		if len(ps) == 0 {
+			continue
+		}
+		u.Mounts = append(u.Mounts, Mount{
+			BucketID: g.BucketID, Name: g.Bucket.Name, Path: ps[0],
+			Mirrors: append([]string(nil), ps[1:]...), Writable: g.Writable,
+		})
+	}
+	for i := range grants {
+		grants[i].Bucket = nil
+	}
+	u.Grants = grants
+}
+
 func (s *Store) ListUsers() ([]User, error) {
 	var users []User
-	err := s.db.Preload("Mounts", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).Order("id").Find(&users).Error
+	err := s.usersQuery().Order("id").Find(&users).Error
+	for i := range users {
+		resolve(&users[i])
+	}
 	return users, err
 }
 
 func (s *Store) GetUser(id uint) (*User, error) {
 	var u User
-	if err := s.db.Preload("Mounts", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).First(&u, id).Error; err != nil {
+	if err := s.usersQuery().First(&u, id).Error; err != nil {
 		return nil, notFound(err)
 	}
+	resolve(&u)
 	return &u, nil
 }
 
 func (s *Store) GetUserByName(name string) (*User, error) {
 	var u User
-	if err := s.db.Preload("Mounts", func(db *gorm.DB) *gorm.DB { return db.Order("id") }).Where("username = ? COLLATE NOCASE", name).First(&u).Error; err != nil {
+	if err := s.usersQuery().Where("username = ? COLLATE NOCASE", name).First(&u).Error; err != nil {
 		return nil, notFound(err)
 	}
+	resolve(&u)
 	return &u, nil
 }
 
-// ValidateMounts normalizes mount definitions in place.
-func ValidateMounts(ms []Mount) error {
-	seen := map[string]bool{}
-	for i := range ms {
-		m := &ms[i]
-		m.Name = strings.TrimSpace(m.Name)
-		if m.Name == "" || m.Name == "." || m.Name == ".." || strings.ContainsAny(m.Name, "/\\\x00") ||
-			utf8.RuneCountInString(m.Name) > 128 {
-			return fmt.Errorf("无效的目录名称 %q", m.Name)
+// validateGrants checks that every grant names an existing bucket at most once.
+func validateGrants(tx *gorm.DB, gs []Grant) error {
+	seen := map[uint]bool{}
+	for i := range gs {
+		g := &gs[i]
+		if seen[g.BucketID] {
+			return invalidf("桶重复授权: %d", g.BucketID)
 		}
-		if seen[strings.ToLower(m.Name)] {
-			return fmt.Errorf("目录名称重复: %s", m.Name)
+		seen[g.BucketID] = true
+		var n int64
+		if err := tx.Model(&Bucket{}).Where("id = ?", g.BucketID).Count(&n).Error; err != nil {
+			return err
 		}
-		seen[strings.ToLower(m.Name)] = true
-		if !filepath.IsAbs(m.Path) || strings.ContainsRune(m.Path, 0) {
-			return fmt.Errorf("目录 %s 的路径必须是绝对路径", m.Name)
+		if n == 0 {
+			return invalidf("桶 %d 不存在", g.BucketID)
 		}
-		m.Path = filepath.Clean(m.Path)
-		m.ID = 0
+		g.ID, g.Bucket, g.Name = 0, nil, ""
 	}
 	return nil
 }
 
-func (s *Store) CreateUser(u *User) error {
-	if err := ValidateMounts(u.Mounts); err != nil {
-		return err
-	}
-	err := s.db.Create(u).Error
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
-		return ErrConflict
-	}
-	if err == nil {
-		s.publish(EventUsersChanged)
-	}
-	return err
+func isUnique(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "unique")
 }
 
-// UpdateUser saves the user's scalar fields and, when mounts != nil, replaces its mounts.
-func (s *Store) UpdateUser(u *User, mounts []Mount) error {
-	if mounts != nil {
-		if err := ValidateMounts(mounts); err != nil {
+func (s *Store) CreateUser(u *User) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := validateGrants(tx, u.Grants); err != nil {
 			return err
 		}
+		return tx.Create(u).Error
+	})
+	if isUnique(err) {
+		return ErrConflict
 	}
+	if err != nil {
+		return err
+	}
+	if fresh, err := s.GetUser(u.ID); err == nil {
+		*u = *fresh
+	}
+	s.publish(EventUsersChanged)
+	return nil
+}
+
+// UpdateUser saves the user's scalar fields and, when grants != nil, replaces its grants.
+func (s *Store) UpdateUser(u *User, grants []Grant) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(u).Select("Username", "PasswordHash", "Role", "Disabled", "TokenVersion").Updates(u).Error; err != nil {
 			return err
 		}
-		if mounts == nil {
+		if grants == nil {
 			return nil
 		}
-		if err := tx.Where("user_id = ?", u.ID).Delete(&Mount{}).Error; err != nil {
+		if err := validateGrants(tx, grants); err != nil {
 			return err
 		}
-		for i := range mounts {
-			mounts[i].UserID = u.ID
+		if err := tx.Where("user_id = ?", u.ID).Delete(&Grant{}).Error; err != nil {
+			return err
 		}
-		if len(mounts) > 0 {
-			if err := tx.Create(&mounts).Error; err != nil {
-				return err
-			}
+		for i := range grants {
+			grants[i].UserID = u.ID
 		}
-		u.Mounts = mounts
+		if len(grants) > 0 {
+			return tx.Create(&grants).Error
+		}
 		return nil
 	})
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
+	if isUnique(err) {
 		return ErrConflict
 	}
-	if err == nil {
-		s.publish(EventUsersChanged)
+	if err != nil {
+		return err
 	}
-	return err
+	if fresh, err := s.GetUser(u.ID); err == nil {
+		*u = *fresh
+	}
+	s.publish(EventUsersChanged)
+	return nil
 }
 
 func (s *Store) DeleteUser(id uint) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		for _, m := range []any{&Mount{}, &AccessToken{}, &S3Key{}} {
+		for _, m := range []any{&Grant{}, &AccessToken{}, &S3Key{}} {
 			if err := tx.Where("user_id = ?", id).Delete(m).Error; err != nil {
 				return err
 			}
@@ -316,13 +371,239 @@ func (s *Store) DeleteUser(id uint) error {
 	return err
 }
 
-// AllMountPaths returns the distinct local directories granted to any enabled user.
+// AllMountPaths returns the distinct active directories of every bucket
+// granted to an enabled user.
 func (s *Store) AllMountPaths() ([]string, error) {
+	var bs []Bucket
+	err := s.db.Model(&Bucket{}).
+		Where("id IN (?)", s.db.Model(&Grant{}).Select("grants.bucket_id").
+			Joins("JOIN users ON users.id = grants.user_id AND users.disabled = ?", false)).
+		Order("id").Find(&bs).Error
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
 	var paths []string
-	err := s.db.Model(&Mount{}).
-		Joins("JOIN users ON users.id = mounts.user_id AND users.disabled = ?", false).
-		Distinct().Pluck("mounts.path", &paths).Error
-	return paths, err
+	for _, b := range bs {
+		if len(b.Paths) == 0 {
+			continue
+		}
+		p, _ := Mount{Path: b.Paths[0], Mirrors: b.Paths[1:]}.Active()
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
+// ---------- buckets ----------
+
+// ValidateBucket normalizes a bucket definition in place.
+func ValidateBucket(b *Bucket) error {
+	b.Name = strings.TrimSpace(b.Name)
+	if b.Name == "" || b.Name == "." || b.Name == ".." || strings.ContainsAny(b.Name, "/\\\x00") ||
+		utf8.RuneCountInString(b.Name) > 128 {
+		return invalidf("无效的桶名称 %q", b.Name)
+	}
+	if len(b.Paths) == 0 {
+		return invalidf("桶至少需要一个目录")
+	}
+	seen := map[string]bool{}
+	for i, p := range b.Paths {
+		if !filepath.IsAbs(p) || strings.ContainsRune(p, 0) {
+			return invalidf("目录必须是绝对路径: %s", p)
+		}
+		p = filepath.Clean(p)
+		if seen[p] {
+			return invalidf("目录重复: %s", p)
+		}
+		seen[p] = true
+		b.Paths[i] = p
+	}
+	for _, p := range b.Paths {
+		for _, q := range b.Paths {
+			if p != q && within(p, q) {
+				return invalidf("目录 %s 位于 %s 之内，不能互为备份", q, p)
+			}
+		}
+	}
+	return nil
+}
+
+func within(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func (s *Store) ListBuckets() ([]Bucket, error) {
+	var bs []Bucket
+	err := s.db.Order("id").Find(&bs).Error
+	return bs, err
+}
+
+func (s *Store) GetBucket(id uint) (*Bucket, error) {
+	var b Bucket
+	if err := s.db.First(&b, id).Error; err != nil {
+		return nil, notFound(err)
+	}
+	return &b, nil
+}
+
+// BucketUsers returns how many users each bucket is granted to.
+func (s *Store) BucketUsers() (map[uint]int, error) {
+	var rows []struct {
+		BucketID uint
+		N        int
+	}
+	err := s.db.Model(&Grant{}).Select("bucket_id, count(*) AS n").Group("bucket_id").Scan(&rows).Error
+	out := map[uint]int{}
+	for _, r := range rows {
+		out[r.BucketID] = r.N
+	}
+	return out, err
+}
+
+// bucketNameTaken compares names case-insensitively: they become directory
+// names under the user's virtual root, SMB share names and S3 bucket names.
+func bucketNameTaken(tx *gorm.DB, name string, exclude uint) (bool, error) {
+	var n int64
+	err := tx.Model(&Bucket{}).Where("name = ? COLLATE NOCASE AND id <> ?", name, exclude).Count(&n).Error
+	return n > 0, err
+}
+
+func (s *Store) CreateBucket(b *Bucket) error {
+	if err := ValidateBucket(b); err != nil {
+		return err
+	}
+	b.ID = 0
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if taken, err := bucketNameTaken(tx, b.Name, 0); err != nil {
+			return err
+		} else if taken {
+			return ErrConflict
+		}
+		return tx.Create(b).Error
+	})
+	if isUnique(err) {
+		return ErrConflict
+	}
+	if err == nil {
+		s.publish(EventUsersChanged)
+	}
+	return err
+}
+
+func (s *Store) UpdateBucket(b *Bucket) error {
+	if err := ValidateBucket(b); err != nil {
+		return err
+	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if taken, err := bucketNameTaken(tx, b.Name, b.ID); err != nil {
+			return err
+		} else if taken {
+			return ErrConflict
+		}
+		res := tx.Model(b).Select("Name", "PathsRaw").Updates(b)
+		if res.Error == nil && res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return res.Error
+	})
+	if isUnique(err) {
+		return ErrConflict
+	}
+	if err == nil {
+		s.publish(EventUsersChanged)
+	}
+	return err
+}
+
+// DeleteBucket removes the bucket and its grants. Files on disk are untouched.
+func (s *Store) DeleteBucket(id uint) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("bucket_id = ?", id).Delete(&Grant{}).Error; err != nil {
+			return err
+		}
+		res := tx.Delete(&Bucket{}, id)
+		if res.Error == nil && res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return res.Error
+	})
+	if err == nil {
+		s.publish(EventUsersChanged)
+	}
+	return err
+}
+
+// legacyMount is the per-user authorized directory used before buckets existed.
+type legacyMount struct {
+	UserID   uint
+	Name     string
+	Path     string
+	Writable bool
+}
+
+// migrateMounts turns the legacy per-user mounts table into buckets and grants:
+// every distinct directory becomes a bucket (named after the first mount that
+// used it, de-duplicated) and every mount a grant. The old table is dropped
+// afterwards so this runs once.
+func (s *Store) migrateMounts() error {
+	if !s.db.Migrator().HasTable("mounts") {
+		return nil
+	}
+	var ms []legacyMount
+	if err := s.db.Raw("SELECT user_id, name, path, writable FROM mounts ORDER BY id").Scan(&ms).Error; err != nil {
+		return fmt.Errorf("read legacy mounts: %w", err)
+	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		byPath := map[string]uint{}
+		var existing []Bucket
+		if err := tx.Find(&existing).Error; err != nil {
+			return err
+		}
+		for _, b := range existing {
+			if len(b.Paths) == 1 {
+				byPath[b.Paths[0]] = b.ID
+			}
+		}
+		for _, m := range ms {
+			p := filepath.Clean(m.Path)
+			id, ok := byPath[p]
+			if !ok {
+				name := strings.TrimSpace(m.Name)
+				for i := 2; ; i++ {
+					taken, err := bucketNameTaken(tx, name, 0)
+					if err != nil {
+						return err
+					}
+					if !taken {
+						break
+					}
+					name = fmt.Sprintf("%s-%d", strings.TrimSpace(m.Name), i)
+				}
+				b := &Bucket{Name: name, Paths: []string{p}}
+				if err := tx.Create(b).Error; err != nil {
+					return err
+				}
+				id, byPath[p] = b.ID, b.ID
+			}
+			g := &Grant{UserID: m.UserID, BucketID: id, Writable: m.Writable}
+			if err := tx.Where("user_id = ? AND bucket_id = ?", m.UserID, id).
+				Assign(Grant{Writable: m.Writable}).FirstOrCreate(g).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Exec("DROP TABLE mounts").Error
+	})
+	if err != nil {
+		return fmt.Errorf("migrate legacy mounts: %w", err)
+	}
+	if len(ms) > 0 {
+		slog.Info("store: converted authorized directories to buckets", "mounts", len(ms))
+	}
+	return nil
 }
 
 // ---------- access tokens ----------

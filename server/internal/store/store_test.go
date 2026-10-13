@@ -40,55 +40,131 @@ func (l *eventLog) take() []Event {
 	return out
 }
 
-func TestValidateMounts(t *testing.T) {
-	ok := []Mount{{ID: 7, Name: "  Photos ", Path: abs("data", "photos", "..", "pics") + string(filepath.Separator)}, {Name: "照片", Path: abs("x")}}
-	if err := ValidateMounts(ok); err != nil {
+func TestValidateBucket(t *testing.T) {
+	ok := &Bucket{ID: 7, Name: "  Photos ", Paths: []string{abs("data", "photos", "..", "pics") + string(filepath.Separator), abs("backup", "pics")}}
+	if err := ValidateBucket(ok); err != nil {
 		t.Fatal(err)
 	}
-	if ok[0].Name != "Photos" || ok[0].Path != abs("data", "pics") || ok[0].ID != 0 {
-		t.Fatalf("normalized: %+v", ok[0])
+	if ok.Name != "Photos" || ok.Paths[0] != abs("data", "pics") || ok.Paths[1] != abs("backup", "pics") {
+		t.Fatalf("normalized: %+v", ok)
 	}
-	bad := map[string][]Mount{
-		"empty":        {{Name: " ", Path: abs("a")}},
-		"dot":          {{Name: ".", Path: abs("a")}},
-		"dotdot":       {{Name: "..", Path: abs("a")}},
-		"slash":        {{Name: "a/b", Path: abs("a")}},
-		"backslash":    {{Name: `a\b`, Path: abs("a")}},
-		"nul":          {{Name: "a\x00b", Path: abs("a")}},
-		"too long":     {{Name: strings.Repeat("长", 129), Path: abs("a")}},
-		"relative":     {{Name: "a", Path: "relative/dir"}},
-		"empty path":   {{Name: "a", Path: ""}},
-		"nul path":     {{Name: "a", Path: abs("a\x00b")}},
-		"dup":          {{Name: "a", Path: abs("a")}, {Name: "a", Path: abs("b")}},
-		"dup case":     {{Name: "Music", Path: abs("a")}, {Name: "music", Path: abs("b")}},
-		"dup trimmed":  {{Name: "x", Path: abs("a")}, {Name: " x ", Path: abs("b")}},
-		"dup unicode":  {{Name: "Ärger", Path: abs("a")}, {Name: "ärger", Path: abs("b")}},
-		"second wrong": {{Name: "ok", Path: abs("a")}, {Name: "", Path: abs("b")}},
+	bad := map[string]*Bucket{
+		"empty":      {Name: " ", Paths: []string{abs("a")}},
+		"dot":        {Name: ".", Paths: []string{abs("a")}},
+		"dotdot":     {Name: "..", Paths: []string{abs("a")}},
+		"slash":      {Name: "a/b", Paths: []string{abs("a")}},
+		"backslash":  {Name: `a\b`, Paths: []string{abs("a")}},
+		"nul":        {Name: "a\x00b", Paths: []string{abs("a")}},
+		"too long":   {Name: strings.Repeat("长", 129), Paths: []string{abs("a")}},
+		"no paths":   {Name: "a"},
+		"relative":   {Name: "a", Paths: []string{"relative/dir"}},
+		"empty path": {Name: "a", Paths: []string{""}},
+		"nul path":   {Name: "a", Paths: []string{abs("a\x00b")}},
+		"dup path":   {Name: "a", Paths: []string{abs("a"), abs("a", ".")}},
+		"nested":     {Name: "a", Paths: []string{abs("a"), abs("a", "b")}},
+		"parent":     {Name: "a", Paths: []string{abs("a", "b"), abs("a")}},
 	}
-	for name, ms := range bad {
-		if err := ValidateMounts(ms); err == nil {
-			t.Errorf("%s: expected error", name)
+	for name, b := range bad {
+		if err := ValidateBucket(b); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: expected ErrInvalid, got %v", name, err)
 		}
 	}
-	if err := ValidateMounts(nil); err != nil {
+}
+
+// bucket creates a bucket for tests.
+func bucket(t *testing.T, st *Store, name string, paths ...string) *Bucket {
+	t.Helper()
+	b := &Bucket{Name: name, Paths: paths}
+	if err := st.CreateBucket(b); err != nil {
 		t.Fatal(err)
+	}
+	return b
+}
+
+func TestBucketCRUD(t *testing.T) {
+	st, _ := openTest(t)
+	ev := &eventLog{}
+	st.Subscribe(ev.add)
+
+	b := bucket(t, st, "照片", abs("p1"), abs("p2"))
+	if b.ID == 0 {
+		t.Fatal("no id")
+	}
+	if got := ev.take(); !reflect.DeepEqual(got, []Event{EventUsersChanged}) {
+		t.Fatalf("events %v", got)
+	}
+	if err := st.CreateBucket(&Bucket{Name: "照片", Paths: []string{abs("x")}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate name: %v", err)
+	}
+	if err := st.CreateBucket(&Bucket{Name: "music", Paths: []string{abs("m")}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateBucket(&Bucket{Name: "MUSIC", Paths: []string{abs("m2")}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("case-insensitive duplicate: %v", err)
+	}
+	ev.take()
+
+	g, err := st.GetBucket(b.ID)
+	if err != nil || g.Name != "照片" || !reflect.DeepEqual(g.Paths, []string{abs("p1"), abs("p2")}) {
+		t.Fatalf("get %v %+v", err, g)
+	}
+	g.Name, g.Paths = "图片", []string{abs("p2"), abs("p3")}
+	if err := st.UpdateBucket(g); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ = st.GetBucket(b.ID); g.Name != "图片" || !reflect.DeepEqual(g.Paths, []string{abs("p2"), abs("p3")}) {
+		t.Fatalf("after update %+v", g)
+	}
+	g.Name = "Music"
+	if err := st.UpdateBucket(g); !errors.Is(err, ErrConflict) {
+		t.Fatalf("rename conflict: %v", err)
+	}
+	if err := st.UpdateBucket(&Bucket{ID: 999, Name: "zz", Paths: []string{abs("z")}}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("update missing: %v", err)
+	}
+	bs, err := st.ListBuckets()
+	if err != nil || len(bs) != 2 || bs[0].Name != "图片" {
+		t.Fatalf("list %v %+v", err, bs)
+	}
+
+	u := &User{Username: "u", PasswordHash: "h", Grants: []Grant{{BucketID: b.ID, Writable: true}}}
+	if err := st.CreateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := st.BucketUsers(); n[b.ID] != 1 {
+		t.Fatalf("bucket users %v", n)
+	}
+	ev.take()
+	if err := st.DeleteBucket(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := ev.take(); !reflect.DeepEqual(got, []Event{EventUsersChanged}) {
+		t.Fatalf("events %v", got)
+	}
+	if g, _ := st.GetUser(u.ID); len(g.Grants) != 0 || len(g.Mounts) != 0 {
+		t.Fatalf("grants not cascaded: %+v", g)
+	}
+	if err := st.DeleteBucket(b.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("delete missing: %v", err)
 	}
 }
 
 func TestUserCRUD(t *testing.T) {
 	st, _ := openTest(t)
+	ba := bucket(t, st, "a", abs("data", "a"))
+	bb := bucket(t, st, "b", abs("data", "b"), abs("backup", "b"))
 	ev := &eventLog{}
 	st.Subscribe(ev.add)
 
 	if n, _ := st.CountUsers(); n != 0 {
 		t.Fatal("fresh store has users")
 	}
-	u := &User{Username: "alice", PasswordHash: "h", Role: RoleAdmin, Mounts: []Mount{
-		{Name: "b", Path: abs("data", "b"), Writable: true}, {Name: "a", Path: abs("data", "a")}}}
+	u := &User{Username: "alice", PasswordHash: "h", Role: RoleAdmin, Grants: []Grant{
+		{BucketID: bb.ID, Writable: true}, {BucketID: ba.ID}}}
 	if err := st.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
-	if u.ID == 0 || !u.IsAdmin() {
+	if u.ID == 0 || !u.IsAdmin() || len(u.Grants) != 2 || u.Grants[0].Name != "b" {
 		t.Fatalf("created %+v", u)
 	}
 	if got := ev.take(); !reflect.DeepEqual(got, []Event{EventUsersChanged}) {
@@ -97,8 +173,11 @@ func TestUserCRUD(t *testing.T) {
 	if err := st.CreateUser(&User{Username: "alice", PasswordHash: "h"}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate username: %v", err)
 	}
-	if err := st.CreateUser(&User{Username: "bad", PasswordHash: "h", Mounts: []Mount{{Name: "x", Path: "rel"}}}); err == nil {
-		t.Fatal("invalid mounts accepted")
+	if err := st.CreateUser(&User{Username: "bad", PasswordHash: "h", Grants: []Grant{{BucketID: 999}}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown bucket accepted: %v", err)
+	}
+	if err := st.CreateUser(&User{Username: "bad", PasswordHash: "h", Grants: []Grant{{BucketID: ba.ID}, {BucketID: ba.ID}}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("duplicate grant accepted: %v", err)
 	}
 	if len(ev.take()) != 0 {
 		t.Fatal("failed creates must not publish")
@@ -108,7 +187,11 @@ func TestUserCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.Username != "alice" || g.Role != RoleAdmin || len(g.Mounts) != 2 || g.Mounts[0].Name != "b" || !g.Mounts[0].Writable {
+	want := []Mount{
+		{BucketID: bb.ID, Name: "b", Path: abs("data", "b"), Mirrors: []string{abs("backup", "b")}, Writable: true},
+		{BucketID: ba.ID, Name: "a", Path: abs("data", "a")},
+	}
+	if g.Username != "alice" || g.Role != RoleAdmin || !reflect.DeepEqual(g.Mounts, want) {
 		t.Fatalf("get %+v", g)
 	}
 	if g2, err := st.GetUserByName("alice"); err != nil || g2.ID != u.ID || len(g2.Mounts) != 2 {
@@ -118,47 +201,36 @@ func TestUserCRUD(t *testing.T) {
 		t.Fatalf("missing by name: %v", err)
 	}
 	if _, err := st.GetUser(9999); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing by id: %v", err)
+		t.Fatal("missing user found")
 	}
 
-	// Scalar update without touching mounts.
-	g.Disabled = true
-	g.TokenVersion = 3
+	// Scalar update keeps grants; replacing grants works.
+	g.Disabled, g.TokenVersion = true, 3
 	if err := st.UpdateUser(g, nil); err != nil {
 		t.Fatal(err)
 	}
-	g, _ = st.GetUser(u.ID)
-	if !g.Disabled || g.TokenVersion != 3 || len(g.Mounts) != 2 {
+	if g, _ = st.GetUser(u.ID); !g.Disabled || g.TokenVersion != 3 || len(g.Grants) != 2 {
 		t.Fatalf("after scalar update %+v", g)
 	}
-	// Disabled is a bool: setting it back to false must persist (zero value).
-	g.Disabled = false
-	st.UpdateUser(g, nil)
-	if g, _ = st.GetUser(u.ID); g.Disabled {
-		t.Fatal("disabled=false not persisted")
-	}
-	// Replace mounts.
-	if err := st.UpdateUser(g, []Mount{{ID: 99, Name: "c", Path: abs("c")}}); err != nil {
+	if err := st.UpdateUser(g, []Grant{{BucketID: ba.ID, Writable: true}}); err != nil {
 		t.Fatal(err)
 	}
-	g, _ = st.GetUser(u.ID)
-	if len(g.Mounts) != 1 || g.Mounts[0].Name != "c" || g.Mounts[0].ID == 99 {
-		t.Fatalf("after mount replace %+v", g.Mounts)
+	if g, _ = st.GetUser(u.ID); len(g.Grants) != 1 || g.Grants[0].Name != "a" || !g.Mounts[0].Writable {
+		t.Fatalf("after grant replace %+v", g)
 	}
-	// Invalid mounts leave everything unchanged.
-	if err := st.UpdateUser(g, []Mount{{Name: "x", Path: abs("x")}, {Name: "X", Path: abs("y")}}); err == nil {
-		t.Fatal("dup mounts accepted on update")
+	if err := st.UpdateUser(g, []Grant{{BucketID: 999}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown bucket on update: %v", err)
 	}
-	if g, _ = st.GetUser(u.ID); len(g.Mounts) != 1 {
-		t.Fatal("failed update changed mounts")
+	if g, _ = st.GetUser(u.ID); len(g.Grants) != 1 {
+		t.Fatal("failed update changed grants")
 	}
-	// Empty (non-nil) mounts removes all.
-	if err := st.UpdateUser(g, []Mount{}); err != nil {
+	if err := st.UpdateUser(g, []Grant{}); err != nil {
 		t.Fatal(err)
 	}
-	if g, _ = st.GetUser(u.ID); len(g.Mounts) != 0 {
-		t.Fatal("mounts not cleared")
+	if g, _ = st.GetUser(u.ID); len(g.Grants) != 0 {
+		t.Fatal("grants not cleared")
 	}
+
 	// Rename conflict.
 	bob := &User{Username: "bob", PasswordHash: "h"}
 	st.CreateUser(bob)
@@ -180,8 +252,9 @@ func TestUserCRUD(t *testing.T) {
 func TestDeleteUserCascades(t *testing.T) {
 	st, _ := openTest(t)
 	ev := &eventLog{}
-	u := &User{Username: "u", PasswordHash: "h", Mounts: []Mount{{Name: "m", Path: abs("m")}}}
-	other := &User{Username: "o", PasswordHash: "h", Mounts: []Mount{{Name: "m", Path: abs("o")}}}
+	b := bucket(t, st, "m", abs("m"))
+	u := &User{Username: "u", PasswordHash: "h", Grants: []Grant{{BucketID: b.ID}}}
+	other := &User{Username: "o", PasswordHash: "h", Grants: []Grant{{BucketID: b.ID}}}
 	st.CreateUser(u)
 	st.CreateUser(other)
 	st.CreateToken(&AccessToken{UserID: u.ID, Name: "t", TokenEnc: "e1", Scopes: []string{ScopeRead}})
@@ -206,19 +279,22 @@ func TestDeleteUserCascades(t *testing.T) {
 		t.Fatal("s3 key not cascaded")
 	}
 	var n int64
-	st.db.Model(&Mount{}).Where("user_id = ?", u.ID).Count(&n)
+	st.db.Model(&Grant{}).Where("user_id = ?", u.ID).Count(&n)
 	if n != 0 {
-		t.Fatal("mounts not cascaded")
+		t.Fatal("grants not cascaded")
 	}
-	// Other user's data untouched.
+	// Other user's data and the bucket are untouched.
 	if _, err := st.GetToken(other.ID, 2); err != nil {
 		t.Fatal("other token deleted")
 	}
 	if _, err := st.GetS3Key("AK2"); err != nil {
 		t.Fatal("other key deleted")
 	}
-	if o, _ := st.GetUser(other.ID); len(o.Mounts) != 1 {
-		t.Fatal("other mounts deleted")
+	if o, _ := st.GetUser(other.ID); len(o.Grants) != 1 {
+		t.Fatal("other grants deleted")
+	}
+	if _, err := st.GetBucket(b.ID); err != nil {
+		t.Fatal("bucket deleted with its user")
 	}
 	if err := st.DeleteUser(u.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("delete missing: %v", err)
@@ -230,20 +306,72 @@ func TestDeleteUserCascades(t *testing.T) {
 
 func TestAllMountPaths(t *testing.T) {
 	st, _ := openTest(t)
-	st.CreateUser(&User{Username: "a", PasswordHash: "h", Mounts: []Mount{{Name: "x", Path: abs("p1")}, {Name: "y", Path: abs("p2")}}})
-	st.CreateUser(&User{Username: "b", PasswordHash: "h", Mounts: []Mount{{Name: "x", Path: abs("p1")}}})
-	st.CreateUser(&User{Username: "c", PasswordHash: "h", Disabled: true, Mounts: []Mount{{Name: "x", Path: abs("p3")}}})
+	tmp := t.TempDir()
+	p1, p2, p3, backup := filepath.Join(tmp, "p1"), filepath.Join(tmp, "p2"), filepath.Join(tmp, "p3"), filepath.Join(tmp, "b")
+	for _, d := range []string{p2, p3, backup} {
+		os.MkdirAll(d, 0o755)
+	}
+	x := bucket(t, st, "x", p1, backup) // p1 is offline: the backup serves
+	y := bucket(t, st, "y", p2)
+	z := bucket(t, st, "z", p3)
+	bucket(t, st, "unused", abs("unused"))
+	st.CreateUser(&User{Username: "a", PasswordHash: "h", Grants: []Grant{{BucketID: x.ID}, {BucketID: y.ID}}})
+	st.CreateUser(&User{Username: "b", PasswordHash: "h", Grants: []Grant{{BucketID: x.ID}}})
+	st.CreateUser(&User{Username: "c", PasswordHash: "h", Disabled: true, Grants: []Grant{{BucketID: z.ID}}})
 	ps, err := st.AllMountPaths()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ps) != 2 {
+	if !reflect.DeepEqual(ps, []string{backup, p2}) {
 		t.Fatalf("paths %v", ps)
 	}
-	for _, p := range ps {
-		if p == abs("p3") {
-			t.Fatal("disabled user's mount included")
+}
+
+func TestMigrateLegacyMounts(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &User{Username: "a", PasswordHash: "h"}
+	b := &User{Username: "b", PasswordHash: "h"}
+	st.CreateUser(a)
+	st.CreateUser(b)
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if err := st.db.Exec(q, args...).Error; err != nil {
+			t.Fatal(err)
 		}
+	}
+	exec(`CREATE TABLE mounts (id integer PRIMARY KEY AUTOINCREMENT, user_id integer NOT NULL, name text NOT NULL, path text NOT NULL, writable numeric NOT NULL DEFAULT false)`)
+	exec(`INSERT INTO mounts (user_id, name, path, writable) VALUES (?, '电影', ?, 1), (?, '照片', ?, 0), (?, '电影', ?, 0), (?, '影视', ?, 0)`,
+		a.ID, abs("movies"), a.ID, abs("photos"), b.ID, abs("other-movies"), b.ID, abs("movies"))
+	st.Close()
+
+	st, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if st.db.Migrator().HasTable("mounts") {
+		t.Fatal("legacy table kept")
+	}
+	bs, _ := st.ListBuckets()
+	got := map[string][]string{}
+	for _, x := range bs {
+		got[x.Name] = x.Paths
+	}
+	want := map[string][]string{"电影": {abs("movies")}, "照片": {abs("photos")}, "电影-2": {abs("other-movies")}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buckets %v", got)
+	}
+	ga, _ := st.GetUser(a.ID)
+	gb, _ := st.GetUser(b.ID)
+	if len(ga.Mounts) != 2 || ga.Mounts[0].Name != "电影" || !ga.Mounts[0].Writable || ga.Mounts[1].Writable {
+		t.Fatalf("a mounts %+v", ga.Mounts)
+	}
+	if len(gb.Mounts) != 2 || gb.Mounts[0].Name != "电影-2" || gb.Mounts[1].Name != "电影" || gb.Mounts[1].Path != abs("movies") {
+		t.Fatalf("b mounts %+v", gb.Mounts)
 	}
 }
 

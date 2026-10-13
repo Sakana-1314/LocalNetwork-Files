@@ -55,7 +55,7 @@ func testSearchConfig() config.SearchSettings {
 
 func addUser(t testing.TB, st *store.Store, name string, mounts ...store.Mount) *store.User {
 	t.Helper()
-	u := &store.User{Username: name, PasswordHash: "x", Role: store.RoleUser, Mounts: mounts}
+	u := &store.User{Username: name, PasswordHash: "x", Role: store.RoleUser, Grants: grantMounts(t, st, mounts...)}
 	if err := st.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +64,35 @@ func addUser(t testing.TB, st *store.Store, name string, mounts ...store.Mount) 
 		t.Fatal(err)
 	}
 	return u
+}
+
+// grantMounts creates a bucket for every mount (reusing one with the same
+// name) and returns the matching grants.
+func grantMounts(t testing.TB, st *store.Store, mounts ...store.Mount) []store.Grant {
+	t.Helper()
+	bs, err := st.ListBuckets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []store.Grant
+	for _, m := range mounts {
+		var id uint
+		for _, b := range bs {
+			if b.Name == m.Name {
+				id = b.ID
+			}
+		}
+		if id == 0 {
+			b := &store.Bucket{Name: m.Name, Paths: m.Dirs()}
+			if err := st.CreateBucket(b); err != nil {
+				t.Fatal(err)
+			}
+			bs = append(bs, *b)
+			id = b.ID
+		}
+		out = append(out, store.Grant{BucketID: id, Writable: m.Writable})
+	}
+	return out
 }
 
 func paths(r Response) []string {

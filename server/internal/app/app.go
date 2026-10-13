@@ -41,8 +41,14 @@ type App struct {
 
 	// bg tracks goroutines started from store events so Close can wait for them.
 	bg        sync.WaitGroup
+	stop      chan struct{}
 	closeOnce sync.Once
 }
+
+// bucketSyncInterval is how often the directories of every bucket are merged.
+// Changes made through MList are copied right away; this pass repairs changes
+// made over SMB or directly on disk, and directories that were offline.
+const bucketSyncInterval = 30 * time.Minute
 
 func New(cfg *config.Config, version string) (*App, error) {
 	st, err := store.Open(cfg.DataDir)
@@ -62,7 +68,7 @@ func New(cfg *config.Config, version string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &App{cfg: cfg, version: version, store: st, auth: au, cache: cm}
+	a := &App{cfg: cfg, version: version, store: st, auth: au, cache: cm, stop: make(chan struct{})}
 	a.media = media.New(cfg.FFmpeg, cfg.FFprobe, cm, cfg.Transcode)
 	vfs.FFmpegAvailable = a.media.HasFFmpeg()
 	// Directory listings and search results carry a content digest instead of a
@@ -90,6 +96,46 @@ func New(cfg *config.Config, version string) (*App, error) {
 
 func (a *App) newFS(p *auth.Principal) *vfs.FS {
 	return vfs.New(p.User.Mounts, p.ReadOnly, a.search)
+}
+
+// syncBuckets reconciles the directories of every bucket that has backups.
+func (a *App) syncBuckets() {
+	bs, err := a.store.ListBuckets()
+	if err != nil {
+		slog.Error("bucket sync: list buckets", "err", err)
+		return
+	}
+	for _, b := range bs {
+		select {
+		case <-a.stop:
+			return
+		default:
+		}
+		if len(b.Paths) < 2 {
+			continue
+		}
+		res, err := vfs.Reconcile(b.Paths, a.search)
+		if err != nil {
+			slog.Warn("bucket sync failed", "bucket", b.Name, "err", err)
+		}
+		if res.Copied > 0 || len(res.Conflicts) > 0 {
+			slog.Info("bucket synced", "bucket", b.Name, "copied", res.Copied, "bytes", res.Bytes, "conflicts", len(res.Conflicts))
+		}
+	}
+}
+
+func (a *App) syncLoop() {
+	t := time.NewTicker(bucketSyncInterval)
+	defer t.Stop()
+	a.syncBuckets()
+	for {
+		select {
+		case <-a.stop:
+			return
+		case <-t.C:
+			a.syncBuckets()
+		}
+	}
 }
 
 func (a *App) applyServices() {
@@ -202,6 +248,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.cache.Start()
 	a.search.Start()
 	a.applyServices()
+	a.bg.Go(a.syncLoop)
 
 	srv := &http.Server{Addr: a.cfg.Listen, Handler: a.handler, ReadHeaderTimeout: 30 * time.Second}
 	errc := make(chan error, 1)
@@ -229,6 +276,7 @@ func (a *App) Run(ctx context.Context) error {
 // database. It is safe to call more than once.
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		close(a.stop)
 		a.bg.Wait()
 		a.s3.Close()
 		a.smb.Close()

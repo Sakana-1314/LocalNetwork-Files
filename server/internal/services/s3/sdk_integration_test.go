@@ -75,16 +75,16 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	hash, _ := auth.HashPassword("pw")
-	u := &store.User{Username: "alice", PasswordHash: hash, Role: store.RoleUser, Mounts: []store.Mount{
-		{Name: "rw", Path: e.rw, Writable: true},
-		{Name: "ro", Path: e.ro, Writable: false},
-	}}
+	u := &store.User{Username: "alice", PasswordHash: hash, Role: store.RoleUser, Grants: grantMounts(t, st,
+		store.Mount{Name: "rw", Path: e.rw, Writable: true},
+		store.Mount{Name: "ro", Path: e.ro, Writable: false},
+	)}
 	if err := st.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
-	o := &store.User{Username: "bob", PasswordHash: hash, Role: store.RoleUser, Mounts: []store.Mount{
-		{Name: "bobs", Path: e.otherRoot, Writable: true},
-	}}
+	o := &store.User{Username: "bob", PasswordHash: hash, Role: store.RoleUser, Grants: grantMounts(t, st,
+		store.Mount{Name: "bobs", Path: e.otherRoot, Writable: true},
+	)}
 	if err := st.CreateUser(o); err != nil {
 		t.Fatal(err)
 	}
@@ -945,4 +945,33 @@ func TestDisabledAPIRejectsRequests(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("disabled API: %d", rec.Code)
 	}
+}
+
+// grantMounts creates a bucket for every mount (reusing one with the same
+// name) and returns the matching grants.
+func grantMounts(t testing.TB, st *store.Store, mounts ...store.Mount) []store.Grant {
+	t.Helper()
+	bs, err := st.ListBuckets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []store.Grant
+	for _, m := range mounts {
+		var id uint
+		for _, b := range bs {
+			if b.Name == m.Name {
+				id = b.ID
+			}
+		}
+		if id == 0 {
+			b := &store.Bucket{Name: m.Name, Paths: m.Dirs()}
+			if err := st.CreateBucket(b); err != nil {
+				t.Fatal(err)
+			}
+			bs = append(bs, *b)
+			id = b.ID
+		}
+		out = append(out, store.Grant{BucketID: id, Writable: m.Writable})
+	}
+	return out
 }
