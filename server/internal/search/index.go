@@ -508,6 +508,8 @@ func (x *Indexer) apply(real string) {
 	}
 }
 
+// Status 是搜索索引状态。
+// @Description 搜索索引状态
 type Status struct {
 	Indexing   bool       `json:"indexing"`    // 是否正在构建索引
 	Entries    int        `json:"entries"`     // 已索引的条目数

@@ -42,10 +42,15 @@ payload = {
     "options": {
         "endpointOverwriteBehavior": "OVERWRITE_EXISTING",
         "schemaOverwriteBehavior": "OVERWRITE_EXISTING",
-        "updateFolderOfChangedEndpoint": False,
+        # 开启「更新接口目录」：规范里的中文 tags 是分组的唯一来源，
+        # 早期导入留下的英文目录（auth/files/media/tokens/system/admin）
+        # 必须跟着改过来，否则文档侧栏一直是英文。
+        "updateFolderOfChangedEndpoint": True,
         "prependBasePath": False,
-        # 不删除规范里没有的资源，避免误删手工维护的接口。
-        "deleteUnmatchedResources": False,
+        # 开启「删除规范外资源」：文档与仓库里的规范保持完全一致，
+        # 清掉先前导入残留的英文模型与已删除接口。这意味着手工在 Apifox
+        # 里添加、规范中不存在的接口也会被删除——文档的唯一来源是本仓库。
+        "deleteUnmatchedResources": True,
     },
 }
 with open(sys.argv[1], "w", encoding="utf-8") as f:

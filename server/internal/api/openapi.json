@@ -1,7 +1,74 @@
 {
   "components": {
     "schemas": {
-      "api.BatchFailure": {
+      "AccessToken": {
+        "description": "API 访问令牌",
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "过期时间；null 表示永不过期",
+            "type": "string"
+          },
+          "id": {
+            "description": "令牌 ID",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "description": "最近使用时间；null 表示从未使用",
+            "type": "string"
+          },
+          "name": {
+            "description": "令牌名称",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Prefix 是令牌开头若干位，用于辨认；完整明文可通过 /tokens/{id}/secret 读取。",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "权限范围",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "title": "API 访问令牌",
+        "type": "object"
+      },
+      "AudioStream": {
+        "description": "音频轨道信息",
+        "properties": {
+          "channels": {
+            "description": "声道数",
+            "type": "integer"
+          },
+          "codec": {
+            "description": "音频编码，如 aac、ac3",
+            "type": "string"
+          },
+          "index": {
+            "description": "音轨序号",
+            "type": "integer"
+          },
+          "language": {
+            "description": "语言标签（来自容器元数据）",
+            "type": "string"
+          },
+          "title": {
+            "description": "轨道标题（来自容器元数据）",
+            "type": "string"
+          }
+        },
+        "title": "音频轨道信息",
+        "type": "object"
+      },
+      "BatchFailure": {
+        "description": "批量操作中失败的单个条目",
         "properties": {
           "error": {
             "description": "失败原因",
@@ -12,14 +79,16 @@
             "type": "string"
           }
         },
+        "title": "批量操作中失败的单个条目",
         "type": "object"
       },
-      "api.BatchResult": {
+      "BatchResult": {
+        "description": "批量操作结果，含成功的路径与失败的条目",
         "properties": {
           "failed": {
             "description": "操作失败的条目及原因",
             "items": {
-              "$ref": "#/components/schemas/api.BatchFailure"
+              "$ref": "#/components/schemas/BatchFailure"
             },
             "type": "array",
             "uniqueItems": false
@@ -33,9 +102,11 @@
             "uniqueItems": false
           }
         },
+        "title": "批量操作结果，含成功的路径与失败的条目",
         "type": "object"
       },
-      "api.BrowseResponse": {
+      "BrowseResponse": {
+        "description": "服务器本地目录浏览结果",
         "properties": {
           "dirs": {
             "description": "子目录的绝对路径",
@@ -54,14 +125,16 @@
             "type": "string"
           }
         },
+        "title": "服务器本地目录浏览结果",
         "type": "object"
       },
-      "api.BucketConflictResponse": {
+      "BucketConflictResponse": {
+        "description": "目录合并冲突",
         "properties": {
           "conflicts": {
             "description": "冲突条目（最多 100 条）",
             "items": {
-              "$ref": "#/components/schemas/vfs.Conflict"
+              "$ref": "#/components/schemas/Conflict"
             },
             "type": "array",
             "uniqueItems": false
@@ -71,22 +144,26 @@
             "type": "string"
           }
         },
+        "title": "目录合并冲突",
         "type": "object"
       },
-      "api.BucketCreated": {
+      "BucketCreated": {
+        "description": "创建或更新桶的结果",
         "properties": {
           "bucket": {
-            "$ref": "#/components/schemas/api.BucketView",
+            "$ref": "#/components/schemas/BucketView",
             "description": "桶信息"
           },
           "sync": {
-            "$ref": "#/components/schemas/vfs.SyncResult",
+            "$ref": "#/components/schemas/SyncResult",
             "description": "合并目录的结果"
           }
         },
+        "title": "创建或更新桶的结果",
         "type": "object"
       },
-      "api.BucketDir": {
+      "BucketDir": {
+        "description": "桶中一个目录的状态",
         "properties": {
           "active": {
             "description": "是否为当前读写的主目录（第一个可用目录）",
@@ -101,9 +178,11 @@
             "type": "string"
           }
         },
+        "title": "桶中一个目录的状态",
         "type": "object"
       },
-      "api.BucketInput": {
+      "BucketInput": {
+        "description": "创建或更新桶的请求体",
         "properties": {
           "name": {
             "description": "桶名称，即用户虚拟根目录下显示的名称，最长 128 字符，不能含 / 或 \\",
@@ -122,9 +201,34 @@
           "name",
           "paths"
         ],
+        "title": "创建或更新桶的请求体",
         "type": "object"
       },
-      "api.BucketView": {
+      "BucketStats": {
+        "description": "单个缓存桶的占用情况",
+        "properties": {
+          "bytes": {
+            "description": "当前占用字节数",
+            "type": "integer"
+          },
+          "files": {
+            "description": "文件数量",
+            "type": "integer"
+          },
+          "max_bytes": {
+            "description": "容量上限（字节），超出后按最近最少使用淘汰",
+            "type": "integer"
+          },
+          "ttl_hours": {
+            "description": "保留时长（小时）；0 表示永不过期",
+            "type": "integer"
+          }
+        },
+        "title": "单个缓存桶的占用情况",
+        "type": "object"
+      },
+      "BucketView": {
+        "description": "桶及其目录状态",
         "properties": {
           "created_at": {
             "description": "创建时间",
@@ -133,7 +237,7 @@
           "dirs": {
             "description": "各目录的可用状态",
             "items": {
-              "$ref": "#/components/schemas/api.BucketDir"
+              "$ref": "#/components/schemas/BucketDir"
             },
             "type": "array",
             "uniqueItems": false
@@ -159,9 +263,11 @@
             "type": "integer"
           }
         },
+        "title": "桶及其目录状态",
         "type": "object"
       },
-      "api.CacheCleanRequest": {
+      "CacheCleanRequest": {
+        "description": "清理缓存的请求体",
         "properties": {
           "kind": {
             "description": "要清理的缓存桶：thumb 预览图，transcode 转码分片，all 全部",
@@ -173,9 +279,11 @@
             "type": "string"
           }
         },
+        "title": "清理缓存的请求体",
         "type": "object"
       },
-      "api.CacheCleanResponse": {
+      "CacheCleanResponse": {
+        "description": "缓存清理结果",
         "properties": {
           "removed_bytes": {
             "description": "释放的字节数",
@@ -186,9 +294,11 @@
             "type": "integer"
           }
         },
+        "title": "缓存清理结果",
         "type": "object"
       },
-      "api.CacheStats": {
+      "CacheStats": {
+        "description": "缓存统计",
         "properties": {
           "dir": {
             "description": "缓存目录的绝对路径",
@@ -201,23 +311,48 @@
           "sessions": {
             "description": "当前已知的转码会话",
             "items": {
-              "$ref": "#/components/schemas/media.SessionInfo"
+              "$ref": "#/components/schemas/SessionInfo"
             },
             "type": "array",
             "uniqueItems": false
           },
           "thumb": {
-            "$ref": "#/components/schemas/cache.BucketStats",
+            "$ref": "#/components/schemas/BucketStats",
             "description": "预览图缓存"
           },
           "transcode": {
-            "$ref": "#/components/schemas/cache.BucketStats",
+            "$ref": "#/components/schemas/BucketStats",
             "description": "转码分片缓存"
           }
         },
+        "title": "缓存统计",
         "type": "object"
       },
-      "api.CreateS3KeyRequest": {
+      "Conflict": {
+        "description": "合并目录时发现的同名冲突",
+        "properties": {
+          "dirs": {
+            "description": "含有该条目的服务器目录",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "path": {
+            "description": "冲突条目在桶内的相对路径，以 / 开头",
+            "type": "string"
+          },
+          "reason": {
+            "description": "冲突原因",
+            "type": "string"
+          }
+        },
+        "title": "合并目录时发现的同名冲突",
+        "type": "object"
+      },
+      "CreateS3KeyRequest": {
+        "description": "创建 S3 密钥的请求体",
         "properties": {
           "name": {
             "description": "备注名称，便于辨认，最长 128 字符",
@@ -228,9 +363,11 @@
             "type": "boolean"
           }
         },
+        "title": "创建 S3 密钥的请求体",
         "type": "object"
       },
-      "api.CreateTokenRequest": {
+      "CreateTokenRequest": {
+        "description": "创建访问令牌的请求体",
         "properties": {
           "expires_in_days": {
             "description": "有效期天数；0 或省略表示永不过期，最大 3650",
@@ -256,9 +393,11 @@
         "required": [
           "name"
         ],
+        "title": "创建访问令牌的请求体",
         "type": "object"
       },
-      "api.DeleteRequest": {
+      "DeleteRequest": {
+        "description": "删除的请求体",
         "properties": {
           "paths": {
             "description": "要删除的虚拟路径列表，目录会被递归删除",
@@ -272,18 +411,98 @@
         "required": [
           "paths"
         ],
+        "title": "删除的请求体",
         "type": "object"
       },
-      "api.ErrorResponse": {
+      "Entry": {
+        "description": "文件或目录条目",
+        "properties": {
+          "is_dir": {
+            "description": "是否为目录",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "文件类型，用于选择预览方式",
+            "enum": [
+              "dir",
+              "image",
+              "video",
+              "audio",
+              "text",
+              "pdf",
+              "archive",
+              "other"
+            ],
+            "type": "string"
+          },
+          "mime": {
+            "description": "由扩展名推断的 MIME 类型",
+            "type": "string"
+          },
+          "mod_time": {
+            "description": "最后修改时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "文件或目录名",
+            "type": "string"
+          },
+          "path": {
+            "description": "虚拟路径",
+            "type": "string"
+          },
+          "size": {
+            "description": "文件大小（字节）；目录为 0",
+            "type": "integer"
+          },
+          "thumb": {
+            "description": "Thumb 是预览源文件的内容摘要（不可预览时为空串）。它不是路径，\n因此列目录不会暴露文件在服务器上的位置。",
+            "type": "string"
+          },
+          "thumb_sig": {
+            "description": "ThumbSig 是服务端对 Thumb 的签名，供 /media/thumb 校验。",
+            "type": "string"
+          },
+          "writable": {
+            "description": "是否可写（目录权限与令牌范围共同决定）",
+            "type": "boolean"
+          }
+        },
+        "title": "文件或目录条目",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "错误响应",
         "properties": {
           "error": {
             "description": "错误信息",
             "type": "string"
           }
         },
+        "title": "错误响应",
         "type": "object"
       },
-      "api.GrantInput": {
+      "Grant": {
+        "description": "把一个桶授权给用户",
+        "properties": {
+          "bucket_id": {
+            "description": "桶 ID",
+            "type": "integer"
+          },
+          "name": {
+            "description": "桶名称（只读，由服务端填充）",
+            "type": "string"
+          },
+          "writable": {
+            "description": "false 为只读，true 为可写",
+            "type": "boolean"
+          }
+        },
+        "title": "把一个桶授权给用户",
+        "type": "object"
+      },
+      "GrantInput": {
+        "description": "把一个桶授权给用户的请求体",
         "properties": {
           "bucket_id": {
             "description": "桶 ID",
@@ -297,9 +516,11 @@
         "required": [
           "bucket_id"
         ],
+        "title": "把一个桶授权给用户的请求体",
         "type": "object"
       },
-      "api.IndexStatus": {
+      "IndexStatus": {
+        "description": "搜索索引状态",
         "properties": {
           "duration_ms": {
             "description": "上次构建耗时（毫秒）",
@@ -326,14 +547,16 @@
             "type": "boolean"
           }
         },
+        "title": "搜索索引状态",
         "type": "object"
       },
-      "api.ListResponse": {
+      "ListResponse": {
+        "description": "目录列表",
         "properties": {
           "entries": {
             "description": "目录下的文件与子目录",
             "items": {
-              "$ref": "#/components/schemas/vfs.Entry"
+              "$ref": "#/components/schemas/Entry"
             },
             "type": "array",
             "uniqueItems": false
@@ -347,9 +570,11 @@
             "type": "boolean"
           }
         },
+        "title": "目录列表",
         "type": "object"
       },
-      "api.LoginRequest": {
+      "LoginRequest": {
+        "description": "登录请求体",
         "properties": {
           "password": {
             "description": "登录密码",
@@ -364,9 +589,11 @@
           "password",
           "username"
         ],
+        "title": "登录请求体",
         "type": "object"
       },
-      "api.LoginResponse": {
+      "LoginResponse": {
+        "description": "登录成功后的会话信息",
         "properties": {
           "expires_at": {
             "description": "会话过期时间",
@@ -377,13 +604,58 @@
             "type": "string"
           },
           "user": {
-            "$ref": "#/components/schemas/store.User",
+            "$ref": "#/components/schemas/User",
             "description": "登录用户信息"
           }
         },
+        "title": "登录成功后的会话信息",
         "type": "object"
       },
-      "api.MkdirRequest": {
+      "MediaInfo": {
+        "description": "探测到的媒体信息",
+        "properties": {
+          "audio": {
+            "description": "音频轨道列表；index 即请求转码时的 audio_track",
+            "items": {
+              "$ref": "#/components/schemas/AudioStream"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "bit_rate": {
+            "description": "总码率（bps）",
+            "type": "integer"
+          },
+          "direct_play": {
+            "description": "浏览器大概率可直接播放（无需转码）",
+            "type": "boolean"
+          },
+          "duration": {
+            "description": "总时长（秒）",
+            "type": "number"
+          },
+          "format": {
+            "description": "容器格式，如 matroska,webm",
+            "type": "string"
+          },
+          "subtitles": {
+            "description": "字幕轨道列表；index 即请求转换时的 index",
+            "items": {
+              "$ref": "#/components/schemas/SubtitleStream"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "video": {
+            "$ref": "#/components/schemas/VideoStream",
+            "description": "视频轨道；纯音频文件为 null"
+          }
+        },
+        "title": "探测到的媒体信息",
+        "type": "object"
+      },
+      "MkdirRequest": {
+        "description": "新建目录的请求体",
         "properties": {
           "path": {
             "description": "新目录的完整虚拟路径",
@@ -393,9 +665,11 @@
         "required": [
           "path"
         ],
+        "title": "新建目录的请求体",
         "type": "object"
       },
-      "api.PasswordRequest": {
+      "PasswordRequest": {
+        "description": "修改自己密码的请求体",
         "properties": {
           "new_password": {
             "description": "新密码，至少 6 位",
@@ -410,9 +684,11 @@
           "new_password",
           "old_password"
         ],
+        "title": "修改自己密码的请求体",
         "type": "object"
       },
-      "api.PasswordResponse": {
+      "PasswordResponse": {
+        "description": "修改密码后签发的新会话",
         "properties": {
           "expires_at": {
             "description": "新会话的过期时间",
@@ -423,18 +699,22 @@
             "type": "string"
           }
         },
+        "title": "修改密码后签发的新会话",
         "type": "object"
       },
-      "api.ReindexResponse": {
+      "ReindexResponse": {
+        "description": "重建搜索索引的受理结果",
         "properties": {
           "ok": {
             "description": "是否已开始后台重建",
             "type": "boolean"
           }
         },
+        "title": "重建搜索索引的受理结果",
         "type": "object"
       },
-      "api.RenameRequest": {
+      "RenameRequest": {
+        "description": "重命名的请求体",
         "properties": {
           "name": {
             "description": "新名称（不含路径）",
@@ -449,18 +729,45 @@
           "name",
           "path"
         ],
+        "title": "重命名的请求体",
         "type": "object"
       },
-      "api.S3KeySecret": {
+      "S3Key": {
+        "description": "S3 访问密钥",
+        "properties": {
+          "access_key": {
+            "description": "S3 Access Key（访问密钥 ID）",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "name": {
+            "description": "备注名称",
+            "type": "string"
+          },
+          "read_only": {
+            "description": "是否只读",
+            "type": "boolean"
+          }
+        },
+        "title": "S3 访问密钥",
+        "type": "object"
+      },
+      "S3KeySecret": {
+        "description": "S3 密钥的 Secret",
         "properties": {
           "secret_key": {
             "description": "S3 Secret Key（访问密钥对应的私钥）",
             "type": "string"
           }
         },
+        "title": "S3 密钥的 Secret",
         "type": "object"
       },
-      "api.S3KeyWithSecret": {
+      "S3KeyWithSecret": {
+        "description": "创建 S3 密钥的响应，含 Secret",
         "properties": {
           "access_key": {
             "description": "S3 Access Key（访问密钥 ID）",
@@ -483,9 +790,11 @@
             "type": "string"
           }
         },
+        "title": "创建 S3 密钥的响应，含 Secret",
         "type": "object"
       },
-      "api.SearchResponse": {
+      "SearchResponse": {
+        "description": "搜索结果",
         "properties": {
           "indexing": {
             "description": "索引是否正在构建（此时结果可能不完整）",
@@ -494,7 +803,7 @@
           "results": {
             "description": "命中的条目，按相关度从高到低",
             "items": {
-              "$ref": "#/components/schemas/api.SearchResult"
+              "$ref": "#/components/schemas/SearchResult"
             },
             "type": "array",
             "uniqueItems": false
@@ -508,9 +817,11 @@
             "type": "integer"
           }
         },
+        "title": "搜索结果",
         "type": "object"
       },
-      "api.SearchResult": {
+      "SearchResult": {
+        "description": "单条搜索结果",
         "properties": {
           "is_dir": {
             "description": "是否为目录",
@@ -575,9 +886,11 @@
             "type": "boolean"
           }
         },
+        "title": "单条搜索结果",
         "type": "object"
       },
-      "api.ServiceStatus": {
+      "ServiceStatus": {
+        "description": "单个协议服务的状态",
         "properties": {
           "account": {
             "description": "仅 SMB：当前用户的 SMB 登录名",
@@ -611,9 +924,92 @@
             "type": "object"
           }
         },
+        "title": "单个协议服务的状态",
         "type": "object"
       },
-      "api.SystemInfo": {
+      "SessionInfo": {
+        "description": "转码会话信息",
+        "properties": {
+          "id": {
+            "description": "会话 ID",
+            "type": "string"
+          },
+          "last_access": {
+            "description": "最近一次访问时间",
+            "type": "string"
+          },
+          "path": {
+            "description": "源视频的虚拟路径",
+            "type": "string"
+          },
+          "quality": {
+            "description": "输出画质",
+            "type": "string"
+          },
+          "running": {
+            "description": "当前是否有 ffmpeg 进程在转码",
+            "type": "boolean"
+          },
+          "user": {
+            "description": "正在观看的用户名（多用户时用逗号分隔）",
+            "type": "string"
+          }
+        },
+        "title": "转码会话信息",
+        "type": "object"
+      },
+      "SubtitleStream": {
+        "description": "字幕轨道信息",
+        "properties": {
+          "codec": {
+            "description": "字幕编码，如 subrip、ass、hdmv_pgs_subtitle",
+            "type": "string"
+          },
+          "external": {
+            "description": "外挂字幕的虚拟路径；内嵌字幕为空",
+            "type": "string"
+          },
+          "index": {
+            "description": "字幕序号",
+            "type": "integer"
+          },
+          "language": {
+            "description": "语言标签（来自容器元数据）",
+            "type": "string"
+          },
+          "title": {
+            "description": "轨道标题（来自容器元数据）",
+            "type": "string"
+          }
+        },
+        "title": "字幕轨道信息",
+        "type": "object"
+      },
+      "SyncResult": {
+        "description": "一次目录合并的结果",
+        "properties": {
+          "bytes": {
+            "description": "复制的字节数",
+            "type": "integer"
+          },
+          "conflicts": {
+            "description": "无法自动合并的冲突（同名的文件与目录）",
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
+          "copied": {
+            "description": "复制的文件数",
+            "type": "integer"
+          }
+        },
+        "title": "一次目录合并的结果",
+        "type": "object"
+      },
+      "SystemInfo": {
+        "description": "系统与协议服务信息，用于挂载向导",
         "properties": {
           "addresses": {
             "description": "服务器探测到的局域网 IP 地址",
@@ -637,7 +1033,7 @@
           },
           "services": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/api.ServiceStatus"
+              "$ref": "#/components/schemas/ServiceStatus"
             },
             "description": "各协议服务的状态",
             "type": "object"
@@ -647,9 +1043,11 @@
             "type": "string"
           }
         },
+        "title": "系统与协议服务信息，用于挂载向导",
         "type": "object"
       },
-      "api.TextResponse": {
+      "TextResponse": {
+        "description": "文本文件内容",
         "properties": {
           "content": {
             "description": "文件文本内容（按 UTF-8 解码）",
@@ -660,18 +1058,22 @@
             "type": "boolean"
           }
         },
+        "title": "文本文件内容",
         "type": "object"
       },
-      "api.TokenSecret": {
+      "TokenSecret": {
+        "description": "访问令牌明文",
         "properties": {
           "token": {
             "description": "令牌明文",
             "type": "string"
           }
         },
+        "title": "访问令牌明文",
         "type": "object"
       },
-      "api.TokenWithSecret": {
+      "TokenWithSecret": {
+        "description": "创建访问令牌的响应，含一次性的令牌明文",
         "properties": {
           "created_at": {
             "description": "创建时间",
@@ -710,9 +1112,11 @@
             "type": "string"
           }
         },
+        "title": "创建访问令牌的响应，含一次性的令牌明文",
         "type": "object"
       },
-      "api.TranscodeRequest": {
+      "TranscodeRequest": {
+        "description": "创建 HLS 转码会话的请求体",
         "properties": {
           "audio_track": {
             "description": "音轨序号（MediaInfo.audio 下标），0 为第 1 条",
@@ -736,9 +1140,11 @@
         "required": [
           "path"
         ],
+        "title": "创建 HLS 转码会话的请求体",
         "type": "object"
       },
-      "api.TranscodeResponse": {
+      "TranscodeResponse": {
+        "description": "转码会话信息",
         "properties": {
           "duration": {
             "description": "视频总时长（秒）",
@@ -757,9 +1163,11 @@
             "type": "string"
           }
         },
+        "title": "转码会话信息",
         "type": "object"
       },
-      "api.TransferRequest": {
+      "TransferRequest": {
+        "description": "移动或复制的请求体",
         "properties": {
           "dest_dir": {
             "description": "目标目录的虚拟路径",
@@ -782,279 +1190,11 @@
           "dest_dir",
           "sources"
         ],
+        "title": "移动或复制的请求体",
         "type": "object"
       },
-      "api.UserInput": {
-        "properties": {
-          "disabled": {
-            "description": "是否禁用该账户",
-            "type": "boolean"
-          },
-          "grants": {
-            "description": "授权桶列表，整表替换；更新时省略表示不修改",
-            "items": {
-              "$ref": "#/components/schemas/api.GrantInput"
-            },
-            "type": "array",
-            "uniqueItems": false
-          },
-          "password": {
-            "description": "密码；创建时必填且至少 6 位，更新时留空表示不修改",
-            "type": "string"
-          },
-          "role": {
-            "description": "角色，admin 为管理员",
-            "enum": [
-              "admin",
-              "user"
-            ],
-            "type": "string"
-          },
-          "username": {
-            "description": "用户名，1-32 位，可用字母、数字、下划线、点和横线",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "cache.BucketStats": {
-        "properties": {
-          "bytes": {
-            "description": "当前占用字节数",
-            "type": "integer"
-          },
-          "files": {
-            "description": "文件数量",
-            "type": "integer"
-          },
-          "max_bytes": {
-            "description": "容量上限（字节），超出后按最近最少使用淘汰",
-            "type": "integer"
-          },
-          "ttl_hours": {
-            "description": "保留时长（小时）；0 表示永不过期",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "media.AudioStream": {
-        "properties": {
-          "channels": {
-            "description": "声道数",
-            "type": "integer"
-          },
-          "codec": {
-            "description": "音频编码，如 aac、ac3",
-            "type": "string"
-          },
-          "index": {
-            "description": "音轨序号",
-            "type": "integer"
-          },
-          "language": {
-            "description": "语言标签（来自容器元数据）",
-            "type": "string"
-          },
-          "title": {
-            "description": "轨道标题（来自容器元数据）",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "media.MediaInfo": {
-        "properties": {
-          "audio": {
-            "description": "音频轨道列表；index 即请求转码时的 audio_track",
-            "items": {
-              "$ref": "#/components/schemas/media.AudioStream"
-            },
-            "type": "array",
-            "uniqueItems": false
-          },
-          "bit_rate": {
-            "description": "总码率（bps）",
-            "type": "integer"
-          },
-          "direct_play": {
-            "description": "浏览器大概率可直接播放（无需转码）",
-            "type": "boolean"
-          },
-          "duration": {
-            "description": "总时长（秒）",
-            "type": "number"
-          },
-          "format": {
-            "description": "容器格式，如 matroska,webm",
-            "type": "string"
-          },
-          "subtitles": {
-            "description": "字幕轨道列表；index 即请求转换时的 index",
-            "items": {
-              "$ref": "#/components/schemas/media.SubtitleStream"
-            },
-            "type": "array",
-            "uniqueItems": false
-          },
-          "video": {
-            "$ref": "#/components/schemas/media.VideoStream",
-            "description": "视频轨道；纯音频文件为 null"
-          }
-        },
-        "type": "object"
-      },
-      "media.SessionInfo": {
-        "properties": {
-          "id": {
-            "description": "会话 ID",
-            "type": "string"
-          },
-          "last_access": {
-            "description": "最近一次访问时间",
-            "type": "string"
-          },
-          "path": {
-            "description": "源视频的虚拟路径",
-            "type": "string"
-          },
-          "quality": {
-            "description": "输出画质",
-            "type": "string"
-          },
-          "running": {
-            "description": "当前是否有 ffmpeg 进程在转码",
-            "type": "boolean"
-          },
-          "user": {
-            "description": "正在观看的用户名（多用户时用逗号分隔）",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "media.SubtitleStream": {
-        "properties": {
-          "codec": {
-            "description": "字幕编码，如 subrip、ass、hdmv_pgs_subtitle",
-            "type": "string"
-          },
-          "external": {
-            "description": "外挂字幕的虚拟路径；内嵌字幕为空",
-            "type": "string"
-          },
-          "index": {
-            "description": "字幕序号",
-            "type": "integer"
-          },
-          "language": {
-            "description": "语言标签（来自容器元数据）",
-            "type": "string"
-          },
-          "title": {
-            "description": "轨道标题（来自容器元数据）",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "media.VideoStream": {
-        "properties": {
-          "codec": {
-            "description": "视频编码，如 h264、hevc",
-            "type": "string"
-          },
-          "fps": {
-            "description": "帧率",
-            "type": "number"
-          },
-          "height": {
-            "description": "画面高度（像素）",
-            "type": "integer"
-          },
-          "width": {
-            "description": "画面宽度（像素）",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "store.AccessToken": {
-        "properties": {
-          "created_at": {
-            "description": "创建时间",
-            "type": "string"
-          },
-          "expires_at": {
-            "description": "过期时间；null 表示永不过期",
-            "type": "string"
-          },
-          "id": {
-            "description": "令牌 ID",
-            "type": "integer"
-          },
-          "last_used_at": {
-            "description": "最近使用时间；null 表示从未使用",
-            "type": "string"
-          },
-          "name": {
-            "description": "令牌名称",
-            "type": "string"
-          },
-          "prefix": {
-            "description": "Prefix 是令牌开头若干位，用于辨认；完整明文可通过 /tokens/{id}/secret 读取。",
-            "type": "string"
-          },
-          "scopes": {
-            "description": "权限范围",
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "uniqueItems": false
-          }
-        },
-        "type": "object"
-      },
-      "store.Grant": {
-        "properties": {
-          "bucket_id": {
-            "description": "桶 ID",
-            "type": "integer"
-          },
-          "name": {
-            "description": "桶名称（只读，由服务端填充）",
-            "type": "string"
-          },
-          "writable": {
-            "description": "false 为只读，true 为可写",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "store.S3Key": {
-        "properties": {
-          "access_key": {
-            "description": "S3 Access Key（访问密钥 ID）",
-            "type": "string"
-          },
-          "created_at": {
-            "description": "创建时间",
-            "type": "string"
-          },
-          "name": {
-            "description": "备注名称",
-            "type": "string"
-          },
-          "read_only": {
-            "description": "是否只读",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "store.User": {
+      "User": {
+        "description": "用户",
         "properties": {
           "created_at": {
             "description": "创建时间",
@@ -1067,7 +1207,7 @@
           "grants": {
             "description": "该用户被授权的桶",
             "items": {
-              "$ref": "#/components/schemas/store.Grant"
+              "$ref": "#/components/schemas/Grant"
             },
             "type": "array",
             "uniqueItems": false
@@ -1089,103 +1229,65 @@
             "type": "string"
           }
         },
+        "title": "用户",
         "type": "object"
       },
-      "vfs.Conflict": {
+      "UserInput": {
+        "description": "创建或更新用户的请求体",
         "properties": {
-          "dirs": {
-            "description": "含有该条目的服务器目录",
+          "disabled": {
+            "description": "是否禁用该账户",
+            "type": "boolean"
+          },
+          "grants": {
+            "description": "授权桶列表，整表替换；更新时省略表示不修改",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantInput"
             },
             "type": "array",
             "uniqueItems": false
           },
-          "path": {
-            "description": "冲突条目在桶内的相对路径，以 / 开头",
+          "password": {
+            "description": "密码；创建时必填且至少 6 位，更新时留空表示不修改",
             "type": "string"
           },
-          "reason": {
-            "description": "冲突原因",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "vfs.Entry": {
-        "properties": {
-          "is_dir": {
-            "description": "是否为目录",
-            "type": "boolean"
-          },
-          "kind": {
-            "description": "文件类型，用于选择预览方式",
+          "role": {
+            "description": "角色，admin 为管理员",
             "enum": [
-              "dir",
-              "image",
-              "video",
-              "audio",
-              "text",
-              "pdf",
-              "archive",
-              "other"
+              "admin",
+              "user"
             ],
             "type": "string"
           },
-          "mime": {
-            "description": "由扩展名推断的 MIME 类型",
+          "username": {
+            "description": "用户名，1-32 位，可用字母、数字、下划线、点和横线",
             "type": "string"
-          },
-          "mod_time": {
-            "description": "最后修改时间",
-            "type": "string"
-          },
-          "name": {
-            "description": "文件或目录名",
-            "type": "string"
-          },
-          "path": {
-            "description": "虚拟路径",
-            "type": "string"
-          },
-          "size": {
-            "description": "文件大小（字节）；目录为 0",
-            "type": "integer"
-          },
-          "thumb": {
-            "description": "Thumb 是预览源文件的内容摘要（不可预览时为空串）。它不是路径，\n因此列目录不会暴露文件在服务器上的位置。",
-            "type": "string"
-          },
-          "thumb_sig": {
-            "description": "ThumbSig 是服务端对 Thumb 的签名，供 /media/thumb 校验。",
-            "type": "string"
-          },
-          "writable": {
-            "description": "是否可写（目录权限与令牌范围共同决定）",
-            "type": "boolean"
           }
         },
+        "title": "创建或更新用户的请求体",
         "type": "object"
       },
-      "vfs.SyncResult": {
+      "VideoStream": {
+        "description": "视频轨道信息",
         "properties": {
-          "bytes": {
-            "description": "复制的字节数",
+          "codec": {
+            "description": "视频编码，如 h264、hevc",
+            "type": "string"
+          },
+          "fps": {
+            "description": "帧率",
+            "type": "number"
+          },
+          "height": {
+            "description": "画面高度（像素）",
             "type": "integer"
           },
-          "conflicts": {
-            "description": "无法自动合并的冲突（同名的文件与目录）",
-            "items": {
-              "$ref": "#/components/schemas/vfs.Conflict"
-            },
-            "type": "array",
-            "uniqueItems": false
-          },
-          "copied": {
-            "description": "复制的文件数",
+          "width": {
+            "description": "画面宽度（像素）",
             "type": "integer"
           }
         },
+        "title": "视频轨道信息",
         "type": "object"
       }
     },
@@ -1204,7 +1306,7 @@
   },
   "info": {
     "description": "局域网文件管理系统 HTTP API。\n**认证方式**（任选其一）：\n- `Authorization: Bearer <token>`，token 可以是登录得到的会话令牌，或在「账号设置 → 访问令牌」中创建的 API 访问令牌（`ml_` 前缀）。\n- 查询参数 `access_token=<token>`（用于 `<img>` / `<video>` 等无法设置请求头的场景）。\n- 浏览器登录后自动携带的会话 Cookie。\n\n**路径**：所有文件路径均为虚拟路径。`/` 为根，下一级是当前用户被授权的桶（桶名），例如 `/电影/2024/a.mkv`。\n\n**预览图**：`GET /media/thumb` 只接收内容摘要与签名，不接收文件路径，且不要求登录，因此可直接放进 `<img>` 标签。\n\n**错误**：非 2xx 响应体为 `{\"error\": \"message\"}`。",
-    "title": "MList API",
+    "title": "局域网文件管理 API",
     "version": "1.0.0"
   },
   "openapi": "3.1.0",
@@ -1227,7 +1329,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BrowseResponse"
+                  "$ref": "#/components/schemas/BrowseResponse"
                 }
               }
             },
@@ -1237,7 +1339,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1264,7 +1366,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/api.BucketView"
+                    "$ref": "#/components/schemas/BucketView"
                   },
                   "type": "array"
                 }
@@ -1276,7 +1378,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1299,9 +1401,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.BucketInput",
+                "$ref": "#/components/schemas/BucketInput",
                 "description": "桶名称与目录",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1313,7 +1415,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BucketCreated"
+                  "$ref": "#/components/schemas/BucketCreated"
                 }
               }
             },
@@ -1323,7 +1425,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1333,7 +1435,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1343,7 +1445,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BucketConflictResponse"
+                  "$ref": "#/components/schemas/BucketConflictResponse"
                 }
               }
             },
@@ -1383,7 +1485,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1393,7 +1495,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1427,9 +1529,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.BucketInput",
+                "$ref": "#/components/schemas/BucketInput",
                 "description": "桶名称与目录",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1441,7 +1543,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BucketCreated"
+                  "$ref": "#/components/schemas/BucketCreated"
                 }
               }
             },
@@ -1451,7 +1553,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1461,7 +1563,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1471,7 +1573,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1481,7 +1583,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BucketConflictResponse"
+                  "$ref": "#/components/schemas/BucketConflictResponse"
                 }
               }
             },
@@ -1518,7 +1620,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/vfs.SyncResult"
+                  "$ref": "#/components/schemas/SyncResult"
                 }
               }
             },
@@ -1528,7 +1630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1538,7 +1640,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1564,7 +1666,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.CacheStats"
+                  "$ref": "#/components/schemas/CacheStats"
                 }
               }
             },
@@ -1574,7 +1676,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1599,9 +1701,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.CacheCleanRequest",
+                "$ref": "#/components/schemas/CacheCleanRequest",
                 "description": "要清理的缓存桶，省略或 all 表示全部",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1612,7 +1714,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.CacheCleanResponse"
+                  "$ref": "#/components/schemas/CacheCleanResponse"
                 }
               }
             },
@@ -1622,7 +1724,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1632,7 +1734,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1658,7 +1760,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ReindexResponse"
+                  "$ref": "#/components/schemas/ReindexResponse"
                 }
               }
             },
@@ -1668,7 +1770,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1694,7 +1796,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.IndexStatus"
+                  "$ref": "#/components/schemas/IndexStatus"
                 }
               }
             },
@@ -1704,7 +1806,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1731,7 +1833,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/store.User"
+                    "$ref": "#/components/schemas/User"
                   },
                   "type": "array"
                 }
@@ -1743,7 +1845,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1753,7 +1855,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1776,9 +1878,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.UserInput",
+                "$ref": "#/components/schemas/UserInput",
                 "description": "用户信息与授权桶",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1790,7 +1892,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/store.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -1800,7 +1902,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1810,7 +1912,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1850,7 +1952,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1860,7 +1962,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1870,7 +1972,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1904,9 +2006,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.UserInput",
+                "$ref": "#/components/schemas/UserInput",
                 "description": "用户信息与授权桶（整表替换）",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1918,7 +2020,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/store.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -1928,7 +2030,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1938,7 +2040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1948,7 +2050,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1973,9 +2075,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.LoginRequest",
+                "$ref": "#/components/schemas/LoginRequest",
                 "description": "登录凭据",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -1987,7 +2089,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.LoginResponse"
+                  "$ref": "#/components/schemas/LoginResponse"
                 }
               }
             },
@@ -1997,7 +2099,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2007,7 +2109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2042,7 +2144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/store.User"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             },
@@ -2052,7 +2154,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2077,9 +2179,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.PasswordRequest",
+                "$ref": "#/components/schemas/PasswordRequest",
                 "description": "原密码与新密码",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2091,7 +2193,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.PasswordResponse"
+                  "$ref": "#/components/schemas/PasswordResponse"
                 }
               }
             },
@@ -2101,7 +2203,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2126,9 +2228,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.TransferRequest",
+                "$ref": "#/components/schemas/TransferRequest",
                 "description": "源路径、目标目录与是否覆盖",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2140,7 +2242,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BatchResult"
+                  "$ref": "#/components/schemas/BatchResult"
                 }
               }
             },
@@ -2150,7 +2252,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2160,7 +2262,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2185,9 +2287,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.DeleteRequest",
+                "$ref": "#/components/schemas/DeleteRequest",
                 "description": "要删除的路径列表",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2199,7 +2301,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BatchResult"
+                  "$ref": "#/components/schemas/BatchResult"
                 }
               }
             },
@@ -2209,7 +2311,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2219,7 +2321,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2277,7 +2379,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/vfs.Entry"
+                  "$ref": "#/components/schemas/Entry"
                 }
               }
             },
@@ -2287,7 +2389,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2297,7 +2399,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2307,7 +2409,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2344,7 +2446,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ListResponse"
+                  "$ref": "#/components/schemas/ListResponse"
                 }
               }
             },
@@ -2354,7 +2456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2364,7 +2466,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2389,9 +2491,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.MkdirRequest",
+                "$ref": "#/components/schemas/MkdirRequest",
                 "description": "新目录路径",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2403,7 +2505,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/vfs.Entry"
+                  "$ref": "#/components/schemas/Entry"
                 }
               }
             },
@@ -2413,7 +2515,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2423,7 +2525,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2448,9 +2550,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.TransferRequest",
+                "$ref": "#/components/schemas/TransferRequest",
                 "description": "源路径、目标目录与是否覆盖",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2462,7 +2564,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.BatchResult"
+                  "$ref": "#/components/schemas/BatchResult"
                 }
               }
             },
@@ -2472,7 +2574,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2482,7 +2584,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2547,7 +2649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2557,7 +2659,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2631,7 +2733,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2641,7 +2743,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2666,9 +2768,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.RenameRequest",
+                "$ref": "#/components/schemas/RenameRequest",
                 "description": "原路径与新名称",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -2680,7 +2782,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/vfs.Entry"
+                  "$ref": "#/components/schemas/Entry"
                 }
               }
             },
@@ -2690,7 +2792,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2700,7 +2802,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2763,7 +2865,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.SearchResponse"
+                  "$ref": "#/components/schemas/SearchResponse"
                 }
               }
             },
@@ -2773,7 +2875,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2810,7 +2912,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/vfs.Entry"
+                  "$ref": "#/components/schemas/Entry"
                 }
               }
             },
@@ -2820,7 +2922,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2830,7 +2932,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2867,7 +2969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.TextResponse"
+                  "$ref": "#/components/schemas/TextResponse"
                 }
               }
             },
@@ -2877,7 +2979,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2887,7 +2989,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2942,7 +3044,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2952,7 +3054,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -2992,7 +3094,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3039,7 +3141,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3049,7 +3151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3105,7 +3207,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3115,7 +3217,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3152,7 +3254,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/media.MediaInfo"
+                  "$ref": "#/components/schemas/MediaInfo"
                 }
               }
             },
@@ -3162,7 +3264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3172,7 +3274,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3227,7 +3329,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3237,7 +3339,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3308,7 +3410,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3318,7 +3420,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3338,9 +3440,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.TranscodeRequest",
+                "$ref": "#/components/schemas/TranscodeRequest",
                 "description": "源文件、画质与音轨",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -3352,7 +3454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.TranscodeResponse"
+                  "$ref": "#/components/schemas/TranscodeResponse"
                 }
               }
             },
@@ -3362,7 +3464,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3372,7 +3474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3399,7 +3501,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/store.S3Key"
+                    "$ref": "#/components/schemas/S3Key"
                   },
                   "type": "array"
                 }
@@ -3411,7 +3513,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3434,9 +3536,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.CreateS3KeyRequest",
+                "$ref": "#/components/schemas/CreateS3KeyRequest",
                 "description": "备注名称与是否只读",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -3448,7 +3550,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.S3KeyWithSecret"
+                  "$ref": "#/components/schemas/S3KeyWithSecret"
                 }
               }
             },
@@ -3458,7 +3560,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3498,7 +3600,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3508,7 +3610,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3545,7 +3647,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.S3KeySecret"
+                  "$ref": "#/components/schemas/S3KeySecret"
                 }
               }
             },
@@ -3555,7 +3657,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3565,7 +3667,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3591,7 +3693,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.SystemInfo"
+                  "$ref": "#/components/schemas/SystemInfo"
                 }
               }
             },
@@ -3601,7 +3703,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3628,7 +3730,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/store.AccessToken"
+                    "$ref": "#/components/schemas/AccessToken"
                   },
                   "type": "array"
                 }
@@ -3640,7 +3742,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3663,9 +3765,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api.CreateTokenRequest",
+                "$ref": "#/components/schemas/CreateTokenRequest",
                 "description": "令牌名称、权限范围与有效期",
-                "summary": "body"
+                "summary": "请求体"
               }
             }
           },
@@ -3677,7 +3779,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.TokenWithSecret"
+                  "$ref": "#/components/schemas/TokenWithSecret"
                 }
               }
             },
@@ -3687,7 +3789,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3697,7 +3799,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3737,7 +3839,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3747,7 +3849,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3784,7 +3886,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.TokenSecret"
+                  "$ref": "#/components/schemas/TokenSecret"
                 }
               }
             },
@@ -3794,7 +3896,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -3804,7 +3906,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },

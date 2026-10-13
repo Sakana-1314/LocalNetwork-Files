@@ -61,6 +61,8 @@ func (s *Service) HasFFmpeg() bool { return s.hasFFmpeg }
 // Close stops all running transcoders.
 func (s *Service) Close() { s.hls.closeAll() }
 
+// VideoStream 是视频轨道信息。
+// @Description 视频轨道信息
 type VideoStream struct {
 	Codec  string  `json:"codec"`  // 视频编码，如 h264、hevc
 	Width  int     `json:"width"`  // 画面宽度（像素）
@@ -72,6 +74,8 @@ type VideoStream struct {
 	profile string // e.g. High, High 10, Main 10
 }
 
+// AudioStream 是音频轨道信息。
+// @Description 音频轨道信息
 type AudioStream struct {
 	Index    int    `json:"index"`    // 音轨序号
 	Codec    string `json:"codec"`    // 音频编码，如 aac、ac3
@@ -82,6 +86,8 @@ type AudioStream struct {
 	startTime float64 // stream start (source timeline, seconds)
 }
 
+// SubtitleStream 是字幕轨道信息。
+// @Description 字幕轨道信息
 type SubtitleStream struct {
 	Index    int    `json:"index"`              // 字幕序号
 	Codec    string `json:"codec"`              // 字幕编码，如 subrip、ass、hdmv_pgs_subtitle
@@ -90,6 +96,8 @@ type SubtitleStream struct {
 	External string `json:"external,omitempty"` // 外挂字幕的虚拟路径；内嵌字幕为空
 }
 
+// MediaInfo 是探测到的媒体信息。
+// @Description 探测到的媒体信息
 type MediaInfo struct {
 	Duration   float64          `json:"duration"`    // 总时长（秒）
 	Format     string           `json:"format"`      // 容器格式，如 matroska,webm

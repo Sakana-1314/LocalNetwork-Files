@@ -225,6 +225,8 @@ func (m *Manager) scan(b Bucket) ([]entry, int64) {
 	return out, total
 }
 
+// BucketStats 是单个缓存桶的占用情况。
+// @Description 单个缓存桶的占用情况
 type BucketStats struct {
 	Files    int   `json:"files"`     // 文件数量
 	Bytes    int64 `json:"bytes"`     // 当前占用字节数

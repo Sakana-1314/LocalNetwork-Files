@@ -150,6 +150,8 @@ func newHLSManager(s *Service) *hlsManager {
 	return m
 }
 
+// SessionInfo 是转码会话信息。
+// @Description 转码会话信息
 type SessionInfo struct {
 	ID         string    `json:"id"`          // 会话 ID
 	Path       string    `json:"path"`        // 源视频的虚拟路径

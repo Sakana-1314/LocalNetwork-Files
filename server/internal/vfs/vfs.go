@@ -252,6 +252,8 @@ func (f *FS) changed(real string) {
 
 // ---------- reading ----------
 
+// Entry 是文件或目录条目。
+// @Description 文件或目录条目
 type Entry struct {
 	Name     string    `json:"name"`                                                      // 文件或目录名
 	Path     string    `json:"path"`                                                      // 虚拟路径

@@ -13,6 +13,8 @@ const (
 	RoleUser  = "user"
 )
 
+// User 是登录用户。
+// @Description 用户
 type User struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`                         // 用户 ID
 	Username     string `gorm:"uniqueIndex;size:64;not null" json:"username"` // 用户名
@@ -57,6 +59,8 @@ func splitPaths(s string) []string {
 }
 
 // Grant 把一个桶授权给用户；Writable=false 表示只读。
+//
+// @Description 把一个桶授权给用户
 type Grant struct {
 	ID       uint    `gorm:"primaryKey" json:"-"`
 	UserID   uint    `gorm:"uniqueIndex:idx_grant_user_bucket;not null" json:"-"`
@@ -69,6 +73,7 @@ type Grant struct {
 
 // Mount 是用户可访问的一个桶的运行时视图（不落库）。Path 是首选目录，
 // Mirrors 是其余互为备份的目录；实际读写哪个目录由 vfs 在可用目录中选择。
+// @Description 授权给用户的服务器目录
 type Mount struct {
 	BucketID uint
 	Name     string
@@ -102,6 +107,8 @@ const (
 	ScopeWrite = "write"
 )
 
+// AccessToken 是 API 访问令牌。
+// @Description API 访问令牌
 type AccessToken struct {
 	ID     uint   `gorm:"primaryKey" json:"id"` // 令牌 ID
 	UserID uint   `gorm:"index;not null" json:"-"`
@@ -139,6 +146,8 @@ func splitScopes(s string) []string {
 	return out
 }
 
+// S3Key 是 S3 访问密钥。
+// @Description S3 访问密钥
 type S3Key struct {
 	AccessKey string    `gorm:"primaryKey;size:32" json:"access_key"` // S3 Access Key（访问密钥 ID）
 	UserID    uint      `gorm:"index;not null" json:"-"`

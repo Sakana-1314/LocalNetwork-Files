@@ -164,7 +164,7 @@ func (a *API) fsText(c *gin.Context) {
 // @Produce  json
 // @Param    path query string true "目标文件的完整虚拟路径"
 // @Param    overwrite query boolean false "目标已存在时是否覆盖；为 false 时返回 409" default(false)
-// @Param    body body string true "文件内容"
+// @Param    请求体 body string true "文件内容"
 // @Success  201 {object} vfs.Entry "上传成功，返回新文件的条目信息"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
@@ -186,7 +186,7 @@ func (a *API) fsPut(c *gin.Context) {
 // @Tags     文件
 // @Accept   json
 // @Produce  json
-// @Param    body body MkdirRequest true "新目录路径"
+// @Param    请求体 body MkdirRequest true "新目录路径"
 // @Success  201 {object} vfs.Entry "目录创建成功，返回新目录的条目信息"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
@@ -210,7 +210,7 @@ func (a *API) fsMkdir(c *gin.Context) {
 // @Tags     文件
 // @Accept   json
 // @Produce  json
-// @Param    body body RenameRequest true "原路径与新名称"
+// @Param    请求体 body RenameRequest true "原路径与新名称"
 // @Success  200 {object} vfs.Entry "重命名成功，返回更新后的条目信息"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
@@ -270,7 +270,7 @@ func (a *API) transfer(c *gin.Context, op func(fsys *vfs.FS, src, dst string, ov
 // @Tags     文件
 // @Accept   json
 // @Produce  json
-// @Param    body body TransferRequest true "源路径、目标目录与是否覆盖"
+// @Param    请求体 body TransferRequest true "源路径、目标目录与是否覆盖"
 // @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
@@ -286,7 +286,7 @@ func (a *API) fsMove(c *gin.Context) {
 // @Tags     文件
 // @Accept   json
 // @Produce  json
-// @Param    body body TransferRequest true "源路径、目标目录与是否覆盖"
+// @Param    请求体 body TransferRequest true "源路径、目标目录与是否覆盖"
 // @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"
@@ -302,7 +302,7 @@ func (a *API) fsCopy(c *gin.Context) {
 // @Tags     文件
 // @Accept   json
 // @Produce  json
-// @Param    body body DeleteRequest true "要删除的路径列表"
+// @Param    请求体 body DeleteRequest true "要删除的路径列表"
 // @Success  200 {object} BatchResult "每个条目的处理结果（成功与失败分别列出）"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "目录只读或令牌无 write 权限"

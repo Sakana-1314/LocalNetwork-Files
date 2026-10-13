@@ -173,7 +173,7 @@ func (a *API) adminListUsers(c *gin.Context) {
 // @Tags     管理
 // @Accept   json
 // @Produce  json
-// @Param    body body UserInput true "用户信息与授权桶"
+// @Param    请求体 body UserInput true "用户信息与授权桶"
 // @Success  201 {object} store.User "用户创建成功"
 // @Failure  400 {object} ErrorResponse "用户名或密码无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
@@ -225,7 +225,7 @@ func (a *API) countActiveAdmins(exclude uint) int {
 // @Accept   json
 // @Produce  json
 // @Param    id path integer true "用户 ID"
-// @Param    body body UserInput true "用户信息与授权桶（整表替换）"
+// @Param    请求体 body UserInput true "用户信息与授权桶（整表替换）"
 // @Success  200 {object} store.User "用户已更新；角色或状态变化会导致该用户重新登录"
 // @Failure  400 {object} ErrorResponse "用户名或密码无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
@@ -384,7 +384,7 @@ func (a *API) adminCacheStats(c *gin.Context) {
 // @Tags     管理
 // @Accept   json
 // @Produce  json
-// @Param    body body CacheCleanRequest false "要清理的缓存桶，省略或 all 表示全部"
+// @Param    请求体 body CacheCleanRequest false "要清理的缓存桶，省略或 all 表示全部"
 // @Success  200 {object} CacheCleanResponse "清理完成，返回删除的文件数与字节数"
 // @Failure  400 {object} ErrorResponse "kind 无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"

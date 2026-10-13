@@ -36,7 +36,7 @@ func (a *API) listTokens(c *gin.Context) {
 // @Tags     访问凭据
 // @Accept   json
 // @Produce  json
-// @Param    body body CreateTokenRequest true "令牌名称、权限范围与有效期"
+// @Param    请求体 body CreateTokenRequest true "令牌名称、权限范围与有效期"
 // @Success  201 {object} TokenWithSecret "令牌创建成功，返回令牌信息与明文"
 // @Failure  400 {object} ErrorResponse "名称或有效期无效"
 // @Failure  403 {object} ErrorResponse "该访问令牌没有 write 权限"
@@ -138,7 +138,7 @@ func (a *API) listS3Keys(c *gin.Context) {
 // @Tags     访问凭据
 // @Accept   json
 // @Produce  json
-// @Param    body body CreateS3KeyRequest true "备注名称与是否只读"
+// @Param    请求体 body CreateS3KeyRequest true "备注名称与是否只读"
 // @Success  201 {object} S3KeyWithSecret "密钥创建成功，返回 Access Key 与 Secret"
 // @Failure  403 {object} ErrorResponse "该访问令牌没有 write 权限"
 // @Security bearerAuth
