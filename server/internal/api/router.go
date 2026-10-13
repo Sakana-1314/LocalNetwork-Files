@@ -128,6 +128,7 @@ func Register(r *gin.Engine, d Deps) {
 	adm.GET("/users", a.adminListUsers)
 	adm.POST("/users", a.requireWrite, a.adminCreateUser)
 	adm.PUT("/users/:id", a.requireWrite, a.adminUpdateUser)
+	adm.GET("/users/:id/password", a.requireWrite, a.adminUserPassword)
 	adm.DELETE("/users/:id", a.requireWrite, a.adminDeleteUser)
 	adm.GET("/buckets", a.adminListBuckets)
 	adm.POST("/buckets", a.requireWrite, a.adminCreateBucket)

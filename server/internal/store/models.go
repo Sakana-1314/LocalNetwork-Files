@@ -19,8 +19,12 @@ type User struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`                         // 用户 ID
 	Username     string `gorm:"uniqueIndex;size:64;not null" json:"username"` // 用户名
 	PasswordHash string `gorm:"not null" json:"-"`
-	Role         string `gorm:"size:16;not null;default:user" json:"role" enums:"admin,user"` // 角色，admin 为管理员
-	Disabled     bool   `gorm:"not null;default:false" json:"disabled"`                       // 是否已禁用（禁用后无法登录，令牌也失效）
+	// PasswordEnc 是密码的可逆密文（AES-GCM，密钥为 data 目录下的 secret.key），
+	// 供管理员在用户管理里查看当前密码。登录校验始终用 PasswordHash。
+	// 升级前创建的用户没有这一列，取值为空串，接口会提示无法查看。
+	PasswordEnc string `gorm:"size:512" json:"-"`
+	Role        string `gorm:"size:16;not null;default:user" json:"role" enums:"admin,user"` // 角色，admin 为管理员
+	Disabled    bool   `gorm:"not null;default:false" json:"disabled"`                       // 是否已禁用（禁用后无法登录，令牌也失效）
 	// TokenVersion 递增即可让该用户的所有登录会话失效。
 	TokenVersion uint      `gorm:"not null;default:0" json:"-"`
 	Grants       []Grant   `gorm:"constraint:OnDelete:CASCADE" json:"grants"` // 该用户被授权的桶

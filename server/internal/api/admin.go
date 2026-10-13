@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Sakana-1314/MList/server/internal/auth"
 	"github.com/Sakana-1314/MList/server/internal/cache"
 	"github.com/Sakana-1314/MList/server/internal/store"
 )
@@ -191,12 +190,11 @@ func (a *API) adminCreateUser(c *gin.Context) {
 	if !a.checkUsername(c, in.Username, 0) {
 		return
 	}
-	h, err := auth.HashPassword(in.Password)
-	if err != nil {
+	u := &store.User{Username: in.Username, Role: in.Role, Disabled: in.Disabled, Grants: in.grants()}
+	if err := a.Auth.SetPasswordFields(u, in.Password); err != nil {
 		fail(c, err)
 		return
 	}
-	u := &store.User{Username: in.Username, PasswordHash: h, Role: in.Role, Disabled: in.Disabled, Grants: in.grants()}
 	if err := a.Store.CreateUser(u); err != nil {
 		fail(c, err)
 		return
@@ -273,6 +271,35 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, userView(u))
+}
+
+// @Summary     查看用户密码
+// @Description 返回指定用户的当前密码明文，用于在用户管理界面直接查看与转述。
+// @Description 密码以 AES-GCM 加密保存在数据库里（密钥为 data 目录下的 secret.key），
+// @Description 登录校验仍走 bcrypt 哈希；升级前创建的用户没有密文，此时 known 为 false，
+// @Description 只能通过修改密码来设置一个新的。需要管理员权限与 write 令牌。
+// @Description 响应带 Cache-Control: no-store，请勿缓存。
+// @Tags     管理
+// @Param    id path integer true "用户 ID"
+// @Success  200 {object} UserPassword "用户的当前密码；known 为 false 表示查不到，需要重置"
+// @Failure  403 {object} ErrorResponse "需要管理员权限"
+// @Failure  404 {object} ErrorResponse "用户不存在"
+// @Security bearerAuth
+// @Router   /admin/users/{id}/password [get]
+func (a *API) adminUserPassword(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		fail(c, badRequest("id 无效"))
+		return
+	}
+	u, err := a.Store.GetUser(uint(id))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	pw, known := a.Auth.Password(u)
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, UserPassword{Password: pw, Known: known})
 }
 
 // @Summary     删除用户

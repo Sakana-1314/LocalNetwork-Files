@@ -23,7 +23,7 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 | `cmd/mlist` | 入口：解析参数、加载配置、设置日志、处理 SIGINT/SIGTERM |
 | `internal/config` | YAML 配置与默认值：监听、数据目录、服务开关与端口、转码、缓存、搜索（带 `Normalize` 校验），`MLIST_LISTEN` / `MLIST_DATA_DIR` 环境变量覆盖 |
 | `internal/store` | GORM + SQLite（纯 Go 驱动）：用户、桶（Bucket，一个或多个互为备份的目录）、授权（Grant）、访问令牌、S3 密钥；`Subscribe` 发布 `EventUsersChanged` |
-| `internal/auth` | bcrypt 密码、会话 JWT、`ml_` API 令牌（`read`/`write` 范围，与 S3 密钥一样 AES-GCM 加密存储、可再次读取）、WebDAV 用的 Basic 认证（带短期缓存）；`OnPassword` 回调把明文密码交给 SMB 同步 |
+| `internal/auth` | bcrypt 密码（另存一份 AES-GCM 加密的可逆副本，供管理员查看当前密码）、会话 JWT、`ml_` API 令牌（`read`/`write` 范围，与 S3 密钥一样 AES-GCM 加密存储、可再次读取）、WebDAV 用的 Basic 认证（带短期缓存）；`OnPassword` 回调把明文密码交给 SMB 同步 |
 | `internal/vfs` | 每用户虚拟文件系统：`/<mount>/<rel>` → 磁盘路径；路径清理、符号链接约束、只读检查、原子上传（`.lnf-upload-*` 临时文件）；桶的多目录备份（`replica.go`：写入即复制到备份目录，`Reconcile` 只增不删地合并，`FindConflicts` 检测同名冲突）。**REST / WebDAV / S3 的唯一权限执行层** |
 | `internal/search` | 内存文件名索引（按桶的主目录分根）、fzf 风格模糊匹配与打分、vfs 写入通知 + fsnotify 监听 + 定时重建 |
 | `internal/media` | ffprobe 探测、图片 / 视频预览图、HLS 实时转码会话（按需分片、拖动重启、硬件编码回退）、音频转码流、字幕转 WebVTT；缓存以内容指纹（大小 + 首尾各 64 KiB 的 sha256）为 key，与文件路径无关 |
