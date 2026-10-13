@@ -1,6 +1,10 @@
 import { clearToken, getToken } from './token'
 
-export const API_BASE = '/api/v1'
+/**
+ * API 前缀。默认与后端同源（/api/v1）；演示站等场景可用 VITE_API_BASE
+ * 指向别处（如 Apifox 云端 Mock），此时需带完整路径前缀。
+ */
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.trim() || '/api/v1'
 
 export class ApiError extends Error {
   readonly status: number
