@@ -242,3 +242,30 @@ func TestSpecRoutePathParamsMatchGin(t *testing.T) {
 		}
 	}
 }
+
+// TestSpecSummariesAreConcise 接口名称（Apifox 里的接口名取 summary）必须简洁：
+// 不用括号堆细节，也不塞路径或分隔符。细节写进 description。
+func TestSpecSummariesAreConcise(t *testing.T) {
+	doc := specFixture(t)
+	for _, o := range operations(t, doc) {
+		where := o.method + " " + o.path
+		summary, _ := o.op["summary"].(string)
+
+		// 半角/全角圆括号都不允许：细节应放进 description。
+		if strings.ContainsAny(summary, "()（）") {
+			t.Errorf("%s 的名称带括号，请把细节移到 description：%q", where, summary)
+		}
+		// 名称里不出现路径或斜杠。
+		if strings.Contains(summary, "/") {
+			t.Errorf("%s 的名称里出现了 /：%q", where, summary)
+		}
+		// 名字要短：中文字符数与等价的西文词数都不宜多。
+		if n := len([]rune(summary)); n > 12 {
+			t.Errorf("%s 的名称过长（%d 字）：%q", where, n, summary)
+		}
+		// 细节必须有去处。
+		if desc, _ := o.op["description"].(string); strings.TrimSpace(desc) == "" {
+			t.Errorf("%s 缺少 description，细节无处安放", where)
+		}
+	}
+}

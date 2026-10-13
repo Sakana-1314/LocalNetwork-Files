@@ -16,7 +16,9 @@ import (
 	"github.com/Sakana-1314/MList/server/internal/vfs"
 )
 
-// @Summary  列出目录
+// @Summary     列出目录
+// @Description 返回该目录下的文件与子目录；省略 path 时为虚拟根目录 /。
+// @Description 每个条目带预览图摘要 thumb 与签名 thumb_sig，可直接用于获取预览图接口。
 // @Tags     文件
 // @Produce  json
 // @Param    path query string false "目录的虚拟路径，省略时为根目录 /" default(/)
@@ -36,7 +38,8 @@ func (a *API) fsList(c *gin.Context) {
 	c.JSON(http.StatusOK, ListResponse{Path: vfs.CleanPath(p), Writable: writable, Entries: entries})
 }
 
-// @Summary  获取单个文件/目录信息
+// @Summary     获取文件信息
+// @Description 返回单个文件或目录的条目信息，字段与列出目录的条目一致。
 // @Tags     文件
 // @Produce  json
 // @Param    path query string true "文件或目录的虚拟路径"
@@ -60,7 +63,10 @@ var activeTypes = map[string]bool{
 	"text/html": true, "image/svg+xml": true, "application/xhtml+xml": true, "text/xml": true, "application/xml": true,
 }
 
-// @Summary  读取原始文件（支持 Range 断点续传）
+// @Summary     读取原始文件
+// @Description 以流的形式返回文件内容，支持 Range 请求，可用于断点续传与拖动进度。
+// @Description 响应头带 Content-Type 与 Accept-Ranges；download 为 true 时以附件形式下载（Content-Disposition: attachment）。
+// @Description 对可能被浏览器执行脚本的类型会附加 CSP sandbox。
 // @Tags     文件
 // @Param    path query string true "文件的虚拟路径"
 // @Param    download query boolean false "为 true 时以附件形式下载（Content-Disposition: attachment）"
@@ -94,7 +100,9 @@ func (a *API) fsRaw(c *gin.Context) {
 	http.ServeContent(c.Writer, c.Request, "", fi.ModTime(), f)
 }
 
-// @Summary  同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名
+// @Summary     读取原始文件并显示文件名
+// @Description 与读取原始文件接口行为完全相同，只是 URL 末尾带上文件名，便于浏览器保存或下载时显示真实文件名。
+// @Description 末尾的名称由服务端忽略，实际读取的路径仍取自 path 参数。
 // @Tags     文件
 // @Param    name path string true "文件名，仅用于让浏览器显示真实文件名，服务端忽略"
 // @Param    path query string true "文件的虚拟路径（实际使用的路径）"
@@ -109,7 +117,9 @@ func (a *API) fsRawNamed(c *gin.Context) { a.fsRaw(c) }
 
 const maxTextSize = 4 << 20
 
-// @Summary  读取文本文件（最大 4 MiB）
+// @Summary     读取文本文件
+// @Description 按 UTF-8 返回文件文本，最大读取 4 MiB。
+// @Description 超出部分会被截断，并通过 truncated 标记。
 // @Tags     文件
 // @Produce  json
 // @Param    path query string true "文本文件的虚拟路径"
@@ -146,7 +156,9 @@ func (a *API) fsText(c *gin.Context) {
 	c.JSON(http.StatusOK, TextResponse{Content: content, Truncated: truncated})
 }
 
-// @Summary  上传 / 覆盖文件（请求体为文件内容，自动创建父目录）
+// @Summary     上传文件
+// @Description 请求体为文件内容，自动创建不存在的父目录。
+// @Description overwrite 为 false（默认）时，目标已存在则返回 409。
 // @Tags     文件
 // @Accept   application/octet-stream
 // @Produce  json
@@ -169,7 +181,8 @@ func (a *API) fsPut(c *gin.Context) {
 	c.JSON(http.StatusCreated, e)
 }
 
-// @Summary  新建目录
+// @Summary     新建目录
+// @Description 创建目录，并自动创建不存在的父目录。
 // @Tags     文件
 // @Accept   json
 // @Produce  json
@@ -192,7 +205,8 @@ func (a *API) fsMkdir(c *gin.Context) {
 	c.JSON(http.StatusCreated, e)
 }
 
-// @Summary  重命名
+// @Summary     重命名
+// @Description 在同一目录内重命名文件或目录，name 为不含路径的新名称。
 // @Tags     文件
 // @Accept   json
 // @Produce  json
@@ -250,7 +264,9 @@ func (a *API) transfer(c *gin.Context, op func(fsys *vfs.FS, src, dst string, ov
 	c.JSON(http.StatusOK, res)
 }
 
-// @Summary  移动（可跨授权目录）
+// @Summary     移动文件
+// @Description 把多个条目移动到目标目录，可以跨授权目录。
+// @Description overwrite 为 true 时覆盖同名目标；逐个条目返回成功与失败，部分失败不影响其余条目。
 // @Tags     文件
 // @Accept   json
 // @Produce  json
@@ -264,7 +280,9 @@ func (a *API) fsMove(c *gin.Context) {
 	a.transfer(c, func(fsys *vfs.FS, src, dst string, ow bool) error { return fsys.Move(src, dst, ow) })
 }
 
-// @Summary  复制
+// @Summary     复制文件
+// @Description 把多个条目复制到目标目录。
+// @Description overwrite 为 true 时覆盖同名目标；逐个条目返回成功与失败。
 // @Tags     文件
 // @Accept   json
 // @Produce  json
@@ -278,7 +296,9 @@ func (a *API) fsCopy(c *gin.Context) {
 	a.transfer(c, func(fsys *vfs.FS, src, dst string, ow bool) error { return fsys.Copy(src, dst, ow) })
 }
 
-// @Summary  删除（目录递归删除）
+// @Summary     删除文件
+// @Description 删除给定的条目，目录会被递归删除。
+// @Description 逐个条目返回成功与失败。
 // @Tags     文件
 // @Accept   json
 // @Produce  json
@@ -301,7 +321,9 @@ func (a *API) fsDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
-// @Summary  模糊搜索文件名
+// @Summary     搜索文件名
+// @Description 按子序列模糊匹配文件名，支持中文。
+// @Description 可用 path 限定搜索范围、kind 限定类型；结果按相关度排序，并带匹配位置与预览图摘要。
 // @Tags     文件
 // @Produce  json
 // @Param    q query string true "搜索关键字（支持中文；按子序列模糊匹配）"
