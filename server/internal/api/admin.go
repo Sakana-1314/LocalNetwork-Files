@@ -103,19 +103,18 @@ func (in *UserInput) validate(creating bool) error {
 	if in.Role != store.RoleUser && in.Role != store.RoleAdmin {
 		return badRequest("角色无效")
 	}
-	if in.Mounts == nil {
-		in.Mounts = []store.Mount{}
-	}
-	if err := store.ValidateMounts(in.Mounts); err != nil {
-		return badRequest(err.Error())
-	}
-	for _, m := range in.Mounts {
-		fi, err := os.Stat(m.Path)
-		if err != nil || !fi.IsDir() {
-			return badRequest("目录不存在: " + m.Path)
-		}
-	}
 	return nil
+}
+
+func (in *UserInput) grants() []store.Grant {
+	if in.Grants == nil {
+		return nil
+	}
+	out := make([]store.Grant, 0, len(in.Grants))
+	for _, g := range in.Grants {
+		out = append(out, store.Grant{BucketID: g.BucketID, Writable: g.Writable})
+	}
+	return out
 }
 
 // usernameTaken reports whether another user already has name, ignoring case:
@@ -147,10 +146,10 @@ func (a *API) checkUsername(c *gin.Context, name string, exclude uint) bool {
 }
 
 // @Summary     列出用户
-// @Description 返回全部用户及其授权目录；仅管理员可见本地路径。需要管理员权限。
+// @Description 返回全部用户及其授权桶；仅管理员可见本地路径。需要管理员权限。
 // @Tags     管理
 // @Produce  json
-// @Success  200 {array} store.User "全部用户及其授权目录（仅管理员可见本地路径）"
+// @Success  200 {array} store.User "全部用户及其授权桶（仅管理员可见本地路径）"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
 // @Security bearerAuth
@@ -163,18 +162,18 @@ func (a *API) adminListUsers(c *gin.Context) {
 	}
 	out := make([]store.User, 0, len(users))
 	for i := range users {
-		out = append(out, userView(&users[i], true))
+		out = append(out, userView(&users[i]))
 	}
 	c.JSON(http.StatusOK, out)
 }
 
 // @Summary     创建用户
-// @Description 创建用户并设置其授权目录与角色。
+// @Description 创建用户并设置其授权桶与角色。
 // @Description 用户名 1 至 32 位，可用字母、数字、下划线、点和横线；密码至少 6 位。需要管理员权限。
 // @Tags     管理
 // @Accept   json
 // @Produce  json
-// @Param    body body UserInput true "用户信息与授权目录"
+// @Param    body body UserInput true "用户信息与授权桶"
 // @Success  201 {object} store.User "用户创建成功"
 // @Failure  400 {object} ErrorResponse "用户名或密码无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
@@ -197,7 +196,7 @@ func (a *API) adminCreateUser(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	u := &store.User{Username: in.Username, PasswordHash: h, Role: in.Role, Disabled: in.Disabled, Mounts: in.Mounts}
+	u := &store.User{Username: in.Username, PasswordHash: h, Role: in.Role, Disabled: in.Disabled, Grants: in.grants()}
 	if err := a.Store.CreateUser(u); err != nil {
 		fail(c, err)
 		return
@@ -205,7 +204,7 @@ func (a *API) adminCreateUser(c *gin.Context) {
 	if a.Auth.OnPassword != nil {
 		go a.Auth.OnPassword(u, in.Password)
 	}
-	c.JSON(http.StatusCreated, userView(u, true))
+	c.JSON(http.StatusCreated, userView(u))
 }
 
 func (a *API) countActiveAdmins(exclude uint) int {
@@ -220,13 +219,13 @@ func (a *API) countActiveAdmins(exclude uint) int {
 }
 
 // @Summary     更新用户
-// @Description 更新用户信息与授权目录（整表替换）。
+// @Description 更新用户信息与授权桶（整表替换）。
 // @Description password 留空表示不修改密码；角色或启用状态变化会让该用户重新登录。需要管理员权限。
 // @Tags     管理
 // @Accept   json
 // @Produce  json
 // @Param    id path integer true "用户 ID"
-// @Param    body body UserInput true "用户信息与授权目录（整表替换）"
+// @Param    body body UserInput true "用户信息与授权桶（整表替换）"
 // @Success  200 {object} store.User "用户已更新；角色或状态变化会导致该用户重新登录"
 // @Failure  400 {object} ErrorResponse "用户名或密码无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
@@ -269,19 +268,19 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 			return
 		}
 	}
-	if err := a.Store.UpdateUser(u, in.Mounts); err != nil {
+	if err := a.Store.UpdateUser(u, in.grants()); err != nil {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, userView(u, true))
+	c.JSON(http.StatusOK, userView(u))
 }
 
 // @Summary     删除用户
-// @Description 同时删除该用户的授权目录、访问令牌与 S3 密钥。
+// @Description 同时删除该用户的授权桶、访问令牌与 S3 密钥。
 // @Description 不允许删除最后一个管理员或当前登录用户。需要管理员权限。
 // @Tags     管理
 // @Param    id path integer true "用户 ID"
-// @Success  204 "用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体"
+// @Success  204 "用户及其授权桶、访问令牌、S3 密钥均已删除，无响应体"
 // @Failure  400 {object} ErrorResponse "不允许删除最后一个管理员或当前登录用户"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
 // @Failure  404 {object} ErrorResponse "用户不存在"
@@ -304,9 +303,9 @@ func (a *API) adminDeleteUser(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// adminBrowse lists local directories so admins can pick mount paths.
+// adminBrowse lists local directories so admins can pick bucket paths.
 // @Summary     浏览服务器目录
-// @Description 浏览服务器本地文件系统，用于在界面上选择授权目录。
+// @Description 浏览服务器本地文件系统，用于在界面上选择桶的目录。
 // @Description 省略 path 时返回顶层目录或盘符列表。需要管理员权限。
 // @Tags     管理
 // @Produce  json

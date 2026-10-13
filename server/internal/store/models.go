@@ -1,6 +1,7 @@
 package store
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -20,20 +21,80 @@ type User struct {
 	Disabled     bool   `gorm:"not null;default:false" json:"disabled"`                       // 是否已禁用（禁用后无法登录，令牌也失效）
 	// TokenVersion 递增即可让该用户的所有登录会话失效。
 	TokenVersion uint      `gorm:"not null;default:0" json:"-"`
-	Mounts       []Mount   `gorm:"constraint:OnDelete:CASCADE" json:"mounts"` // 该用户被授权的目录
+	Grants       []Grant   `gorm:"constraint:OnDelete:CASCADE" json:"grants"` // 该用户被授权的桶
 	CreatedAt    time.Time `json:"created_at"`                                // 创建时间
 	UpdatedAt    time.Time `json:"-"`
+
+	// Mounts 由 Grants 与其桶解析而来，是文件系统、搜索与 SMB 使用的运行时视图。
+	Mounts []Mount `gorm:"-" json:"-"`
 }
 
 func (u *User) IsAdmin() bool { return u.Role == RoleAdmin }
 
-// Mount 是授权给用户的服务器目录；Writable=false 表示只读。
+// Bucket 是对服务器目录的抽象：一个桶对应一个或多个本地目录，多个目录互为备份，
+// 内容保持一致（复制而非软链接）。第一个可用目录是读写的主目录，其余为副本。
+type Bucket struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`                      // 桶 ID
+	Name      string    `gorm:"uniqueIndex;size:128;not null" json:"name"` // 桶名称，即用户虚拟根目录下显示的名称
+	PathsRaw  string    `gorm:"column:paths;not null" json:"-"`
+	CreatedAt time.Time `json:"created_at"` // 创建时间
+
+	Paths []string `gorm:"-" json:"paths"` // 桶对应的服务器本地绝对路径，按优先级排列；多个目录互为备份
+}
+
+func (b *Bucket) AfterFind(*gorm.DB) error { b.Paths = splitPaths(b.PathsRaw); return nil }
+
+func (b *Bucket) BeforeSave(*gorm.DB) error { b.PathsRaw = strings.Join(b.Paths, "\n"); return nil }
+
+func splitPaths(s string) []string {
+	out := []string{}
+	for _, p := range strings.Split(s, "\n") {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Grant 把一个桶授权给用户；Writable=false 表示只读。
+type Grant struct {
+	ID       uint    `gorm:"primaryKey" json:"-"`
+	UserID   uint    `gorm:"uniqueIndex:idx_grant_user_bucket;not null" json:"-"`
+	BucketID uint    `gorm:"uniqueIndex:idx_grant_user_bucket;index;not null" json:"bucket_id"` // 桶 ID
+	Writable bool    `gorm:"not null;default:false" json:"writable"`                            // false 为只读，true 为可写
+	Bucket   *Bucket `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+
+	Name string `gorm:"-" json:"name"` // 桶名称（只读，由服务端填充）
+}
+
+// Mount 是用户可访问的一个桶的运行时视图（不落库）。Path 是首选目录，
+// Mirrors 是其余互为备份的目录；实际读写哪个目录由 vfs 在可用目录中选择。
 type Mount struct {
-	ID       uint   `gorm:"primaryKey" json:"id"` // 授权目录 ID
-	UserID   uint   `gorm:"index;not null" json:"-"`
-	Name     string `gorm:"size:128;not null" json:"name"`          // 在虚拟根目录下显示的名称
-	Path     string `gorm:"not null" json:"path,omitempty"`         // 服务器本地绝对路径（仅管理员可见）
-	Writable bool   `gorm:"not null;default:false" json:"writable"` // false 为只读目录，true 为可写目录
+	BucketID uint
+	Name     string
+	Path     string
+	Mirrors  []string
+	Writable bool
+}
+
+// Dirs returns every configured directory of the mount, preferred first.
+func (m Mount) Dirs() []string { return append([]string{m.Path}, m.Mirrors...) }
+
+// Active returns the directory that serves reads and writes — the first one
+// that currently exists as a directory — and the other available directories
+// that receive copies. When none is available the preferred path is returned
+// so that callers report "not found" instead of silently switching.
+func (m Mount) Active() (string, []string) {
+	var avail []string
+	for _, d := range m.Dirs() {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			avail = append(avail, d)
+		}
+	}
+	if len(avail) == 0 {
+		return m.Path, nil
+	}
+	return avail[0], avail[1:]
 }
 
 const (

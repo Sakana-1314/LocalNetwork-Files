@@ -303,7 +303,7 @@ async function onDrop(e: DragEvent): Promise<void> {
   e.preventDefault()
   dragDepth.value = 0
   if (!dirWritable.value) {
-    message.warning(isRoot.value ? '请先进入一个授权目录再上传' : '当前目录为只读，无法上传')
+    message.warning(isRoot.value ? '请先进入一个桶再上传' : '当前目录为只读，无法上传')
     return
   }
   if (!e.dataTransfer) return
@@ -799,7 +799,7 @@ const emptyText = computed(() => {
       <div class="drop-box">
         <n-icon :component="CloudUploadOutline" size="48" />
         <div v-if="dirWritable">释放以上传到 <b>{{ currentPath }}</b></div>
-        <div v-else>{{ isRoot ? '请先进入一个授权目录' : '当前目录为只读' }}</div>
+        <div v-else>{{ isRoot ? '请先进入一个桶' : '当前目录为只读' }}</div>
       </div>
     </div>
 

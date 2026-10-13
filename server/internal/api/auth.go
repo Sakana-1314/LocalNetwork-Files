@@ -57,19 +57,11 @@ func (a *API) requireWrite(c *gin.Context) {
 	c.Next()
 }
 
-// userView hides local paths from non-admin viewers.
-func userView(u *store.User, showPaths bool) store.User {
+// userView is the JSON form of a user. Grants only carry bucket names; local
+// paths are only exposed through the admin bucket endpoints.
+func userView(u *store.User) store.User {
 	out := *u
-	out.Mounts = make([]store.Mount, len(u.Mounts))
-	copy(out.Mounts, u.Mounts)
-	if !showPaths {
-		for i := range out.Mounts {
-			out.Mounts[i].Path = ""
-		}
-	}
-	if out.Mounts == nil {
-		out.Mounts = []store.Mount{}
-	}
+	out.Grants = append([]store.Grant{}, u.Grants...)
 	return out
 }
 
@@ -114,7 +106,7 @@ func (a *API) login(c *gin.Context) {
 		return
 	}
 	a.setSessionCookie(c, tok, exp)
-	c.JSON(http.StatusOK, LoginResponse{Token: tok, ExpiresAt: exp, User: userView(u, u.IsAdmin())})
+	c.JSON(http.StatusOK, LoginResponse{Token: tok, ExpiresAt: exp, User: userView(u)})
 }
 
 // @Summary     退出登录
@@ -137,7 +129,7 @@ func (a *API) logout(c *gin.Context) {
 // @Router   /auth/me [get]
 func (a *API) me(c *gin.Context) {
 	u := principal(c).User
-	c.JSON(http.StatusOK, userView(u, u.IsAdmin()))
+	c.JSON(http.StatusOK, userView(u))
 }
 
 // 修改密码会使该用户此前的所有会话失效，因此会签发并写回新的会话令牌。

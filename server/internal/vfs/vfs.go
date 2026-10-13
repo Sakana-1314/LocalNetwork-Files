@@ -56,8 +56,11 @@ type Notifier interface {
 
 type Root struct {
 	Name     string
-	Path     string // absolute, symlinks resolved
+	Path     string // active directory: absolute, symlinks resolved
 	Writable bool
+	// Mirrors are the bucket's other available directories; every change made
+	// through the VFS is copied onto them.
+	Mirrors []string
 }
 
 type FS struct {
@@ -72,15 +75,23 @@ type FS struct {
 func New(mounts []store.Mount, readOnly bool, n Notifier) *FS {
 	f := &FS{byName: map[string]*Root{}, readOnly: readOnly, notify: n}
 	for _, m := range mounts {
-		p := filepath.Clean(m.Path)
-		if rp, err := filepath.EvalSymlinks(p); err == nil {
-			p = rp
+		active, mirrors := m.Active()
+		r := &Root{Name: m.Name, Path: cleanDir(active), Writable: m.Writable && !readOnly}
+		for _, d := range mirrors {
+			r.Mirrors = append(r.Mirrors, cleanDir(d))
 		}
-		r := &Root{Name: m.Name, Path: p, Writable: m.Writable && !readOnly}
 		f.roots = append(f.roots, r)
 		f.byName[m.Name] = r
 	}
 	return f
+}
+
+func cleanDir(p string) string {
+	p = filepath.Clean(p)
+	if rp, err := filepath.EvalSymlinks(p); err == nil {
+		p = rp
+	}
+	return p
 }
 
 func (f *FS) Roots() []*Root         { return f.roots }
@@ -466,10 +477,14 @@ func (f *FS) WriteFile(vpath string, r io.Reader, overwrite bool) (*Entry, error
 		return nil, err
 	}
 	os.Chmod(tmp.Name(), 0o644)
+	unlock := f.lockMirrors(l.Root)
 	if err := publish(tmp.Name(), l.Real, overwrite); err != nil {
+		unlock()
 		os.Remove(tmp.Name())
 		return nil, err
 	}
+	f.mirror(l.Root, l.Rel, false)
+	unlock()
 	f.changed(l.Real)
 	return f.Stat(l.VPath)
 }
@@ -514,9 +529,13 @@ func (f *FS) Mkdir(vpath string) (*Entry, error) {
 	if _, err := os.Lstat(l.Real); err == nil {
 		return nil, ErrExists
 	}
+	unlock := f.lockMirrors(l.Root)
 	if err := os.MkdirAll(l.Real, 0o755); err != nil {
+		unlock()
 		return nil, mapErr(err)
 	}
+	f.mirror(l.Root, l.Rel, false)
+	unlock()
 	f.changed(l.Real)
 	return f.Stat(l.VPath)
 }
@@ -580,6 +599,8 @@ func (f *FS) moveOne(l *Loc, dstPath string, overwrite bool) error {
 		// Overwriting an ancestor of the source would delete the source itself.
 		return fmt.Errorf("%w: 不能覆盖包含源的目录", ErrInvalid)
 	}
+	defer f.lockMirrors(l.Root, d.Root)()
+	replaced := false
 	if fi, err := os.Lstat(d.Real); err == nil {
 		// Case-only renames on case-insensitive filesystems refer to the same file.
 		sameFile := false
@@ -593,6 +614,7 @@ func (f *FS) moveOne(l *Loc, dstPath string, overwrite bool) error {
 			if err := os.RemoveAll(d.Real); err != nil {
 				return mapErr(err)
 			}
+			replaced = true
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(d.Real), 0o755); err != nil {
@@ -609,6 +631,12 @@ func (f *FS) moveOne(l *Loc, dstPath string, overwrite bool) error {
 		if err := os.RemoveAll(l.Real); err != nil {
 			return mapErr(err)
 		}
+	}
+	if l.Root == d.Root {
+		f.mirrorMove(l.Root, l.Rel, d.Rel, replaced)
+	} else {
+		f.mirror(l.Root, l.Rel, false)
+		f.mirror(d.Root, d.Rel, replaced)
 	}
 	f.changed(l.Real)
 	f.changed(d.Real)
@@ -649,6 +677,8 @@ func (f *FS) Copy(src, dst string, overwrite bool) error {
 	if within(d.Real, l.Real) || within(dstR, srcReal) {
 		return fmt.Errorf("%w: 不能覆盖包含源的目录", ErrInvalid)
 	}
+	defer f.lockMirrors(d.Root)()
+	replaced := false
 	if _, err := os.Lstat(d.Real); err == nil {
 		if !overwrite {
 			return ErrExists
@@ -656,14 +686,19 @@ func (f *FS) Copy(src, dst string, overwrite bool) error {
 		if err := os.RemoveAll(d.Real); err != nil {
 			return mapErr(err)
 		}
+		replaced = true
 	}
 	if err := os.MkdirAll(filepath.Dir(d.Real), 0o755); err != nil {
 		return mapErr(err)
 	}
 	if err := copyTree(srcReal, d.Real); err != nil {
 		os.RemoveAll(d.Real)
+		if replaced {
+			f.mirror(d.Root, d.Rel, false)
+		}
 		return err
 	}
+	f.mirror(d.Root, d.Rel, replaced)
 	f.changed(d.Real)
 	return nil
 }
@@ -683,9 +718,12 @@ func (f *FS) Remove(vpath string) error {
 	if _, err := os.Lstat(l.Real); err != nil {
 		return mapErr(err)
 	}
+	defer f.lockMirrors(l.Root)()
 	if err := os.RemoveAll(l.Real); err != nil {
+		f.mirror(l.Root, l.Rel, false)
 		return mapErr(err)
 	}
+	f.mirror(l.Root, l.Rel, false)
 	f.changed(l.Real)
 	return nil
 }
@@ -693,6 +731,11 @@ func (f *FS) Remove(vpath string) error {
 // Changed lets callers that write through OpenFile report modifications.
 func (f *FS) Changed(l *Loc) {
 	if l != nil {
+		if l.Root != nil && l.Rel != "" {
+			unlock := f.lockMirrors(l.Root)
+			f.mirror(l.Root, l.Rel, false)
+			unlock()
+		}
 		f.changed(l.Real)
 	}
 }

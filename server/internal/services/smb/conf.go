@@ -141,7 +141,8 @@ func buildConfig(users []store.User, p confParams) confResult {
 			if pathsByName[k] == nil {
 				pathsByName[k] = map[string]bool{}
 			}
-			pathsByName[k][filepath.Clean(mt.Path)] = true
+			active, _ := mt.Active()
+			pathsByName[k][filepath.Clean(active)] = true
 		}
 	}
 
@@ -150,11 +151,14 @@ func buildConfig(users []store.User, p confParams) confResult {
 	for _, u := range active {
 		acct := accountName(p.UserPrefix, u.Username)
 		for _, mt := range u.Mounts {
-			if why := unsafePath(mt.Path); why != "" {
+			// SMB serves the bucket's active directory; changes made there reach
+			// the backup directories through the periodic bucket sync.
+			active, _ := mt.Active()
+			if why := unsafePath(active); why != "" {
 				res.Skipped = append(res.Skipped, fmt.Sprintf("%s/%s: %s", u.Username, mt.Name, why))
 				continue
 			}
-			path := filepath.Clean(mt.Path)
+			path := filepath.Clean(active)
 			base := shareName(mt.Name)
 			if len(pathsByName[strings.ToLower(base)]) > 1 {
 				base = shareName(base + "-" + u.Username)

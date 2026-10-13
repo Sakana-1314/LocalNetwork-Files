@@ -70,11 +70,11 @@ export interface SearchParams {
 
 export type Role = 'admin' | 'user'
 
-export interface Mount {
-  id: number
+/** 用户被授权的桶 */
+export interface Grant {
+  bucket_id: number
+  /** 桶名称 */
   name: string
-  /** 服务器本地绝对路径（仅管理员可见） */
-  path?: string
   writable: boolean
 }
 
@@ -83,13 +83,12 @@ export interface User {
   username: string
   role: Role
   disabled: boolean
-  mounts: Mount[]
+  grants: Grant[]
   created_at: string
 }
 
-export interface MountInput {
-  name: string
-  path: string
+export interface GrantInput {
+  bucket_id: number
   writable: boolean
 }
 
@@ -98,7 +97,52 @@ export interface UserInput {
   password?: string
   role: Role
   disabled: boolean
-  mounts: MountInput[]
+  /** 省略表示不修改 */
+  grants?: GrantInput[]
+}
+
+/** 桶：对服务器目录的抽象；多个目录互为备份 */
+export interface Bucket {
+  id: number
+  name: string
+  /** 服务器本地绝对路径，按优先级排列 */
+  paths: string[]
+  created_at: string
+}
+
+export interface BucketDir {
+  path: string
+  available: boolean
+  /** 当前读写的主目录 */
+  active: boolean
+}
+
+export interface BucketView extends Bucket {
+  users: number
+  dirs: BucketDir[]
+}
+
+export interface BucketInput {
+  name: string
+  paths: string[]
+}
+
+export interface BucketConflict {
+  /** 桶内相对路径 */
+  path: string
+  dirs: string[]
+  reason: string
+}
+
+export interface SyncResult {
+  copied: number
+  bytes: number
+  conflicts: BucketConflict[]
+}
+
+export interface BucketSaved {
+  bucket: BucketView
+  sync: SyncResult
 }
 
 export interface LoginResponse {

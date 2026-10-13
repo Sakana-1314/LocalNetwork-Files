@@ -22,10 +22,10 @@ import {
   type FormInst,
   type FormRules,
 } from 'naive-ui'
-import { AddOutline, FolderOpenOutline, PersonAddOutline, TrashOutline } from '@vicons/ionicons5'
-import type { MountInput, Role, User, UserInput } from '@/api/types'
+import { AddOutline, PersonAddOutline, TrashOutline } from '@vicons/ionicons5'
+import { RouterLink } from 'vue-router'
+import type { BucketView, GrantInput, Role, User, UserInput } from '@/api/types'
 import { adminApi } from '@/api/admin'
-import ServerDirPickerModal from '@/components/admin/ServerDirPickerModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useIsMobile } from '@/composables/useIsMobile'
 import { formatDate } from '@/utils/format'
@@ -35,12 +35,13 @@ const auth = useAuthStore()
 const isMobile = useIsMobile()
 
 const users = ref<User[]>([])
+const buckets = ref<BucketView[]>([])
 const loading = ref(false)
 
 async function load(): Promise<void> {
   loading.value = true
   try {
-    users.value = await adminApi.users()
+    ;[users.value, buckets.value] = await Promise.all([adminApi.users(), adminApi.buckets()])
   } catch {
     /* 错误已提示 */
   } finally {
@@ -73,10 +74,10 @@ interface FormModel {
   password: string
   role: Role
   disabled: boolean
-  mounts: (MountInput & { _key: number })[]
+  grants: (Omit<GrantInput, 'bucket_id'> & { bucket_id: number | null; _key: number })[]
 }
 let keySeq = 0
-const form = reactive<FormModel>({ username: '', password: '', role: 'user', disabled: false, mounts: [] })
+const form = reactive<FormModel>({ username: '', password: '', role: 'user', disabled: false, grants: [] })
 
 const rules = computed<FormRules>(() => ({
   username: [
@@ -93,8 +94,8 @@ const rules = computed<FormRules>(() => ({
 
 function openCreate(): void {
   editing.value = null
-  Object.assign(form, { username: '', password: '', role: 'user', disabled: false, mounts: [] })
-  addMount()
+  Object.assign(form, { username: '', password: '', role: 'user', disabled: false, grants: [] })
+  if (buckets.value.length) addGrant()
   modalOpen.value = true
 }
 
@@ -105,50 +106,26 @@ function openEdit(u: User): void {
     password: '',
     role: u.role,
     disabled: u.disabled,
-    mounts: u.mounts.map((m) => ({ name: m.name, path: m.path ?? '', writable: m.writable, _key: ++keySeq })),
+    grants: u.grants.map((g) => ({ bucket_id: g.bucket_id, writable: g.writable, _key: ++keySeq })),
   })
   modalOpen.value = true
 }
 
-function addMount(): void {
-  form.mounts.push({ name: '', path: '', writable: false, _key: ++keySeq })
+function addGrant(): void {
+  form.grants.push({ bucket_id: null, writable: false, _key: ++keySeq })
 }
-function removeMount(i: number): void {
-  form.mounts.splice(i, 1)
-}
-
-// 服务器目录选择
-const pickerOpen = ref(false)
-const pickerIndex = ref(-1)
-const pickerInitial = ref('')
-function browseFor(i: number): void {
-  pickerIndex.value = i
-  pickerInitial.value = form.mounts[i]?.path ?? ''
-  pickerOpen.value = true
-}
-function onPicked(path: string): void {
-  const m = form.mounts[pickerIndex.value]
-  if (!m) return
-  m.path = path
-  if (!m.name.trim()) {
-    const trimmed = path.replace(/[\\/]+$/, '')
-    const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
-    m.name = (idx >= 0 ? trimmed.slice(idx + 1) : trimmed).replace(/:$/, '') || ''
-  }
+function removeGrant(i: number): void {
+  form.grants.splice(i, 1)
 }
 
-function validateMounts(): string | null {
-  const names = new Set<string>()
-  for (const m of form.mounts) {
-    const n = m.name.trim()
-    if (!n && !m.path.trim()) continue
-    if (!n) return '授权目录名称不能为空'
-    if (/[\\/]/.test(n)) return `目录名称「${n}」不能包含 / 或 \\`
-    if (!m.path.trim()) return `请为「${n}」选择本地路径`
-    if (names.has(n)) return `目录名称「${n}」重复`
-    names.add(n)
-  }
-  return null
+/** 每个桶只能授权一次：已选的桶在其它行里不可再选。 */
+function bucketOptions(current: number | null): { label: string; value: number; disabled: boolean }[] {
+  const taken = new Set(form.grants.map((g) => g.bucket_id))
+  return buckets.value.map((b) => ({ label: b.name, value: b.id, disabled: b.id !== current && taken.has(b.id) }))
+}
+
+function bucketPaths(id: number): string {
+  return buckets.value.find((b) => b.id === id)?.paths.join('\n') ?? ''
 }
 
 async function save(): Promise<void> {
@@ -157,19 +134,14 @@ async function save(): Promise<void> {
   } catch {
     return
   }
-  const err = validateMounts()
-  if (err) {
-    message.warning(err)
-    return
-  }
   const payload: UserInput = {
     username: form.username.trim(),
     password: form.password,
     role: form.role,
     disabled: form.disabled,
-    mounts: form.mounts
-      .filter((m) => m.name.trim() || m.path.trim())
-      .map((m) => ({ name: m.name.trim(), path: m.path.trim(), writable: m.writable })),
+    grants: form.grants
+      .filter((g): g is typeof g & { bucket_id: number } => g.bucket_id !== null)
+      .map((g) => ({ bucket_id: g.bucket_id, writable: g.writable })),
   }
   saving.value = true
   try {
@@ -233,14 +205,14 @@ const columns = computed<DataTableColumns<User>>(() => {
         h(NTag, { size: 'small', bordered: false, type: u.disabled ? 'error' : 'success' }, () => (u.disabled ? '已禁用' : '正常')),
     },
     {
-      title: '授权目录',
-      key: 'mounts',
+      title: '授权桶',
+      key: 'grants',
       render: (u) =>
-        u.mounts.length
+        u.grants.length
           ? h(
               'div',
               { style: 'display:flex;flex-wrap:wrap;gap:4px' },
-              u.mounts.map((m) =>
+              u.grants.map((m) =>
                 h(
                   NTooltip,
                   {},
@@ -250,7 +222,7 @@ const columns = computed<DataTableColumns<User>>(() => {
                         m.name,
                         h('span', { style: 'opacity:.65;margin-left:4px;font-size:11px' }, m.writable ? '可写' : '只读'),
                       ]),
-                    default: () => m.path || m.name,
+                    default: () => bucketPaths(m.bucket_id) || m.name,
                   },
                 ),
               ),
@@ -329,32 +301,39 @@ function rowProps(u: User): { style: string; onClick: () => void } {
           </n-grid>
 
           <div class="mounts-head">
-            <span class="label">授权目录</span>
-            <n-button size="small" dashed @click="addMount">
+            <span class="label">授权桶</span>
+            <n-button size="small" dashed :disabled="form.grants.length >= buckets.length" @click="addGrant">
               <template #icon><n-icon :component="AddOutline" /></template>
-              添加目录
+              添加桶
             </n-button>
           </div>
-          <p class="hint">名称将作为该用户虚拟根目录下的文件夹名（也是 SMB 共享名与 S3 Bucket 名）。</p>
-          <n-empty v-if="!form.mounts.length" description="尚未授权任何目录" size="small" class="mounts-empty" />
-          <div v-for="(m, i) in form.mounts" :key="m._key" class="mount-row">
-            <n-input v-model:value="m.name" placeholder="名称，如 电影" class="m-name" />
-            <n-input v-model:value="m.path" placeholder="服务器本地绝对路径" class="m-path mono">
-              <template #suffix>
-                <n-button text size="small" @click="browseFor(i)">
-                  <template #icon><n-icon :component="FolderOpenOutline" /></template>
-                  浏览
-                </n-button>
-              </template>
-            </n-input>
+          <p class="hint">
+            桶名即该用户虚拟根目录下的文件夹名（也是 SMB 共享名与 S3 Bucket 名）。桶在
+            <router-link :to="{ name: 'admin-system' }">系统管理</router-link>
+            中创建。
+          </p>
+          <n-empty
+            v-if="!form.grants.length"
+            :description="buckets.length ? '尚未授权任何桶' : '还没有桶，请先到系统管理中创建'"
+            size="small"
+            class="mounts-empty"
+          />
+          <div v-for="(g, i) in form.grants" :key="g._key" class="mount-row">
+            <n-select
+              v-model:value="g.bucket_id"
+              :options="bucketOptions(g.bucket_id)"
+              placeholder="选择桶"
+              filterable
+              class="m-name"
+            />
             <div class="m-actions">
               <n-select
                 class="m-perm"
-                :value="m.writable ? 'rw' : 'ro'"
+                :value="g.writable ? 'rw' : 'ro'"
                 :options="PERMISSION_OPTIONS"
-                @update:value="(v: string) => (m.writable = v === 'rw')"
+                @update:value="(v: string) => (g.writable = v === 'rw')"
               />
-              <n-button quaternary circle size="small" type="error" @click="removeMount(i)">
+              <n-button quaternary circle size="small" type="error" @click="removeGrant(i)">
                 <template #icon><n-icon :component="TrashOutline" /></template>
               </n-button>
             </div>
@@ -385,8 +364,6 @@ function rowProps(u: User): { style: string; onClick: () => void } {
         </div>
       </template>
     </n-modal>
-
-    <server-dir-picker-modal v-model:show="pickerOpen" :initial-path="pickerInitial" @confirm="onPicked" />
   </div>
 </template>
 
@@ -427,7 +404,7 @@ function rowProps(u: User): { style: string; onClick: () => void } {
 }
 .mount-row {
   display: grid;
-  grid-template-columns: 120px 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -439,16 +416,5 @@ function rowProps(u: User): { style: string; onClick: () => void } {
 }
 .m-perm {
   width: 96px;
-}
-@media (max-width: 560px) {
-  .mount-row {
-    grid-template-columns: 1fr auto;
-    padding-bottom: 8px;
-    border-bottom: 1px dashed rgba(128, 128, 128, 0.25);
-  }
-  .m-path {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }
 </style>

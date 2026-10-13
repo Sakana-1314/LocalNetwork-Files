@@ -156,11 +156,49 @@ type S3KeySecret struct {
 
 // UserInput 创建 / 更新用户的请求体。
 type UserInput struct {
-	Username string        `json:"username"`                // 用户名，1-32 位，可用字母、数字、下划线、点和横线
-	Password string        `json:"password"`                // 密码；创建时必填且至少 6 位，更新时留空表示不修改
-	Role     string        `json:"role" enums:"admin,user"` // 角色，admin 为管理员
-	Disabled bool          `json:"disabled"`                // 是否禁用该账户
-	Mounts   []store.Mount `json:"mounts"`                  // 授权目录列表，整表替换
+	Username string       `json:"username"`                // 用户名，1-32 位，可用字母、数字、下划线、点和横线
+	Password string       `json:"password"`                // 密码；创建时必填且至少 6 位，更新时留空表示不修改
+	Role     string       `json:"role" enums:"admin,user"` // 角色，admin 为管理员
+	Disabled bool         `json:"disabled"`                // 是否禁用该账户
+	Grants   []GrantInput `json:"grants"`                  // 授权桶列表，整表替换；更新时省略表示不修改
+}
+
+// GrantInput 把一个桶授权给用户。
+type GrantInput struct {
+	BucketID uint `json:"bucket_id" binding:"required"` // 桶 ID
+	Writable bool `json:"writable"`                     // 是否可写；false 为只读
+}
+
+// BucketInput 创建 / 更新桶的请求体。
+type BucketInput struct {
+	Name  string   `json:"name" binding:"required"`  // 桶名称，即用户虚拟根目录下显示的名称，最长 128 字符，不能含 / 或 \
+	Paths []string `json:"paths" binding:"required"` // 服务器本地绝对路径，按优先级排列；多个目录互为备份，不能相互嵌套
+}
+
+// BucketDir 桶中一个目录的状态。
+type BucketDir struct {
+	Path      string `json:"path"`      // 服务器本地绝对路径
+	Available bool   `json:"available"` // 目录当前是否存在且可访问
+	Active    bool   `json:"active"`    // 是否为当前读写的主目录（第一个可用目录）
+}
+
+// BucketView 桶及其目录状态。
+type BucketView struct {
+	store.Bucket
+	Users int         `json:"users"` // 被授权的用户数
+	Dirs  []BucketDir `json:"dirs"`  // 各目录的可用状态
+}
+
+// BucketCreated 创建或更新桶的结果。
+type BucketCreated struct {
+	Bucket BucketView     `json:"bucket"` // 桶信息
+	Sync   vfs.SyncResult `json:"sync"`   // 合并目录的结果
+}
+
+// BucketConflictResponse 目录合并冲突。
+type BucketConflictResponse struct {
+	Error     string         `json:"error"`     // 错误信息
+	Conflicts []vfs.Conflict `json:"conflicts"` // 冲突条目（最多 100 条）
 }
 
 // BrowseResponse 服务器本地目录浏览结果。

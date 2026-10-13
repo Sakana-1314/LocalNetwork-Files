@@ -128,6 +128,11 @@ func Register(r *gin.Engine, d Deps) {
 	adm.POST("/users", a.requireWrite, a.adminCreateUser)
 	adm.PUT("/users/:id", a.requireWrite, a.adminUpdateUser)
 	adm.DELETE("/users/:id", a.requireWrite, a.adminDeleteUser)
+	adm.GET("/buckets", a.adminListBuckets)
+	adm.POST("/buckets", a.requireWrite, a.adminCreateBucket)
+	adm.PUT("/buckets/:id", a.requireWrite, a.adminUpdateBucket)
+	adm.DELETE("/buckets/:id", a.requireWrite, a.adminDeleteBucket)
+	adm.POST("/buckets/:id/sync", a.requireWrite, a.adminSyncBucket)
 	adm.GET("/browse", a.adminBrowse)
 	adm.GET("/cache", a.adminCacheStats)
 	adm.POST("/cache/clean", a.requireWrite, a.adminCacheClean)
@@ -161,7 +166,7 @@ func statusOf(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, vfs.ErrExists), errors.Is(err, store.ErrConflict):
 		return http.StatusConflict
-	case errors.Is(err, vfs.ErrInvalid), errors.Is(err, vfs.ErrNotDir), errors.Is(err, vfs.ErrIsDir),
+	case errors.Is(err, vfs.ErrInvalid), errors.Is(err, store.ErrInvalid), errors.Is(err, vfs.ErrNotDir), errors.Is(err, vfs.ErrIsDir),
 		errors.Is(err, media.ErrNoVideo):
 		return http.StatusBadRequest
 	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrUnauthorized):

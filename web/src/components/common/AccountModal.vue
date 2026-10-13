@@ -28,12 +28,12 @@ const auth = useAuthStore()
             </n-tag>
           </n-descriptions-item>
           <n-descriptions-item label="创建时间">{{ formatDate(auth.user.created_at) }}</n-descriptions-item>
-          <n-descriptions-item label="授权目录">
+          <n-descriptions-item label="授权桶">
             <div class="mounts">
-              <n-tag v-for="m in auth.user.mounts" :key="m.id" size="small" :type="m.writable ? 'success' : 'default'" :bordered="false">
+              <n-tag v-for="m in auth.user.grants" :key="m.bucket_id" size="small" :type="m.writable ? 'success' : 'default'" :bordered="false">
                 {{ m.name }} · {{ m.writable ? '可写' : '只读' }}
               </n-tag>
-              <span v-if="!auth.user.mounts.length" class="muted">无</span>
+              <span v-if="!auth.user.grants.length" class="muted">无</span>
             </div>
           </n-descriptions-item>
         </n-descriptions>

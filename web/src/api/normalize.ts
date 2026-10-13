@@ -1,4 +1,4 @@
-import type { Entry, MediaInfo, User } from './types'
+import type { BucketView, Entry, MediaInfo, SyncResult, User } from './types'
 
 /** Go 的 nil 切片会被序列化为 null，这里统一转换为空数组。 */
 export function arr<T>(v: T[] | null | undefined): T[] {
@@ -6,7 +6,15 @@ export function arr<T>(v: T[] | null | undefined): T[] {
 }
 
 export function normUser(u: User): User {
-  return { ...u, mounts: arr(u.mounts) }
+  return { ...u, grants: arr(u.grants) }
+}
+
+export function normBucket(b: BucketView): BucketView {
+  return { ...b, paths: arr(b.paths), dirs: arr(b.dirs) }
+}
+
+export function normSync(r: SyncResult): SyncResult {
+  return { ...r, conflicts: arr(r.conflicts) }
 }
 
 export function normEntry<T extends Entry>(e: T): T {
