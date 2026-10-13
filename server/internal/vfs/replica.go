@@ -186,6 +186,8 @@ func copyAtomic(src, dst string, si fs.FileInfo) error {
 // ---------- merging directories ----------
 
 // Conflict 是合并目录时发现的同名冲突：同一相对路径在不同目录中内容不同。
+//
+// @Description 合并目录时发现的同名冲突
 type Conflict struct {
 	Path   string   `json:"path"`   // 冲突条目在桶内的相对路径，以 / 开头
 	Dirs   []string `json:"dirs"`   // 含有该条目的服务器目录
@@ -193,6 +195,8 @@ type Conflict struct {
 }
 
 // SyncResult 是一次目录合并的结果。
+//
+// @Description 一次目录合并的结果
 type SyncResult struct {
 	Copied    int        `json:"copied"`    // 复制的文件数
 	Bytes     int64      `json:"bytes"`     // 复制的字节数

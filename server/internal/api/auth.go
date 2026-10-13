@@ -78,7 +78,7 @@ func (a *API) setSessionCookie(c *gin.Context, tok string, exp time.Time) {
 // @Tags     认证
 // @Accept   json
 // @Produce  json
-// @Param    body body LoginRequest true "登录凭据"
+// @Param    请求体 body LoginRequest true "登录凭据"
 // @Success  200 {object} LoginResponse "登录成功，返回会话令牌与用户信息（同时写入会话 Cookie）"
 // @Failure  401 {object} ErrorResponse "用户名或密码错误"
 // @Failure  429 {object} ErrorResponse "登录失败次数过多，请 10 分钟后再试"
@@ -140,7 +140,7 @@ func (a *API) me(c *gin.Context) {
 // @Tags     认证
 // @Accept   json
 // @Produce  json
-// @Param    body body PasswordRequest true "原密码与新密码"
+// @Param    请求体 body PasswordRequest true "原密码与新密码"
 // @Success  200 {object} PasswordResponse "修改成功。旧会话全部失效，返回新的会话令牌（同时写入 Cookie），客户端应替换本地保存的令牌。"
 // @Failure  400 {object} ErrorResponse "原密码错误或新密码不足 6 位"
 // @Security bearerAuth

@@ -107,7 +107,7 @@ func (a *API) adminListBuckets(c *gin.Context) {
 // @Tags     管理
 // @Accept   json
 // @Produce  json
-// @Param    body body BucketInput true "桶名称与目录"
+// @Param    请求体 body BucketInput true "桶名称与目录"
 // @Success  201 {object} BucketCreated "桶已创建，目录已合并"
 // @Failure  400 {object} ErrorResponse "名称或目录无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"
@@ -166,7 +166,7 @@ func (a *API) bucketNameTaken(c *gin.Context, name string, exclude uint) bool {
 // @Accept   json
 // @Produce  json
 // @Param    id path integer true "桶 ID"
-// @Param    body body BucketInput true "桶名称与目录"
+// @Param    请求体 body BucketInput true "桶名称与目录"
 // @Success  200 {object} BucketCreated "桶已更新，新增目录已合并"
 // @Failure  400 {object} ErrorResponse "名称或目录无效"
 // @Failure  403 {object} ErrorResponse "需要管理员权限"

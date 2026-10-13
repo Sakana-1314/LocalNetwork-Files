@@ -29,6 +29,7 @@ import (
 var openapiJSONDoc []byte
 
 // ServiceStatus 描述单个协议服务的状态，用于挂载向导与管理界面。
+// @Description 单个协议服务的状态
 type ServiceStatus struct {
 	Enabled bool              `json:"enabled"`           // 是否在 config.yaml 中启用
 	Running bool              `json:"running"`           // 当前是否正在运行

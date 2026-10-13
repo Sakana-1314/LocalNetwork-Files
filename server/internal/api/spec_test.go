@@ -171,6 +171,69 @@ func TestSpecSchemaFieldsAreChinese(t *testing.T) {
 	}
 }
 
+// TestSpecTextHasNoAsciiOnly 人类可见的文案不能是纯英文。
+// 规范里的接口名（summary）、说明（description）、模型名（schema title）、
+// 文档标题都直接显示在 Apifox 上，任何一个漏成英文用户都会看到。
+func TestSpecTextHasNoAsciiOnly(t *testing.T) {
+	doc := specFixture(t)
+
+	info, _ := doc["info"].(map[string]any)
+	if title, _ := info["title"].(string); !hasChinese(title) {
+		t.Errorf("info.title 不是中文：%q", title)
+	}
+	if desc, _ := info["description"].(string); !hasChinese(desc) {
+		t.Errorf("info.description 不是中文：%q", desc)
+	}
+
+	components, _ := doc["components"].(map[string]any)
+	schemas, _ := components["schemas"].(map[string]any)
+	for name, raw := range schemas {
+		schema, _ := raw.(map[string]any)
+		// 模型的键必须是合法 OpenAPI 标识符，所以中文只能放在 title 上；
+		// title 是 Apifox「数据模型」里显示的模型名。
+		if title, _ := schema["title"].(string); !hasChinese(title) {
+			t.Errorf("模型 %s 的 title 不是中文：%q", name, title)
+		}
+	}
+
+	// 请求体的 name（Apifox 里的「名称」列）也不能是英文。
+	for _, o := range operations(t, doc) {
+		where := o.method + " " + o.path
+		body, _ := o.op["requestBody"].(map[string]any)
+		content, _ := body["content"].(map[string]any)
+		for ct, rawMedia := range content {
+			media, _ := rawMedia.(map[string]any)
+			schema, _ := media["schema"].(map[string]any)
+			if summary, _ := schema["summary"].(string); summary != "" && !hasChinese(summary) {
+				t.Errorf("%s 请求体（%s）的名称不是中文：%q", where, ct, summary)
+			}
+		}
+	}
+}
+
+// TestSpecSchemaNamesAreValidIdentifiers 模型名必须是合法 OpenAPI 标识符。
+// OpenAPI 规定 components.schemas 的键只能匹配 ^[a-zA-Z0-9._-]+$，用中文键虽然
+// 能被 Apifox 接受，但规范不再合法，kin-openapi 之类的校验器会直接拒绝；模型的中文
+// 名只能放在 title 上。同时模型名不应带 Go 包名前缀（api.、vfs. 等），那对使用文档
+// 的人没有意义。
+func TestSpecSchemaNamesAreValidIdentifiers(t *testing.T) {
+	doc := specFixture(t)
+	components, _ := doc["components"].(map[string]any)
+	schemas, _ := components["schemas"].(map[string]any)
+	if len(schemas) == 0 {
+		t.Fatal("规范缺少 components.schemas")
+	}
+	valid := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	for name := range schemas {
+		if !valid.MatchString(name) {
+			t.Errorf("模型名 %q 不是合法 OpenAPI 标识符（只允许字母、数字、点、下划线和横线）", name)
+		}
+		if strings.Contains(name, ".") {
+			t.Errorf("模型名 %q 仍带 Go 包名前缀，规范化时应去掉", name)
+		}
+	}
+}
+
 // TestSpecSecurityMatchesAuth 公开接口在规范里不应带 security，受保护接口必须带。
 func TestSpecSecurityMatchesAuth(t *testing.T) {
 	doc := specFixture(t)

@@ -110,7 +110,7 @@ func (a *API) mediaInfo(c *gin.Context) {
 // @Tags     媒体
 // @Accept   json
 // @Produce  json
-// @Param    body body TranscodeRequest true "源文件、画质与音轨"
+// @Param    请求体 body TranscodeRequest true "源文件、画质与音轨"
 // @Success  200 {object} TranscodeResponse "会话创建成功，返回播放列表地址"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  404 {object} ErrorResponse "文件不存在"

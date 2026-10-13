@@ -17,7 +17,7 @@
 //     例如正文里写一句「@securityDefinitions 要放在 @tag 之前」就会被误读成
 //     鉴权定义本身，从而报错或吞掉后面的注解。
 //
-// @title       MList API
+// @title       局域网文件管理 API
 // @version     1.0.0
 // @description 局域网文件管理系统 HTTP API。
 //
