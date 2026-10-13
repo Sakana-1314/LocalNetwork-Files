@@ -3,9 +3,24 @@ import { computed, h } from 'vue'
 import { NButton, NDataTable, NIcon, NTag, useThemeVars, type DataTableColumns, type DataTableSortState } from 'naive-ui'
 import { EllipsisHorizontal } from '@vicons/ionicons5'
 import type { Entry } from '@/api/types'
-import FileIcon from '@/components/common/FileIcon.vue'
+import FileThumb from './FileThumb.vue'
 import { formatDate, formatRelative, formatSize } from '@/utils/format'
 import type { SortKey, SortState } from './sort'
+
+/** 列表行里预览图的边长（px）。用最小档 128 的预览图，节省流量。 */
+const THUMB_PX = 40
+
+/** 列表行高度（px）。
+ *
+ * naive-ui 的虚拟滚动按固定步长定位行，步长取自 min-row-height（默认 28）。
+ * 放上 40px 的预览图后，行高变成「预览图 + 单元格上下内边距 16 + 1 边框」；
+ * 若不同步调大 min-row-height，虚拟列表算出的总高会偏小，滚动到底时最后几行
+ * 会被截断（实测 230 行：总高 12105，而实际需要 13110）。
+ *
+ * 紧凑模式（移动端）在名称下多一行「大小 · 时间」，行会更高，所以分开取值。
+ */
+const ROW_HEIGHT = 57
+const ROW_HEIGHT_COMPACT = 60
 
 const props = defineProps<{
   entries: Entry[]
@@ -39,7 +54,11 @@ const columns = computed<DataTableColumns<Entry>>(() => {
       ellipsis: false,
       render: (row) =>
         h('div', { class: 'name-cell' }, [
-          h(FileIcon, { entry: row, size: 22, mount: props.isRoot && row.is_dir }),
+          h(
+            'div',
+            { class: 'thumb-box' },
+            h(FileThumb, { entry: row, size: 128, iconSize: 20, mount: props.isRoot && row.is_dir }),
+          ),
           h('div', { class: 'name-main' }, [
             h(
               'a',
@@ -144,13 +163,18 @@ function rowProps(row: Entry) {
 }
 
 const virtual = computed(() => props.entries.length > 200)
+const rowHeight = computed(() => (props.compact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT))
 const vars = useThemeVars()
 </script>
 
 <template>
   <n-data-table
     class="file-table"
-    :style="{ '--lnf-primary': vars.primaryColor }"
+    :style="{
+      '--lnf-primary': vars.primaryColor,
+      '--thumb-bg': vars.actionColor,
+      '--thumb-size': THUMB_PX + 'px',
+    }"
     :columns="columns"
     :data="entries"
     :row-key="(r: Entry) => r.path"
@@ -160,6 +184,7 @@ const vars = useThemeVars()
     :bordered="false"
     :single-line="true"
     :virtual-scroll="virtual"
+    :min-row-height="rowHeight"
     flex-height
     size="small"
     @update:checked-row-keys="(k) => emit('update:selected', k as string[])"
@@ -178,6 +203,16 @@ const vars = useThemeVars()
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+/* 固定尺寸容器：预览图与回退图标占据同样大小，行高才不会跳动。
+   尺寸需与脚本里的 ROW_HEIGHT / ROW_HEIGHT_COMPACT 保持一致。 */
+.file-table :deep(.thumb-box) {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  flex: 0 0 auto;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--thumb-bg);
 }
 .file-table :deep(.name-main) {
   min-width: 0;
