@@ -233,6 +233,51 @@ function onTrackLoad(): void {
   for (const t of Array.from(v.textTracks)) t.mode = 'showing'
 }
 
+// ---------- 手机全屏横屏 ----------
+// 手机上进入全屏时把屏幕锁定为横屏（竖屏视频除外），退出全屏时解锁。
+// Android Chrome 等支持 Screen Orientation API；iOS 的原生全屏播放器会随设备方向自动旋转，无需处理。
+type LockableOrientation = ScreenOrientation & { lock?: (o: 'landscape') => Promise<void> }
+const coarsePointer = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+let orientationLocked = false
+
+function fullscreenElement(): Element | null {
+  const d = document as Document & { webkitFullscreenElement?: Element | null }
+  return document.fullscreenElement ?? d.webkitFullscreenElement ?? null
+}
+
+function isLandscapeVideo(v: HTMLVideoElement): boolean {
+  const w = v.videoWidth || info.value?.video?.width || 0
+  const h = v.videoHeight || info.value?.video?.height || 0
+  return !w || !h || w >= h
+}
+
+function unlockOrientation(): void {
+  if (!orientationLocked) return
+  orientationLocked = false
+  try {
+    screen.orientation?.unlock()
+  } catch {
+    /* ignore */
+  }
+}
+
+async function onFullscreenChange(): Promise<void> {
+  const v = videoRef.value
+  const el = fullscreenElement()
+  if (!v || !el || !(el === v || el.contains(v))) {
+    unlockOrientation()
+    return
+  }
+  const o = screen.orientation as LockableOrientation | undefined
+  if (!coarsePointer || !o?.lock || !isLandscapeVideo(v)) return
+  try {
+    await o.lock('landscape')
+    orientationLocked = true
+  } catch {
+    /* 浏览器不支持或不允许锁定方向 */
+  }
+}
+
 // 页面关闭时尽量停止转码会话
 function onPageHide(): void {
   const id = session.value
@@ -247,6 +292,8 @@ function onPageHide(): void {
 
 onMounted(async () => {
   window.addEventListener('pagehide', onPageHide)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
   try {
     info.value = await mediaApi.info(props.entry.path, { silent: true })
   } catch {
@@ -265,6 +312,9 @@ onBeforeUnmount(() => {
   disposed = true
   applySeq++
   window.removeEventListener('pagehide', onPageHide)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  unlockOrientation()
   destroyHls()
   stopSession(session.value)
   session.value = null
