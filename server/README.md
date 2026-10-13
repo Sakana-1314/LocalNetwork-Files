@@ -41,7 +41,8 @@ make dist         # CGO_ENABLED=0 交叉编译 linux/amd64、linux/arm64、darwi
 - 新增 / 修改接口时，在 handler 上方补写中文注解（`@Summary`/`@Tags`/`@Param`/`@Success` 等），
   字段描述写在结构体字段的行尾注释里，然后运行 `make docs` 重新生成 `internal/api/openapi.json`。
   该文件是生成物，**禁止手写**：CI 会用 `scripts/check-openapi.sh` 重新生成并比对，不一致即失败。
-  前端类型与 Apifox 在线文档都以它为准，推送用 `APIFOX_TOKEN=xxx ./server/scripts/sync-apifox.sh`。
+  前端类型与 Apifox 在线文档都以它为准；配置仓库 Secret `APIFOX_TOKEN` 后由
+  `.github/workflows/apifox-sync.yml` 自动同步到 Apifox，也可本地 `APIFOX_TOKEN=xxx ./server/scripts/sync-apifox.sh`。
 - 新增配置项：加到 `config.Config` 的对应分组，在 `Normalize` 中给出默认值与范围，并在 `config.example.yaml` 中写明中文注释；
   配置只在启动时读取，改动需重启生效。
 - 依赖 ffmpeg 的测试在找不到 ffmpeg 时应跳过；CI 会安装 ffmpeg。

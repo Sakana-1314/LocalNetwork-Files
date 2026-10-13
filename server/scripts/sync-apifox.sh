@@ -104,7 +104,7 @@ fi
 cat <<'EOF'
 
 提示：
-  * 文档地址 https://local-files.apifox.cn 在 Apifox 后台「发布」后才会更新。
+  * 文档地址 https://mlist.apifox.cn 在 Apifox 后台「发布」后才会更新。
   * 规范里的 servers 是相对路径 /api/v1，在 Apifox 的「环境」里配置 Base URL
     （例如 http://192.168.1.10:8080）后再调试。
 EOF
