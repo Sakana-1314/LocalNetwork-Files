@@ -59,19 +59,98 @@ func (s *Service) passwordSeen(u *store.User, pw string) {
 	}
 }
 
-// SetPassword changes a user's password, invalidating existing login sessions.
-func (s *Service) SetPassword(u *store.User, pw string) error {
+// SetPasswordFields fills in both the bcrypt hash and the reversible copy
+// without saving. Use it when creating a user, where there is no row to update.
+func (s *Service) SetPasswordFields(u *store.User, pw string) error {
 	h, err := HashPassword(pw)
 	if err != nil {
 		return err
 	}
-	u.PasswordHash = h
+	enc, err := s.encryptPassword(pw)
+	if err != nil {
+		return err
+	}
+	u.PasswordHash, u.PasswordEnc = h, enc
+	return nil
+}
+
+// SetPassword changes a user's password, invalidating existing login sessions.
+func (s *Service) SetPassword(u *store.User, pw string) error {
+	if err := s.SetPasswordFields(u, pw); err != nil {
+		return err
+	}
 	u.TokenVersion++
 	if err := s.store.UpdateUser(u, nil); err != nil {
 		return err
 	}
 	s.passwordSeen(u, pw)
 	return nil
+}
+
+// Password returns the stored plaintext password. ok is false for accounts
+// created before the reversible copy existed (or when it cannot be decrypted),
+// in which case the caller should offer a reset instead of a value.
+func (s *Service) Password(u *store.User) (string, bool) {
+	if u.PasswordEnc == "" {
+		return "", false
+	}
+	pw, err := s.decryptPassword(u.PasswordEnc)
+	if err != nil {
+		return "", false
+	}
+	return pw, true
+}
+
+// backfillPasswordEnc stores the reversible copy for accounts that predate it.
+// The plaintext is only available at login (it is what the user just typed) and
+// leaving it unstored would keep those accounts unviewable forever.
+func (s *Service) backfillPasswordEnc(u *store.User, pw string) {
+	if u.PasswordEnc != "" {
+		return
+	}
+	enc, err := s.encryptPassword(pw)
+	if err != nil {
+		return
+	}
+	u.PasswordEnc = enc
+	if err := s.store.UpdateUser(u, nil); err != nil {
+		u.PasswordEnc = ""
+	}
+}
+
+func (s *Service) passwordAEAD() (cipher.AEAD, error) {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("mlist-password"))
+	block, err := aes.NewCipher(mac.Sum(nil))
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func (s *Service) encryptPassword(plain string) (string, error) {
+	g, err := s.passwordAEAD()
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, g.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(g.Seal(nonce, nonce, []byte(plain), nil)), nil
+}
+
+func (s *Service) decryptPassword(enc string) (string, error) {
+	g, err := s.passwordAEAD()
+	if err != nil {
+		return "", err
+	}
+	b, err := base64.StdEncoding.DecodeString(enc)
+	if err != nil || len(b) < g.NonceSize() {
+		return "", errors.New("corrupt password")
+	}
+	out, err := g.Open(nil, b[:g.NonceSize()], b[g.NonceSize():], nil)
+	return string(out), err
 }
 
 func New(st *store.Store, dataDir string, ttl time.Duration) (*Service, error) {
@@ -118,7 +197,11 @@ func (s *Service) EnsureAdmin(username, password string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return true, s.store.CreateUser(&store.User{Username: username, PasswordHash: h, Role: store.RoleAdmin})
+	enc, err := s.encryptPassword(password)
+	if err != nil {
+		return false, err
+	}
+	return true, s.store.CreateUser(&store.User{Username: username, PasswordHash: h, PasswordEnc: enc, Role: store.RoleAdmin})
 }
 
 // Authenticate verifies a username/password pair.
@@ -135,6 +218,7 @@ func (s *Service) Authenticate(username, password string) (*store.User, error) {
 	if u.Disabled {
 		return nil, ErrDisabled
 	}
+	s.backfillPasswordEnc(u, password)
 	s.passwordSeen(u, password)
 	return u, nil
 }

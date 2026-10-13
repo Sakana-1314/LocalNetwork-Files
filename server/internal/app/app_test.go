@@ -299,7 +299,7 @@ func TestMeHidesMountPaths(t *testing.T) {
 	if me["role"] != "user" || len(me["grants"].([]any)) != 2 {
 		t.Fatalf("me: %v", me)
 	}
-	for _, k := range []string{"password_hash", "PasswordHash", "token_version", "TokenVersion"} {
+	for _, k := range []string{"password_hash", "PasswordHash", "password_enc", "PasswordEnc", "token_version", "TokenVersion"} {
 		if _, ok := me[k]; ok {
 			t.Fatalf("me leaks %s", k)
 		}
@@ -336,6 +336,74 @@ func TestChangePassword(t *testing.T) {
 	expect(t, e.do("GET", "/api/v1/auth/me", fresh, nil), 200)
 	expect(t, e.do("POST", "/api/v1/auth/login", "", obj{"username": "alice", "password": "alice-pw"}), 401)
 	e.login("alice", "newpass1")
+}
+
+func TestAdminUserPassword(t *testing.T) {
+	e := newEnv(t)
+	alice := e.alice()
+	aliceID := uint(decode[obj](t, e.do("GET", "/api/v1/auth/me", alice, nil))["id"].(float64))
+	pwURL := fmt.Sprintf("/api/v1/admin/users/%v/password", aliceID)
+
+	// An administrator can read back the password that was set at creation.
+	got := decode[obj](t, e.do("GET", pwURL, e.admin, nil))
+	if got["password"] != "alice-pw" || got["known"] != true {
+		t.Fatalf("password = %v, known = %v", got["password"], got["known"])
+	}
+	if cc := e.do("GET", pwURL, e.admin, nil).Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", cc)
+	}
+
+	// Changing the password updates what is revealed, and the new password logs in.
+	expect(t, e.do("PUT", fmt.Sprintf("/api/v1/admin/users/%v", aliceID), e.admin,
+		obj{"username": "alice", "password": "new-alice-pw"}), 200)
+	if got := decode[obj](t, e.do("GET", pwURL, e.admin, nil)); got["password"] != "new-alice-pw" {
+		t.Fatalf("after change: password = %v", got["password"])
+	}
+	// The old session was invalidated by the change, so log in again.
+	alice = e.login("alice", "new-alice-pw")
+
+	// Changing it from the account page must be reflected too.
+	expect(t, e.do("PUT", "/api/v1/auth/password", alice,
+		obj{"old_password": "new-alice-pw", "new_password": "third-pw-1"}), 200)
+	if got := decode[obj](t, e.do("GET", pwURL, e.admin, nil)); got["password"] != "third-pw-1" {
+		t.Fatalf("after self-change: password = %v", got["password"])
+	}
+	alice = e.login("alice", "third-pw-1")
+
+	// A non-admin must not read another user's password.
+	expect(t, e.do("GET", pwURL, alice, nil), 403)
+
+	// The password ciphertext must never appear in the user listing or the
+	// user's own profile — only the dedicated endpoint reveals it.
+	for _, tc := range []struct{ url, tok string }{
+		{"/api/v1/admin/users", e.admin},
+		{"/api/v1/auth/me", alice},
+	} {
+		if body := e.do("GET", tc.url, tc.tok, nil).Body.String(); strings.Contains(body, "password_enc") {
+			t.Fatalf("%s leaks the password ciphertext: %s", tc.url, truncate(body))
+		}
+	}
+	// An unknown user is a 404.
+	expect(t, e.do("GET", "/api/v1/admin/users/99999/password", e.admin, nil), 404)
+	// A non-numeric id is rejected.
+	expect(t, e.do("GET", "/api/v1/admin/users/abc/password", e.admin, nil), 400)
+
+	// Accounts predating the reversible copy report known=false instead of failing,
+	// and the copy is backfilled the next time that user logs in.
+	db, err := gorm.Open(sqlite.Open(filepath.Join(e.dir, "data", "mlist.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	must(t, err)
+	must(t, db.Exec("UPDATE users SET password_enc = '' WHERE username = 'alice'").Error)
+	if sdb, err := db.DB(); err == nil {
+		sdb.Close()
+	}
+	got = decode[obj](t, e.do("GET", pwURL, e.admin, nil))
+	if got["known"] != false || got["password"] != "" {
+		t.Fatalf("legacy account: %v", got)
+	}
+	e.login("alice", "third-pw-1")
+	if got := decode[obj](t, e.do("GET", pwURL, e.admin, nil)); got["known"] != true || got["password"] != "third-pw-1" {
+		t.Fatalf("backfill after login: %v", got)
+	}
 }
 
 func TestAdminUsers(t *testing.T) {

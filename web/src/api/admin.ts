@@ -12,6 +12,7 @@ import type {
   SyncResult,
   User,
   UserInput,
+  UserPassword,
 } from './types'
 
 function normSaved(r: BucketSaved): BucketSaved {
@@ -30,6 +31,10 @@ export const adminApi = {
   },
   deleteUser(id: number): Promise<void> {
     return http.del<void>(`/admin/users/${id}`)
+  },
+  /** 读取用户当前密码；known 为 false 表示该账户没有密文，只能重置 */
+  async userPassword(id: number): Promise<UserPassword> {
+    return http.get<UserPassword>(`/admin/users/${id}/password`, { silent: true })
   },
   async buckets(): Promise<BucketView[]> {
     return arr(await http.get<BucketView[]>('/admin/buckets')).map(normBucket)

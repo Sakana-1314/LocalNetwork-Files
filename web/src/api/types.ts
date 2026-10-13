@@ -101,6 +101,12 @@ export interface UserInput {
   grants?: GrantInput[]
 }
 
+/** 用户的当前密码；known 为 false 表示查不到，只能重置 */
+export interface UserPassword {
+  password: string
+  known: boolean
+}
+
 /** 桶：对服务器目录的抽象；多个目录互为备份 */
 export interface Bucket {
   id: number

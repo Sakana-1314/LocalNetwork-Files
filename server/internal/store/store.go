@@ -319,7 +319,7 @@ func (s *Store) CreateUser(u *User) error {
 // UpdateUser saves the user's scalar fields and, when grants != nil, replaces its grants.
 func (s *Store) UpdateUser(u *User, grants []Grant) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(u).Select("Username", "PasswordHash", "Role", "Disabled", "TokenVersion").Updates(u).Error; err != nil {
+		if err := tx.Model(u).Select("Username", "PasswordHash", "PasswordEnc", "Role", "Disabled", "TokenVersion").Updates(u).Error; err != nil {
 			return err
 		}
 		if grants == nil {

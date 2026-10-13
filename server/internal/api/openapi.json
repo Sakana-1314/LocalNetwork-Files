@@ -1267,6 +1267,21 @@
         "title": "创建或更新用户的请求体",
         "type": "object"
       },
+      "UserPassword": {
+        "description": "用户的当前密码",
+        "properties": {
+          "known": {
+            "description": "是否还能查到密码；升级前创建的用户为 false，此时只能重置",
+            "type": "boolean"
+          },
+          "password": {
+            "description": "当前密码明文；known 为 false 时为空串",
+            "type": "string"
+          }
+        },
+        "title": "用户的当前密码",
+        "type": "object"
+      },
       "VideoStream": {
         "description": "视频轨道信息",
         "properties": {
@@ -2063,6 +2078,63 @@
           }
         ],
         "summary": "更新用户",
+        "tags": [
+          "管理"
+        ]
+      }
+    },
+    "/admin/users/{id}/password": {
+      "get": {
+        "description": "返回指定用户的当前密码明文，用于在用户管理界面直接查看与转述。\n密码以 AES-GCM 加密保存在数据库里（密钥为 data 目录下的 secret.key），\n登录校验仍走 bcrypt 哈希；升级前创建的用户没有密文，此时 known 为 false，\n只能通过修改密码来设置一个新的。需要管理员权限与 write 令牌。\n响应带 Cache-Control: no-store，请勿缓存。",
+        "parameters": [
+          {
+            "description": "用户 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPassword"
+                }
+              }
+            },
+            "description": "用户的当前密码；known 为 false 表示查不到，需要重置"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "需要管理员权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "用户不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "查看用户密码",
         "tags": [
           "管理"
         ]

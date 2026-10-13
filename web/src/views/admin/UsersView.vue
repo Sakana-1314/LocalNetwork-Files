@@ -56,6 +56,22 @@ const editing = ref<User | null>(null)
 const saving = ref(false)
 const formRef = ref<FormInst | null>(null)
 
+// 当前密码：进入编辑时读一次，管理员可以直接查看或转述给用户。
+const currentPw = ref<string | null>(null)
+const pwKnown = ref(false)
+const pwVisible = ref(false)
+const pwLoading = ref(false)
+
+async function copyPw(): Promise<void> {
+  if (!currentPw.value) return
+  try {
+    await navigator.clipboard.writeText(currentPw.value)
+    message.success('密码已复制')
+  } catch {
+    message.error('复制失败，请手动选择')
+  }
+}
+
 const ROLE_OPTIONS = [
   { label: '普通用户', value: 'user' as Role },
   { label: '管理员', value: 'admin' as Role },
@@ -101,6 +117,23 @@ function openCreate(): void {
 
 function openEdit(u: User): void {
   editing.value = u
+  currentPw.value = null
+  pwKnown.value = false
+  pwVisible.value = false
+  pwLoading.value = true
+  void adminApi
+    .userPassword(u.id)
+    .then((r) => {
+      currentPw.value = r.password
+      pwKnown.value = r.known
+    })
+    .catch(() => {
+      currentPw.value = ''
+      pwKnown.value = false
+    })
+    .finally(() => {
+      pwLoading.value = false
+    })
   Object.assign(form, {
     username: u.username,
     password: '',
@@ -277,6 +310,21 @@ function rowProps(u: User): { style: string; onClick: () => void } {
           <n-form-item label="用户名" path="username">
             <n-input v-model:value="form.username" placeholder="用于登录、WebDAV、SMB" :input-props="{ autocomplete: 'off' }" />
           </n-form-item>
+          <n-form-item v-if="editing" label="当前密码">
+            <div class="pw-row">
+              <n-input
+                :value="pwLoading ? '读取中…' : !pwKnown ? '' : pwVisible ? currentPw ?? '' : '••••••••'"
+                readonly
+                :placeholder="pwLoading ? '读取中…' : pwKnown ? '' : '该账户没有留存密码，请设置新密码'"
+                :input-props="{ autocomplete: 'off' }"
+                class="pw-input"
+              />
+              <n-button v-if="pwKnown && !pwLoading" quaternary size="small" @click="pwVisible = !pwVisible">
+                {{ pwVisible ? '隐藏' : '显示' }}
+              </n-button>
+              <n-button v-if="pwKnown && !pwLoading" quaternary size="small" @click="copyPw">复制</n-button>
+            </div>
+          </n-form-item>
           <n-form-item :label="editing ? '新密码（留空则不修改）' : '密码'" path="password">
             <n-input
               v-model:value="form.password"
@@ -384,6 +432,16 @@ function rowProps(u: User): { style: string; onClick: () => void } {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+.pw-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.pw-row .pw-input {
+  flex: 1;
+  min-width: 0;
 }
 .mounts-head {
   display: flex;

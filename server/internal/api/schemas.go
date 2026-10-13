@@ -198,6 +198,14 @@ type S3KeySecret struct {
 	SecretKey string `json:"secret_key"` // S3 Secret Key（访问密钥对应的私钥）
 }
 
+// UserPassword 用户的当前密码。
+//
+// @Description 用户的当前密码
+type UserPassword struct {
+	Password string `json:"password"` // 当前密码明文；known 为 false 时为空串
+	Known    bool   `json:"known"`    // 是否还能查到密码；升级前创建的用户为 false，此时只能重置
+}
+
 // UserInput 创建 / 更新用户的请求体。
 //
 // @Description 创建或更新用户的请求体
