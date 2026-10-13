@@ -154,14 +154,15 @@ Pull Request **只构建不推送**；也支持手动触发。
 规范在 `GET /api/openapi.json`，由 Go 注解生成（生成物 `server/internal/api/openapi.json`，
 **禁止手写**）：改动 handler 注解或结构体字段注释后运行 `cd server && make docs` 重新生成，
 CI 会比对生成物与注解是否一致。界面「API 文档」以 iframe 内嵌 Apifox 在线文档
-<https://local-files.apifox.cn>，同步方式：
+<https://mlist.apifox.cn>，同步方式：
 
 ```bash
 APIFOX_TOKEN=afxp_xxxxxxxx ./server/scripts/sync-apifox.sh   # 项目 ID 默认 8912512，可用 APIFOX_PROJECT_ID 覆盖
 ```
 
-令牌是 Apifox 的**系统级访问令牌**，只经环境变量传入，不要写进仓库；CI 里用仓库 Secret `APIFOX_TOKEN`
-手动触发 `.github/workflows/apifox-sync.yml` 即可。规范里的 `servers` 是相对路径 `/api/v1`，
+令牌是 Apifox 的**系统级访问令牌**，只经环境变量传入，不要写进仓库。配置好仓库 Secret `APIFOX_TOKEN`
+后，`.github/workflows/apifox-sync.yml` 会在 `main` 上的规范变更时**自动同步**（也可手动触发并指定项目 ID）；
+未配置令牌时该工作流只告警并跳过，接口文档不会更新。规范里的 `servers` 是相对路径 `/api/v1`，
 在 Apifox 的「环境」里配置 Base URL（如 `http://192.168.1.10:8080`）后再调试。
 
 认证用 `Authorization: Bearer <token>`；无法设置请求头的场景（`<video>`、HLS）可用 `access_token=` 查询参数。

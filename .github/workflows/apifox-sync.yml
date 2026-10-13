@@ -1,10 +1,24 @@
-name: Apifox Sync
+name: Apifox 同步
 
-# 手动把 server/internal/api/openapi.json 同步到 Apifox 项目。
+# 把 server/internal/api/openapi.json 同步到 Apifox 项目。
+#
+#   main 上的规范变更 -> 自动导入（无需人工）
+#   手动触发          -> 可指定项目 ID
+#
+# 规范由 Go 注解生成（make docs），CI 已强制它与注解一致，所以「规范文件变了」
+# 等价于「接口变了」。这里用 paths 过滤，避免规范未变时重复调用 Apifox。
+#
 # 需要仓库 Secret：APIFOX_TOKEN（Apifox 系统级访问令牌）。
-# 未配置令牌时只提示并成功退出，不阻塞其它流程。
+# 未配置令牌时只告警并成功退出，不阻塞其它流程。
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - server/internal/api/openapi.json
+      - server/scripts/sync-apifox.sh
+      - server/scripts/spec-normalize.py
+      - .github/workflows/apifox-sync.yml
   workflow_dispatch:
     inputs:
       project_id:
@@ -17,26 +31,26 @@ permissions:
 
 jobs:
   sync:
-    name: Import OpenAPI into Apifox
+    name: 导入规范到 Apifox
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check token
+      - name: 检查令牌
         id: token
         env:
           APIFOX_TOKEN: ${{ secrets.APIFOX_TOKEN }}
         run: |
           if [ -z "$APIFOX_TOKEN" ]; then
-            echo "::warning::未配置 APIFOX_TOKEN，跳过同步。"
+            echo "::warning::未配置 APIFOX_TOKEN（仓库 Settings → Secrets and variables → Actions），本次跳过：接口文档不会更新到 Apifox。"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync openapi.json
+      - name: 导入规范
         if: steps.token.outputs.configured == 'true'
         env:
           APIFOX_TOKEN: ${{ secrets.APIFOX_TOKEN }}
-          APIFOX_PROJECT_ID: ${{ inputs.project_id }}
+          APIFOX_PROJECT_ID: ${{ inputs.project_id || '8912512' }}
         run: bash server/scripts/sync-apifox.sh
