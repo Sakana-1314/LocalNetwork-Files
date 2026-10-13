@@ -9,7 +9,7 @@ MList（局域网文件管理）：把服务器上的目录按用户授权，通
 
 ## 目录
 
-- `server/` - 后端（Go + Gin + SQLite），含 `internal/api/openapi.yaml` 规范与 `internal/webui/` 内嵌前端产物
+- `server/` - 后端（Go + Gin + SQLite），含 `internal/api/openapi.json` 规范与 `internal/webui/` 内嵌前端产物
 - `server/scripts/` - 后端相关脚本（如 Apifox 文档同步）
 - `web/` - 前端（Vue 3 + TypeScript + Naive UI）
 - `.github/workflows/` - CI/CD 工作流
