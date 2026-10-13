@@ -10,7 +10,8 @@ import (
 	"github.com/Sakana-1314/MList/server/internal/store"
 )
 
-// @Summary  我的访问令牌
+// @Summary     列出访问令牌
+// @Description 返回当前用户的访问令牌列表，不含令牌明文。
 // @Tags     访问凭据
 // @Produce  json
 // @Success  200 {array} store.AccessToken "当前用户的访问令牌列表（不含令牌明文）"
@@ -29,7 +30,9 @@ func (a *API) listTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, ts)
 }
 
-// @Summary  创建访问令牌（明文可随时通过 /tokens/{id}/secret 再次读取）
+// @Summary     创建访问令牌
+// @Description name 最长 128 字符；scopes 可选 read、write；expires_in_days 为 0 或省略表示永不过期。
+// @Description 明文只在创建时返回一次，之后可随时通过读取访问令牌明文接口再次读取。
 // @Tags     访问凭据
 // @Accept   json
 // @Produce  json
@@ -61,7 +64,9 @@ func (a *API) createToken(c *gin.Context) {
 }
 
 // revealToken returns the plaintext of one of the caller's own tokens.
-// @Summary  读取访问令牌明文（仅令牌所属用户）
+// @Summary     读取令牌明文
+// @Description 返回指定令牌的明文，仅令牌所属用户可读。
+// @Description 响应带 Cache-Control: no-store，请勿长期缓存。
 // @Tags     访问凭据
 // @Produce  json
 // @Param    id path integer true "令牌 ID"
@@ -85,7 +90,8 @@ func (a *API) revealToken(c *gin.Context) {
 	c.JSON(http.StatusOK, TokenSecret{Token: secret})
 }
 
-// @Summary  吊销访问令牌
+// @Summary     吊销访问令牌
+// @Description 立即吊销该令牌，使用它的客户端会失去访问权限。
 // @Tags     访问凭据
 // @Param    id path integer true "令牌 ID"
 // @Success  204 "令牌已吊销，无响应体"
@@ -106,7 +112,8 @@ func (a *API) deleteToken(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary  我的 S3 访问密钥
+// @Summary     列出 S3 密钥
+// @Description 返回当前用户的 S3 访问密钥列表，不含 Secret。
 // @Tags     访问凭据
 // @Produce  json
 // @Success  200 {array} store.S3Key "当前用户的 S3 密钥列表（不含 Secret）"
@@ -125,7 +132,9 @@ func (a *API) listS3Keys(c *gin.Context) {
 	c.JSON(http.StatusOK, ks)
 }
 
-// @Summary  创建 S3 密钥（Secret 可随时通过 /s3keys/{access_key}/secret 再次读取）
+// @Summary     创建 S3 密钥
+// @Description 创建一对 S3 Access Key 与 Secret；read_only 为 true 时该密钥只能读取。
+// @Description Secret 只在创建时返回一次，之后可随时通过读取 S3 密钥接口再次读取。
 // @Tags     访问凭据
 // @Accept   json
 // @Produce  json
@@ -148,7 +157,9 @@ func (a *API) createS3Key(c *gin.Context) {
 }
 
 // revealS3Key returns the secret of one of the caller's own S3 keys.
-// @Summary  读取 S3 密钥的 Secret（仅密钥所属用户）
+// @Summary     读取密钥 Secret
+// @Description 返回指定 S3 密钥的 Secret，仅密钥所属用户可读。
+// @Description 响应带 Cache-Control: no-store，请勿长期缓存。
 // @Tags     访问凭据
 // @Produce  json
 // @Param    access_key path string true "S3 Access Key（访问密钥 ID）"
@@ -167,7 +178,8 @@ func (a *API) revealS3Key(c *gin.Context) {
 	c.JSON(http.StatusOK, S3KeySecret{SecretKey: secret})
 }
 
-// @Summary  删除 S3 密钥
+// @Summary     删除 S3 密钥
+// @Description 删除该密钥，使用它的 S3 客户端会立即失去访问权限。
 // @Tags     访问凭据
 // @Param    access_key path string true "S3 Access Key（访问密钥 ID）"
 // @Success  204 "密钥已删除，无响应体"

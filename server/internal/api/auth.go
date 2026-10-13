@@ -80,7 +80,9 @@ func (a *API) setSessionCookie(c *gin.Context, tok string, exp time.Time) {
 	})
 }
 
-// @Summary  用户名密码登录
+// @Summary     登录
+// @Description 校验用户名与密码，成功后返回会话令牌并写入会话 Cookie。
+// @Description 该接口不需要鉴权。同一 IP 连续失败会触发限流（10 分钟）。
 // @Tags     认证
 // @Accept   json
 // @Produce  json
@@ -115,7 +117,8 @@ func (a *API) login(c *gin.Context) {
 	c.JSON(http.StatusOK, LoginResponse{Token: tok, ExpiresAt: exp, User: userView(u, u.IsAdmin())})
 }
 
-// @Summary 退出登录（清除会话 Cookie）
+// @Summary     退出登录
+// @Description 清除浏览器会话 Cookie。接口不需要鉴权，会话过期后调用同样返回 204。
 // @Tags    认证
 // @Success 204 "已退出登录，无响应体"
 // @Router  /auth/logout [post]
@@ -124,7 +127,8 @@ func (a *API) logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary  当前用户
+// @Summary     获取当前用户
+// @Description 返回当前登录用户及其授权目录。普通用户只能看到自己的信息。
 // @Tags     认证
 // @Produce  json
 // @Success  200 {object} store.User "当前登录用户及其授权目录"
@@ -138,7 +142,9 @@ func (a *API) me(c *gin.Context) {
 
 // 修改密码会使该用户此前的所有会话失效，因此会签发并写回新的会话令牌。
 //
-// @Summary  修改自己的密码
+// @Summary     修改密码
+// @Description 需要提供原密码，新密码至少 6 位。
+// @Description 修改成功后该用户此前签发的所有会话失效，返回新的会话令牌并写入 Cookie，客户端应替换本地保存的令牌。
 // @Tags     认证
 // @Accept   json
 // @Produce  json

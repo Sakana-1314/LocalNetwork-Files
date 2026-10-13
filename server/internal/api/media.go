@@ -22,7 +22,10 @@ import (
 // The signature is the only credential (it never expires), so the route is
 // reachable without a session — that is what lets <img> tags work behind a
 // reverse proxy without leaking tokens into URLs.
-// @Summary  按内容摘要取预览图（图片/视频/音频封面），JPEG
+// @Summary     获取预览图
+// @Description 按内容摘要返回 JPEG 预览图。
+// @Description 只接收摘要 d 与其签名 s，不接收文件路径，也不要求登录，因此可以直接放进 img 标签；签名不过期。
+// @Description 摘要取自列表接口条目的 thumb 与 thumb_sig。签名无效返回 403，摘要未知或无法生成返回 404。
 // @Tags     媒体
 // @Param    d query string true "内容摘要（Entry.thumb）"
 // @Param    s query string true "服务端对摘要的签名（Entry.thumb_sig）"
@@ -67,7 +70,8 @@ func probeError(c *gin.Context, err error) error {
 	return err
 }
 
-// @Summary  媒体信息（ffprobe）
+// @Summary     获取媒体信息
+// @Description 用 ffprobe 探测媒体文件，返回时长、码率、视频/音频/字幕轨道，以及浏览器能否直接播放（direct_play）。
 // @Tags     媒体
 // @Produce  json
 // @Param    path query string true "媒体文件的虚拟路径"
@@ -100,7 +104,9 @@ func (a *API) mediaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// @Summary  创建 HLS 实时转码会话
+// @Summary     创建转码会话
+// @Description 为视频创建 HLS 会话，分片按需转码。
+// @Description quality 可选 original、1080p、720p、480p；audio_track 为音轨序号。返回会话 ID 与播放列表地址。
 // @Tags     媒体
 // @Accept   json
 // @Produce  json
@@ -133,7 +139,8 @@ func (a *API) mediaTranscode(c *gin.Context) {
 	})
 }
 
-// @Summary  HLS 播放列表
+// @Summary     获取转码播放列表
+// @Description 返回该会话的 m3u8 播放列表；分片在请求时按需转码。
 // @Tags     媒体
 // @Param    id path string true "转码会话 ID"
 // @Success  200 {string} binary "HLS 播放列表（m3u8，Content-Type: application/vnd.apple.mpegurl）"
@@ -156,7 +163,8 @@ func (a *API) mediaHLSPlaylist(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.apple.mpegurl", []byte(pl))
 }
 
-// @Summary  HLS 分片（按需转码）
+// @Summary     获取转码分片
+// @Description 返回 MPEG-TS 分片数据，首次请求时按需转码并缓存。
 // @Tags     媒体
 // @Param    id path string true "转码会话 ID"
 // @Param    file path string true "分片文件名，形如 0.ts"
@@ -185,7 +193,8 @@ func (a *API) mediaHLSSegment(c *gin.Context) {
 	http.ServeFile(c.Writer, c.Request, p)
 }
 
-// @Summary  停止转码会话
+// @Summary     停止转码会话
+// @Description 停止该会话并结束其转码进程。
 // @Tags     媒体
 // @Param    id path string true "转码会话 ID"
 // @Success  204 "会话已停止，无响应体"
@@ -200,7 +209,9 @@ func (a *API) mediaHLSStop(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary  音频实时转码为 MP3 流（用于浏览器不支持的格式，如 APE/WMA/DSD）
+// @Summary     转码音频为 MP3
+// @Description 把浏览器不支持的音频实时转成 MP3 流，用于在线播放，例如 APE、WMA、DSD。
+// @Description start 指定起始秒数，便于拖动进度。
 // @Tags     媒体
 // @Param    path query string true "音频文件的虚拟路径"
 // @Param    start query number false "起始秒数，从该位置开始转码（用于拖动进度）"
@@ -230,7 +241,9 @@ func (a *API) mediaAudio(c *gin.Context) {
 	a.Media.StreamAudio(c.Request.Context(), loc.Real, start, c.Writer)
 }
 
-// @Summary  字幕转 WebVTT（内嵌字幕或同名外挂 .srt/.ass/.vtt）
+// @Summary     获取字幕
+// @Description 把内嵌字幕或同名外挂字幕（.srt、.ass、.vtt）转成 WebVTT。
+// @Description 传 index 时提取视频的内嵌字幕，省略时按外挂字幕文件处理。
 // @Tags     媒体
 // @Param    path query string true "视频路径（用于提取内嵌字幕）或字幕文件路径"
 // @Param    index query integer false "内嵌字幕序号（MediaInfo.subtitles 下标）；省略时按外挂字幕处理"

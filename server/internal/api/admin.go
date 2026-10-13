@@ -62,7 +62,9 @@ func lanRank(ip string) int {
 	return 3
 }
 
-// @Summary  系统与服务信息（用于挂载向导）
+// @Summary     获取系统信息
+// @Description 返回版本、主机名、服务器探测到的局域网地址与监听端口。
+// @Description 同时返回 WebDAV、S3、SMB 各服务的运行状态，供挂载向导与客户端配置使用。
 // @Tags     系统
 // @Produce  json
 // @Success  200 {object} SystemInfo "版本、主机名、地址与各协议服务的运行状态"
@@ -144,7 +146,8 @@ func (a *API) checkUsername(c *gin.Context, name string, exclude uint) bool {
 	return true
 }
 
-// @Summary  用户列表
+// @Summary     列出用户
+// @Description 返回全部用户及其授权目录；仅管理员可见本地路径。需要管理员权限。
 // @Tags     管理
 // @Produce  json
 // @Success  200 {array} store.User "全部用户及其授权目录（仅管理员可见本地路径）"
@@ -165,7 +168,9 @@ func (a *API) adminListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// @Summary  创建用户
+// @Summary     创建用户
+// @Description 创建用户并设置其授权目录与角色。
+// @Description 用户名 1 至 32 位，可用字母、数字、下划线、点和横线；密码至少 6 位。需要管理员权限。
 // @Tags     管理
 // @Accept   json
 // @Produce  json
@@ -214,7 +219,9 @@ func (a *API) countActiveAdmins(exclude uint) int {
 	return n
 }
 
-// @Summary  更新用户（password 为空表示不修改）
+// @Summary     更新用户
+// @Description 更新用户信息与授权目录（整表替换）。
+// @Description password 留空表示不修改密码；角色或启用状态变化会让该用户重新登录。需要管理员权限。
 // @Tags     管理
 // @Accept   json
 // @Produce  json
@@ -269,7 +276,9 @@ func (a *API) adminUpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, userView(u, true))
 }
 
-// @Summary  删除用户
+// @Summary     删除用户
+// @Description 同时删除该用户的授权目录、访问令牌与 S3 密钥。
+// @Description 不允许删除最后一个管理员或当前登录用户。需要管理员权限。
 // @Tags     管理
 // @Param    id path integer true "用户 ID"
 // @Success  204 "用户及其授权目录、访问令牌、S3 密钥均已删除，无响应体"
@@ -296,7 +305,9 @@ func (a *API) adminDeleteUser(c *gin.Context) {
 }
 
 // adminBrowse lists local directories so admins can pick mount paths.
-// @Summary  浏览服务器本地目录（用于选择授权目录）
+// @Summary     浏览服务器目录
+// @Description 浏览服务器本地文件系统，用于在界面上选择授权目录。
+// @Description 省略 path 时返回顶层目录或盘符列表。需要管理员权限。
 // @Tags     管理
 // @Produce  json
 // @Param    path query string false "服务器本地绝对路径；省略时返回根目录 / 盘符列表"
@@ -352,7 +363,8 @@ func isDir(p string) bool {
 
 // ---------- cache / search ----------
 
-// @Summary  缓存统计
+// @Summary     获取缓存统计
+// @Description 返回预览图与转码缓存的占用、容量上限与保留时长，以及当前已知的转码会话。需要管理员权限。
 // @Tags     管理
 // @Produce  json
 // @Success  200 {object} CacheStats "预览图 / 转码缓存的占用、上限与保留时长，以及当前转码会话"
@@ -367,7 +379,9 @@ func (a *API) adminCacheStats(c *gin.Context) {
 	})
 }
 
-// @Summary  清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）
+// @Summary     清理缓存
+// @Description 只清理已过期项与超出容量上限的条目；保留时长为 0 表示永不过期，因此不提供清空全部。
+// @Description kind 可选 thumb、transcode、all。需要管理员权限。
 // @Tags     管理
 // @Accept   json
 // @Produce  json
@@ -396,7 +410,8 @@ func (a *API) adminCacheClean(c *gin.Context) {
 	c.JSON(http.StatusOK, a.Cache.Cleanup(buckets))
 }
 
-// @Summary  搜索索引状态
+// @Summary     获取索引状态
+// @Description 返回搜索索引的构建状态与统计，含条目数、上次构建时间与耗时。需要管理员权限。
 // @Tags     管理
 // @Produce  json
 // @Success  200 {object} IndexStatus "索引的构建状态与统计"
@@ -405,7 +420,8 @@ func (a *API) adminCacheClean(c *gin.Context) {
 // @Router   /admin/search/status [get]
 func (a *API) adminSearchStatus(c *gin.Context) { c.JSON(http.StatusOK, a.Search.Status()) }
 
-// @Summary  重建搜索索引
+// @Summary     重建搜索索引
+// @Description 在后台重建全部搜索索引，接口立即返回，不等待构建完成。需要管理员权限。
 // @Tags     管理
 // @Produce  json
 // @Success  202 {object} ReindexResponse "已开始后台重建"

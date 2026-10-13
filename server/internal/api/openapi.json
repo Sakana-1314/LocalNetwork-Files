@@ -1052,6 +1052,7 @@
   "paths": {
     "/admin/browse": {
       "get": {
+        "description": "浏览服务器本地文件系统，用于在界面上选择授权目录。\n省略 path 时返回顶层目录或盘符列表。需要管理员权限。",
         "parameters": [
           {
             "description": "服务器本地绝对路径；省略时返回根目录 / 盘符列表",
@@ -1089,7 +1090,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "浏览服务器本地目录（用于选择授权目录）",
+        "summary": "浏览服务器目录",
         "tags": [
           "管理"
         ]
@@ -1097,6 +1098,7 @@
     },
     "/admin/cache": {
       "get": {
+        "description": "返回预览图与转码缓存的占用、容量上限与保留时长，以及当前已知的转码会话。需要管理员权限。",
         "responses": {
           "200": {
             "content": {
@@ -1124,7 +1126,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "缓存统计",
+        "summary": "获取缓存统计",
         "tags": [
           "管理"
         ]
@@ -1132,6 +1134,7 @@
     },
     "/admin/cache/clean": {
       "post": {
+        "description": "只清理已过期项与超出容量上限的条目；保留时长为 0 表示永不过期，因此不提供清空全部。\nkind 可选 thumb、transcode、all。需要管理员权限。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1181,7 +1184,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "清理已过期的缓存（保留时长为 0 表示永不过期，不可清空）",
+        "summary": "清理缓存",
         "tags": [
           "管理"
         ]
@@ -1189,6 +1192,7 @@
     },
     "/admin/search/reindex": {
       "post": {
+        "description": "在后台重建全部搜索索引，接口立即返回，不等待构建完成。需要管理员权限。",
         "responses": {
           "202": {
             "content": {
@@ -1224,6 +1228,7 @@
     },
     "/admin/search/status": {
       "get": {
+        "description": "返回搜索索引的构建状态与统计，含条目数、上次构建时间与耗时。需要管理员权限。",
         "responses": {
           "200": {
             "content": {
@@ -1251,7 +1256,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "搜索索引状态",
+        "summary": "获取索引状态",
         "tags": [
           "管理"
         ]
@@ -1259,6 +1264,7 @@
     },
     "/admin/users": {
       "get": {
+        "description": "返回全部用户及其授权目录；仅管理员可见本地路径。需要管理员权限。",
         "responses": {
           "200": {
             "content": {
@@ -1299,12 +1305,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "用户列表",
+        "summary": "列出用户",
         "tags": [
           "管理"
         ]
       },
       "post": {
+        "description": "创建用户并设置其授权目录与角色。\n用户名 1 至 32 位，可用字母、数字、下划线、点和横线；密码至少 6 位。需要管理员权限。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1363,6 +1370,7 @@
     },
     "/admin/users/{id}": {
       "delete": {
+        "description": "同时删除该用户的授权目录、访问令牌与 S3 密钥。\n不允许删除最后一个管理员或当前登录用户。需要管理员权限。",
         "parameters": [
           {
             "description": "用户 ID",
@@ -1420,6 +1428,7 @@
         ]
       },
       "put": {
+        "description": "更新用户信息与授权目录（整表替换）。\npassword 留空表示不修改密码；角色或启用状态变化会让该用户重新登录。需要管理员权限。",
         "parameters": [
           {
             "description": "用户 ID",
@@ -1491,7 +1500,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "更新用户（password 为空表示不修改）",
+        "summary": "更新用户",
         "tags": [
           "管理"
         ]
@@ -1499,6 +1508,7 @@
     },
     "/auth/login": {
       "post": {
+        "description": "校验用户名与密码，成功后返回会话令牌并写入会话 Cookie。\n该接口不需要鉴权。同一 IP 连续失败会触发限流（10 分钟）。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1544,7 +1554,7 @@
             "description": "登录失败次数过多，请 10 分钟后再试"
           }
         },
-        "summary": "用户名密码登录",
+        "summary": "登录",
         "tags": [
           "认证"
         ]
@@ -1552,12 +1562,13 @@
     },
     "/auth/logout": {
       "post": {
+        "description": "清除浏览器会话 Cookie。接口不需要鉴权，会话过期后调用同样返回 204。",
         "responses": {
           "204": {
             "description": "已退出登录，无响应体"
           }
         },
-        "summary": "退出登录（清除会话 Cookie）",
+        "summary": "退出登录",
         "tags": [
           "认证"
         ]
@@ -1565,6 +1576,7 @@
     },
     "/auth/me": {
       "get": {
+        "description": "返回当前登录用户及其授权目录。普通用户只能看到自己的信息。",
         "responses": {
           "200": {
             "content": {
@@ -1592,7 +1604,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "当前用户",
+        "summary": "获取当前用户",
         "tags": [
           "认证"
         ]
@@ -1600,6 +1612,7 @@
     },
     "/auth/password": {
       "put": {
+        "description": "需要提供原密码，新密码至少 6 位。\n修改成功后该用户此前签发的所有会话失效，返回新的会话令牌并写入 Cookie，客户端应替换本地保存的令牌。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1640,7 +1653,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "修改自己的密码",
+        "summary": "修改密码",
         "tags": [
           "认证"
         ]
@@ -1648,6 +1661,7 @@
     },
     "/fs/copy": {
       "post": {
+        "description": "把多个条目复制到目标目录。\noverwrite 为 true 时覆盖同名目标；逐个条目返回成功与失败。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1698,7 +1712,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "复制",
+        "summary": "复制文件",
         "tags": [
           "文件"
         ]
@@ -1706,6 +1720,7 @@
     },
     "/fs/delete": {
       "post": {
+        "description": "删除给定的条目，目录会被递归删除。\n逐个条目返回成功与失败。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1756,7 +1771,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "删除（目录递归删除）",
+        "summary": "删除文件",
         "tags": [
           "文件"
         ]
@@ -1764,6 +1779,7 @@
     },
     "/fs/file": {
       "put": {
+        "description": "请求体为文件内容，自动创建不存在的父目录。\noverwrite 为 false（默认）时，目标已存在则返回 409。",
         "parameters": [
           {
             "description": "目标文件的完整虚拟路径",
@@ -1843,7 +1859,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "上传 / 覆盖文件（请求体为文件内容，自动创建父目录）",
+        "summary": "上传文件",
         "tags": [
           "文件"
         ]
@@ -1851,6 +1867,7 @@
     },
     "/fs/list": {
       "get": {
+        "description": "返回该目录下的文件与子目录；省略 path 时为虚拟根目录 /。\n每个条目带预览图摘要 thumb 与签名 thumb_sig，可直接用于获取预览图接口。",
         "parameters": [
           {
             "description": "目录的虚拟路径，省略时为根目录 /",
@@ -1907,6 +1924,7 @@
     },
     "/fs/mkdir": {
       "post": {
+        "description": "创建目录，并自动创建不存在的父目录。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1965,6 +1983,7 @@
     },
     "/fs/move": {
       "post": {
+        "description": "把多个条目移动到目标目录，可以跨授权目录。\noverwrite 为 true 时覆盖同名目标；逐个条目返回成功与失败，部分失败不影响其余条目。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2015,7 +2034,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "移动（可跨授权目录）",
+        "summary": "移动文件",
         "tags": [
           "文件"
         ]
@@ -2023,6 +2042,7 @@
     },
     "/fs/raw": {
       "get": {
+        "description": "以流的形式返回文件内容，支持 Range 请求，可用于断点续传与拖动进度。\n响应头带 Content-Type 与 Accept-Ranges；download 为 true 时以附件形式下载（Content-Disposition: attachment）。\n对可能被浏览器执行脚本的类型会附加 CSP sandbox。",
         "parameters": [
           {
             "description": "文件的虚拟路径",
@@ -2089,7 +2109,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "读取原始文件（支持 Range 断点续传）",
+        "summary": "读取原始文件",
         "tags": [
           "文件"
         ]
@@ -2097,6 +2117,7 @@
     },
     "/fs/raw/{name}": {
       "get": {
+        "description": "与读取原始文件接口行为完全相同，只是 URL 末尾带上文件名，便于浏览器保存或下载时显示真实文件名。\n末尾的名称由服务端忽略，实际读取的路径仍取自 path 参数。",
         "parameters": [
           {
             "description": "文件名，仅用于让浏览器显示真实文件名，服务端忽略",
@@ -2172,7 +2193,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "同 /fs/raw；末尾的文件名会被忽略，仅用于让浏览器显示真实文件名",
+        "summary": "读取原始文件并显示文件名",
         "tags": [
           "文件"
         ]
@@ -2180,6 +2201,7 @@
     },
     "/fs/rename": {
       "post": {
+        "description": "在同一目录内重命名文件或目录，name 为不含路径的新名称。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2238,6 +2260,7 @@
     },
     "/fs/search": {
       "get": {
+        "description": "按子序列模糊匹配文件名，支持中文。\n可用 path 限定搜索范围、kind 限定类型；结果按相关度排序，并带匹配位置与预览图摘要。",
         "parameters": [
           {
             "description": "搜索关键字（支持中文；按子序列模糊匹配）",
@@ -2302,7 +2325,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "模糊搜索文件名",
+        "summary": "搜索文件名",
         "tags": [
           "文件"
         ]
@@ -2310,6 +2333,7 @@
     },
     "/fs/stat": {
       "get": {
+        "description": "返回单个文件或目录的条目信息，字段与列出目录的条目一致。",
         "parameters": [
           {
             "description": "文件或目录的虚拟路径",
@@ -2358,7 +2382,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "获取单个文件/目录信息",
+        "summary": "获取文件信息",
         "tags": [
           "文件"
         ]
@@ -2366,6 +2390,7 @@
     },
     "/fs/text": {
       "get": {
+        "description": "按 UTF-8 返回文件文本，最大读取 4 MiB。\n超出部分会被截断，并通过 truncated 标记。",
         "parameters": [
           {
             "description": "文本文件的虚拟路径",
@@ -2414,7 +2439,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "读取文本文件（最大 4 MiB）",
+        "summary": "读取文本文件",
         "tags": [
           "文件"
         ]
@@ -2422,6 +2447,7 @@
     },
     "/media/audio": {
       "get": {
+        "description": "把浏览器不支持的音频实时转成 MP3 流，用于在线播放，例如 APE、WMA、DSD。\nstart 指定起始秒数，便于拖动进度。",
         "parameters": [
           {
             "description": "音频文件的虚拟路径",
@@ -2478,7 +2504,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "音频实时转码为 MP3 流（用于浏览器不支持的格式，如 APE/WMA/DSD）",
+        "summary": "转码音频为 MP3",
         "tags": [
           "媒体"
         ]
@@ -2486,6 +2512,7 @@
     },
     "/media/hls/{id}": {
       "delete": {
+        "description": "停止该会话并结束其转码进程。",
         "parameters": [
           {
             "description": "转码会话 ID",
@@ -2525,6 +2552,7 @@
     },
     "/media/hls/{id}/index.m3u8": {
       "get": {
+        "description": "返回该会话的 m3u8 播放列表；分片在请求时按需转码。",
         "parameters": [
           {
             "description": "转码会话 ID",
@@ -2573,7 +2601,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "HLS 播放列表",
+        "summary": "获取转码播放列表",
         "tags": [
           "媒体"
         ]
@@ -2581,6 +2609,7 @@
     },
     "/media/hls/{id}/{file}": {
       "get": {
+        "description": "返回 MPEG-TS 分片数据，首次请求时按需转码并缓存。",
         "parameters": [
           {
             "description": "转码会话 ID",
@@ -2638,7 +2667,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "HLS 分片（按需转码）",
+        "summary": "获取转码分片",
         "tags": [
           "媒体"
         ]
@@ -2646,6 +2675,7 @@
     },
     "/media/info": {
       "get": {
+        "description": "用 ffprobe 探测媒体文件，返回时长、码率、视频/音频/字幕轨道，以及浏览器能否直接播放（direct_play）。",
         "parameters": [
           {
             "description": "媒体文件的虚拟路径",
@@ -2694,7 +2724,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "媒体信息（ffprobe）",
+        "summary": "获取媒体信息",
         "tags": [
           "媒体"
         ]
@@ -2702,6 +2732,7 @@
     },
     "/media/subtitle": {
       "get": {
+        "description": "把内嵌字幕或同名外挂字幕（.srt、.ass、.vtt）转成 WebVTT。\n传 index 时提取视频的内嵌字幕，省略时按外挂字幕文件处理。",
         "parameters": [
           {
             "description": "视频路径（用于提取内嵌字幕）或字幕文件路径",
@@ -2758,7 +2789,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "字幕转 WebVTT（内嵌字幕或同名外挂 .srt/.ass/.vtt）",
+        "summary": "获取字幕",
         "tags": [
           "媒体"
         ]
@@ -2766,6 +2797,7 @@
     },
     "/media/thumb": {
       "get": {
+        "description": "按内容摘要返回 JPEG 预览图。\n只接收摘要 d 与其签名 s，不接收文件路径，也不要求登录，因此可以直接放进 img 标签；签名不过期。\n摘要取自列表接口条目的 thumb 与 thumb_sig。签名无效返回 403，摘要未知或无法生成返回 404。",
         "parameters": [
           {
             "description": "内容摘要（Entry.thumb）",
@@ -2833,7 +2865,7 @@
             "description": "摘要未知（服务端无记录或文件已变化），或该文件无法生成预览图"
           }
         },
-        "summary": "按内容摘要取预览图（图片/视频/音频封面），JPEG",
+        "summary": "获取预览图",
         "tags": [
           "媒体"
         ]
@@ -2841,6 +2873,7 @@
     },
     "/media/transcode": {
       "post": {
+        "description": "为视频创建 HLS 会话，分片按需转码。\nquality 可选 original、1080p、720p、480p；audio_track 为音轨序号。返回会话 ID 与播放列表地址。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2891,7 +2924,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "创建 HLS 实时转码会话",
+        "summary": "创建转码会话",
         "tags": [
           "媒体"
         ]
@@ -2899,6 +2932,7 @@
     },
     "/s3keys": {
       "get": {
+        "description": "返回当前用户的 S3 访问密钥列表，不含 Secret。",
         "responses": {
           "200": {
             "content": {
@@ -2929,12 +2963,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "我的 S3 访问密钥",
+        "summary": "列出 S3 密钥",
         "tags": [
           "访问凭据"
         ]
       },
       "post": {
+        "description": "创建一对 S3 Access Key 与 Secret；read_only 为 true 时该密钥只能读取。\nSecret 只在创建时返回一次，之后可随时通过读取 S3 密钥接口再次读取。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2975,7 +3010,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "创建 S3 密钥（Secret 可随时通过 /s3keys/{access_key}/secret 再次读取）",
+        "summary": "创建 S3 密钥",
         "tags": [
           "访问凭据"
         ]
@@ -2983,6 +3018,7 @@
     },
     "/s3keys/{access_key}": {
       "delete": {
+        "description": "删除该密钥，使用它的 S3 客户端会立即失去访问权限。",
         "parameters": [
           {
             "description": "S3 Access Key（访问密钥 ID）",
@@ -3032,6 +3068,7 @@
     },
     "/s3keys/{access_key}/secret": {
       "get": {
+        "description": "返回指定 S3 密钥的 Secret，仅密钥所属用户可读。\n响应带 Cache-Control: no-store，请勿长期缓存。",
         "parameters": [
           {
             "description": "S3 Access Key（访问密钥 ID）",
@@ -3080,7 +3117,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "读取 S3 密钥的 Secret（仅密钥所属用户）",
+        "summary": "读取密钥 Secret",
         "tags": [
           "访问凭据"
         ]
@@ -3088,6 +3125,7 @@
     },
     "/system/info": {
       "get": {
+        "description": "返回版本、主机名、服务器探测到的局域网地址与监听端口。\n同时返回 WebDAV、S3、SMB 各服务的运行状态，供挂载向导与客户端配置使用。",
         "responses": {
           "200": {
             "content": {
@@ -3115,7 +3153,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "系统与服务信息（用于挂载向导）",
+        "summary": "获取系统信息",
         "tags": [
           "系统"
         ]
@@ -3123,6 +3161,7 @@
     },
     "/tokens": {
       "get": {
+        "description": "返回当前用户的访问令牌列表，不含令牌明文。",
         "responses": {
           "200": {
             "content": {
@@ -3153,12 +3192,13 @@
             "bearerAuth": []
           }
         ],
-        "summary": "我的访问令牌",
+        "summary": "列出访问令牌",
         "tags": [
           "访问凭据"
         ]
       },
       "post": {
+        "description": "name 最长 128 字符；scopes 可选 read、write；expires_in_days 为 0 或省略表示永不过期。\n明文只在创建时返回一次，之后可随时通过读取访问令牌明文接口再次读取。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3209,7 +3249,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "创建访问令牌（明文可随时通过 /tokens/{id}/secret 再次读取）",
+        "summary": "创建访问令牌",
         "tags": [
           "访问凭据"
         ]
@@ -3217,6 +3257,7 @@
     },
     "/tokens/{id}": {
       "delete": {
+        "description": "立即吊销该令牌，使用它的客户端会失去访问权限。",
         "parameters": [
           {
             "description": "令牌 ID",
@@ -3266,6 +3307,7 @@
     },
     "/tokens/{id}/secret": {
       "get": {
+        "description": "返回指定令牌的明文，仅令牌所属用户可读。\n响应带 Cache-Control: no-store，请勿长期缓存。",
         "parameters": [
           {
             "description": "令牌 ID",
@@ -3314,7 +3356,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "读取访问令牌明文（仅令牌所属用户）",
+        "summary": "读取令牌明文",
         "tags": [
           "访问凭据"
         ]
