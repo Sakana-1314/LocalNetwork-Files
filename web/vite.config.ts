@@ -46,7 +46,7 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      // 使用正则，避免把前端路由 /api-docs 也转发到后端
+      // 使用正则，只转发 /api/ 与 /dav 前缀，前端路由不受影响
       '^/api/': { target: backend, changeOrigin: false },
       '^/dav(/|$)': { target: backend, changeOrigin: false },
     },

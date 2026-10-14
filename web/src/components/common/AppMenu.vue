@@ -3,7 +3,6 @@ import { computed, h, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NIcon, NMenu, type MenuOption } from 'naive-ui'
 import {
-  BookOutline,
   FolderOpenOutline,
   GitNetworkOutline,
   OptionsOutline,
@@ -26,7 +25,6 @@ const options = computed<MenuOption[]>(() => {
     { label: '文件', key: 'files', icon: icon(FolderOpenOutline) },
     { label: '搜索', key: 'search', icon: icon(SearchOutline) },
     { label: '挂载与服务', key: 'mount', icon: icon(GitNetworkOutline) },
-    { label: 'API 文档', key: 'api-docs', icon: icon(BookOutline) },
   ]
   if (auth.isAdmin) {
     base.push(
