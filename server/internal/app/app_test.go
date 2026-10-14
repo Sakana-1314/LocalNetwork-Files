@@ -1317,6 +1317,12 @@ func TestRoutingAndSpec(t *testing.T) {
 		"POST /auth/login":  400, // 未带凭据时由参数校验拒绝
 		"POST /auth/logout": 204, // 只清 Cookie，必须在会话过期后仍可用
 		"GET /media/thumb":  403, // 只校验摘要签名，不要求登录
+		// 分享链接：凭随机令牌只读访问，未知令牌返回 404
+		"GET /share/{token}":            404,
+		"GET /share/{token}/list":       404,
+		"GET /share/{token}/raw":        404,
+		"GET /share/{token}/raw/{name}": 404,
+		"GET /share/{token}/text":       404,
 	}
 	seen := map[string]bool{}
 	for p, ops := range spec.Paths {
