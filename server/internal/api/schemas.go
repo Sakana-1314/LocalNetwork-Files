@@ -20,9 +20,9 @@ import (
 //
 // @Description 目录列表
 type ListResponse struct {
-	Path     string      `json:"path"`     // 规范化后的目录虚拟路径
-	Writable bool        `json:"writable"` // 当前目录是否可写
-	Entries  []vfs.Entry `json:"entries"`  // 目录下的文件与子目录
+	Path     string      `json:"path" extensions:"x-apifox-mock=/"`        // 规范化后的目录虚拟路径
+	Writable bool        `json:"writable" extensions:"x-apifox-mock=true"` // 当前目录是否可写
+	Entries  []vfs.Entry `json:"entries"`                                  // 目录下的文件与子目录
 }
 
 // TextResponse 文本文件内容。
@@ -309,12 +309,12 @@ type ErrorResponse struct {
 //
 // @Description 系统与协议服务信息，用于挂载向导
 type SystemInfo struct {
-	Version   string                   `json:"version"`   // 服务器版本
-	Hostname  string                   `json:"hostname"`  // 服务器主机名
-	Addresses []string                 `json:"addresses"` // 服务器探测到的局域网 IP 地址
-	HTTPPort  int                      `json:"http_port"` // Web / API / WebDAV / S3 的监听端口
-	FFmpeg    bool                     `json:"ffmpeg"`    // 是否检测到 ffmpeg（决定转码与部分预览是否可用）
-	Services  map[string]ServiceStatus `json:"services"`  // 各协议服务的状态
+	Version   string         `json:"version" extensions:"x-apifox-mock=1.2.3"`         // 服务器版本
+	Hostname  string         `json:"hostname" extensions:"x-apifox-mock=mlist-server"` // 服务器主机名
+	Addresses []string       `json:"addresses"`                                        // 服务器探测到的局域网 IP 地址
+	HTTPPort  int            `json:"http_port" extensions:"x-apifox-mock=8080"`        // Web / API / WebDAV / S3 的监听端口
+	FFmpeg    bool           `json:"ffmpeg" extensions:"x-apifox-mock=true"`           // 是否检测到 ffmpeg（决定转码与部分预览是否可用）
+	Services  ServicesStatus `json:"services"`                                         // 各协议服务的状态
 }
 
 // CacheStats 缓存统计。

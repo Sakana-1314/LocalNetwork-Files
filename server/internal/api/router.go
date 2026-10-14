@@ -29,20 +29,37 @@ import (
 var openapiJSONDoc []byte
 
 // ServiceStatus 描述单个协议服务的状态，用于挂载向导与管理界面。
+//
+// enabled / running 的 Mock 固定为 true：Apifox 智能 Mock 对布尔字段本会随机
+// 取值，演示站里「挂载与服务」的卡片会随机显示「未启用 / 未运行」。
+//
 // @Description 单个协议服务的状态
 type ServiceStatus struct {
-	Enabled bool              `json:"enabled"`           // 是否在 config.yaml 中启用
-	Running bool              `json:"running"`           // 当前是否正在运行
-	Port    int               `json:"port,omitempty"`    // 监听端口
-	Path    string            `json:"path,omitempty"`    // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
-	Error   string            `json:"error,omitempty"`   // 服务启动错误（仅管理员可见）
-	Shares  map[string]string `json:"shares,omitempty"`  // 仅 SMB：当前用户的挂载名 → SMB 共享名
-	Account string            `json:"account,omitempty"` // 仅 SMB：当前用户的 SMB 登录名
+	Enabled bool              `json:"enabled" extensions:"x-apifox-mock=true"` // 是否在 config.yaml 中启用
+	Running bool              `json:"running" extensions:"x-apifox-mock=true"` // 当前是否正在运行
+	Port    int               `json:"port,omitempty"`                          // 监听端口
+	Path    string            `json:"path,omitempty"`                          // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
+	Error   string            `json:"error,omitempty"`                         // 服务启动错误（仅管理员可见）
+	Shares  map[string]string `json:"shares,omitempty"`                        // 仅 SMB：当前用户的挂载名 → SMB 共享名
+	Account string            `json:"account,omitempty"`                       // 仅 SMB：当前用户的 SMB 登录名
+}
+
+// ServicesStatus 是各协议服务的状态集合。
+//
+// 服务端始终返回固定的这三个键（WebDAV / S3 / SMB），所以这里用固定字段而不是
+// map：map 在规范里只能写成 additionalProperties，文档与 Mock 都无法确定键名。
+// 序列化结果与原来的 map 完全一致。
+//
+// @Description 各协议服务的状态
+type ServicesStatus struct {
+	WebDAV ServiceStatus `json:"webdav"` // WebDAV 服务（挂载在 HTTP 端口的 /dav）
+	S3     ServiceStatus `json:"s3"`     // S3 兼容接口
+	SMB    ServiceStatus `json:"smb"`    // 托管的 Samba 服务
 }
 
 // Services is implemented by the application to expose protocol service state.
 type Services interface {
-	Status(userID uint) map[string]ServiceStatus
+	Status(userID uint) ServicesStatus
 }
 
 type Deps struct {

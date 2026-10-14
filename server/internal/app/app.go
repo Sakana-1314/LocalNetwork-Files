@@ -145,13 +145,13 @@ func (a *App) applyServices() {
 }
 
 // Status implements api.Services.
-func (a *App) Status(userID uint) map[string]api.ServiceStatus {
+func (a *App) Status(userID uint) api.ServicesStatus {
 	s := a.cfg.Services
-	out := map[string]api.ServiceStatus{}
+	out := api.ServicesStatus{}
 	_, port := splitPort(a.cfg.Listen)
-	out["webdav"] = api.ServiceStatus{Enabled: s.WebDAVEnabled, Running: s.WebDAVEnabled, Port: port, Path: webdav.Prefix}
+	out.WebDAV = api.ServiceStatus{Enabled: s.WebDAVEnabled, Running: s.WebDAVEnabled, Port: port, Path: webdav.Prefix}
 	// S3 shares the main listener, so its port and status follow it.
-	out["s3"] = api.ServiceStatus{
+	out.S3 = api.ServiceStatus{
 		Enabled: s.S3Enabled, Running: s.S3Enabled && a.s3.Enabled(),
 		Port: port, Path: s3.Prefix,
 	}
@@ -169,14 +169,17 @@ func (a *App) Status(userID uint) map[string]api.ServiceStatus {
 			st.Account = a.smb.Account(u.Username)
 		}
 	}
-	out["smb"] = st
+	out.SMB = st
 	// Start errors may reveal local paths and binaries; only admins see them.
 	if u, err := a.store.GetUser(userID); err != nil || !u.IsAdmin() {
-		for k, v := range out {
-			if v.Error != "" {
-				v.Error = "服务异常，请联系管理员"
-				out[k] = v
-			}
+		if out.WebDAV.Error != "" {
+			out.WebDAV.Error = "服务异常，请联系管理员"
+		}
+		if out.S3.Error != "" {
+			out.S3.Error = "服务异常，请联系管理员"
+		}
+		if out.SMB.Error != "" {
+			out.SMB.Error = "服务异常，请联系管理员"
 		}
 	}
 	return out
