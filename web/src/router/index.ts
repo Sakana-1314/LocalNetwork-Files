@@ -64,7 +64,8 @@ const routes: RouteRecordRaw[] = [
 ]
 
 export const router = createRouter({
-  history: createWebHistory(),
+  // 部署到子路径时（Vite base）History 路由也必须带上同样的前缀。
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 }),
 })
