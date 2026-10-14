@@ -4,7 +4,7 @@ import { NButton, NDataTable, NIcon, NTag, useThemeVars, type DataTableColumns, 
 import { EllipsisHorizontal } from '@vicons/ionicons5'
 import type { Entry } from '@/api/types'
 import FileThumb from './FileThumb.vue'
-import { formatDate, formatRelative, formatSize } from '@/utils/format'
+import { formatDate, formatEntrySize, formatRelative } from '@/utils/format'
 import type { SortKey, SortState } from './sort'
 
 /** 列表行里预览图的边长（px）。用最小档 128 的预览图，节省流量。 */
@@ -76,7 +76,7 @@ const columns = computed<DataTableColumns<Entry>>(() => {
               ? h(
                   'div',
                   { class: 'name-sub' },
-                  row.is_dir ? formatRelative(row.mod_time) : `${formatSize(row.size)} · ${formatRelative(row.mod_time)}`,
+                  `${formatEntrySize(row)} · ${formatRelative(row.mod_time)}`,
                 )
               : null,
           ]),
@@ -95,7 +95,7 @@ const columns = computed<DataTableColumns<Entry>>(() => {
         sorter: true,
         sortOrder: sortOrderOf('size'),
         align: 'right',
-        render: (row) => h('span', { class: 'muted' }, row.is_dir ? '—' : formatSize(row.size)),
+        render: (row) => h('span', { class: 'muted' }, formatEntrySize(row)),
       },
       {
         title: '修改时间',

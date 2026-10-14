@@ -677,3 +677,47 @@ func TestSearch200kUnder100ms(t *testing.T) {
 		}
 	}
 }
+
+func TestDirSize(t *testing.T) {
+	root := t.TempDir()
+	if rp, err := filepath.EvalSymlinks(root); err == nil {
+		root = rp
+	}
+	write := func(rel string, n int) {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, make([]byte, n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a/1.bin", 100)
+	write("a/b/2.bin", 20)
+	write("a/b/c/3.bin", 3)
+	write("top.bin", 1000)
+	write("a/node_modules/skipped.bin", 5000) // junk directories are not indexed
+	os.MkdirAll(filepath.Join(root, "empty"), 0o755)
+
+	ri := newRootIndex(root)
+	ri.walk("", nil)
+	want := map[string]int64{"": 1123, "a": 123, "a/b": 23, "a/b/c": 3, "empty": 0}
+	for rel, n := range want {
+		if got, ok := ri.dirSize(rel); !ok || got != n {
+			t.Errorf("dirSize(%q) = %d, %v; want %d", rel, got, ok, n)
+		}
+	}
+	if _, ok := ri.dirSize("missing"); ok {
+		t.Error("unknown directory reported a size")
+	}
+
+	// Changes invalidate the cached totals.
+	write("a/b/4.bin", 7)
+	ri.update("a/b/4.bin")
+	os.RemoveAll(filepath.Join(root, "a", "b", "c"))
+	ri.update("a/b/c")
+	if got, _ := ri.dirSize("a"); got != 127 {
+		t.Fatalf("after update a = %d, want 127", got)
+	}
+	if got, _ := ri.dirSize(""); got != 1127 {
+		t.Fatalf("after update root = %d, want 1127", got)
+	}
+}

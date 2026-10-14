@@ -452,7 +452,7 @@
             "type": "string"
           },
           "size": {
-            "description": "文件大小（字节）；目录为 0",
+            "description": "大小（字节）；目录为其下所有文件的总大小，尚未统计（索引构建中）时为 -1",
             "type": "integer"
           },
           "thumb": {
@@ -880,7 +880,7 @@
             "type": "integer"
           },
           "size": {
-            "description": "文件大小（字节）；目录为 0",
+            "description": "大小（字节）；目录为其下所有文件的总大小，尚未统计（索引构建中）时为 -1",
             "type": "integer"
           },
           "thumb": {

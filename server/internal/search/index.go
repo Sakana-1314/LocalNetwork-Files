@@ -68,6 +68,11 @@ type rootIndex struct {
 	dirs    []string         // relative directory paths ("" = root)
 	dirIDs  map[string]int32 // rel dir -> index
 	deleted int
+
+	// sizes caches the total size of the files below every directory
+	// (rel dir -> bytes). It is rebuilt on demand after the index changes.
+	sizeMu sync.Mutex
+	sizes  map[string]int64
 }
 
 func newRootIndex(root string) *rootIndex {
@@ -159,8 +164,70 @@ func (ri *rootIndex) walk(relStart string, limit *int) {
 	})
 }
 
+// dirSize returns the total size of the indexed files below rel.
+func (ri *rootIndex) dirSize(rel string) (int64, bool) {
+	ri.mu.RLock()
+	defer ri.mu.RUnlock()
+	return ri.dirSizeRLocked(rel)
+}
+
+// dirSizeRLocked is dirSize for callers that hold ri.mu for reading. Lock
+// order is ri.mu before sizeMu.
+func (ri *rootIndex) dirSizeRLocked(rel string) (int64, bool) {
+	ri.sizeMu.Lock()
+	defer ri.sizeMu.Unlock()
+	if ri.sizes == nil {
+		sizes := make(map[string]int64, len(ri.dirs))
+		for d := range ri.dirIDs {
+			sizes[d] = 0
+		}
+		for i := range ri.items {
+			it := &ri.items[i]
+			if it.deleted {
+				continue
+			}
+			if it.isDir {
+				// Empty directories have no dirs entry of their own.
+				if k := ri.rel(it); !hasKey(sizes, k) {
+					sizes[k] = 0
+				}
+				continue
+			}
+			if it.size == 0 {
+				continue
+			}
+			for d := ri.dirs[it.dir]; ; {
+				sizes[d] += it.size
+				if d == "" {
+					break
+				}
+				if j := strings.LastIndexByte(d, '/'); j >= 0 {
+					d = d[:j]
+				} else {
+					d = ""
+				}
+			}
+		}
+		ri.sizes = sizes
+	}
+	n, ok := ri.sizes[rel]
+	return n, ok
+}
+
+func hasKey(m map[string]int64, k string) bool {
+	_, ok := m[k]
+	return ok
+}
+
+func (ri *rootIndex) dropSizes() {
+	ri.sizeMu.Lock()
+	ri.sizes = nil
+	ri.sizeMu.Unlock()
+}
+
 // update re-syncs the subtree at rel ("" means the whole root).
 func (ri *rootIndex) update(rel string) {
+	defer ri.dropSizes()
 	ri.mu.Lock()
 	defer ri.mu.Unlock()
 	if rel == "" {
@@ -508,6 +575,34 @@ func (x *Indexer) apply(real string) {
 	}
 }
 
+// DirSize returns the total size of the files below the local directory
+// real, as currently indexed. ok is false when the directory is not indexed
+// (not below an authorized directory, or the index is still being built).
+// Junk entries the index skips (see skipNames) are not counted.
+func (x *Indexer) DirSize(real string) (int64, bool) {
+	x.mu.RLock()
+	var target *rootIndex
+	for root, ri := range x.indexes {
+		if isWithin(root, real) {
+			target = ri
+			break
+		}
+	}
+	x.mu.RUnlock()
+	if target == nil {
+		return 0, false
+	}
+	rel, err := filepath.Rel(target.root, real)
+	if err != nil {
+		return 0, false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		rel = ""
+	}
+	return target.dirSize(rel)
+}
+
 // Status 是搜索索引状态。
 // @Description 搜索索引状态
 type Status struct {
@@ -709,12 +804,17 @@ func (x *Indexer) Search(fsys *vfs.FS, within, query, kind string, limit int) Re
 		vp := h.sc.virtualDir(h.ri.dirs[it.dir]) + it.name
 		pos := matchPositions(it, pats)
 		var digest string
+		size := it.size
 		if !it.isDir {
 			real := filepath.Join(h.ri.root, h.ri.dirs[it.dir], it.name)
 			digest = vfs.DigestFor(real, it.name, it.size, time.Unix(it.mtime, 0))
+		} else if n, ok := h.ri.dirSizeRLocked(h.ri.rel(it)); ok {
+			size = n
+		} else {
+			size = -1
 		}
 		e := vfs.Entry{
-			Name: it.name, Path: vp, IsDir: it.isDir, Size: it.size, ModTime: time.Unix(it.mtime, 0),
+			Name: it.name, Path: vp, IsDir: it.isDir, Size: size, ModTime: time.Unix(it.mtime, 0),
 			Mime: vfs.MimeOf(it.name, it.isDir), Kind: kinds[it.kind], Writable: h.sc.mount.Writable,
 			Thumb: digest,
 		}

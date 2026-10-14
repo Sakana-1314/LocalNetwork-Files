@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { NCheckbox, NTag, useThemeVars } from 'naive-ui'
 import type { Entry } from '@/api/types'
 import FileThumb from './FileThumb.vue'
-import { formatRelative, formatSize } from '@/utils/format'
+import { formatEntrySize, formatRelative } from '@/utils/format'
 
 const props = defineProps<{
   entries: Entry[]
@@ -97,7 +97,7 @@ function onClick(e: Entry, ev: MouseEvent): void {
         </div>
         <div class="meta">
           <div class="name">{{ e.name }}</div>
-          <div class="sub">{{ e.is_dir ? formatRelative(e.mod_time) : formatSize(e.size) }}</div>
+          <div class="sub">{{ e.is_dir && e.size < 0 ? formatRelative(e.mod_time) : formatEntrySize(e) }}</div>
         </div>
       </div>
     </div>

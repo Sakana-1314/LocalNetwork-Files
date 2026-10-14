@@ -7,6 +7,11 @@ dayjs.locale('zh-cn')
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
 
+/** 条目大小：文件夹为其下文件总大小，尚未统计（size < 0）时显示「—」 */
+export function formatEntrySize(e: { is_dir: boolean; size: number }): string {
+  return e.is_dir && e.size < 0 ? '—' : formatSize(e.size)
+}
+
 export function formatSize(bytes: number | null | undefined, digits = 1): string {
   if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '-'
   if (bytes < 1024) return `${bytes} B`
