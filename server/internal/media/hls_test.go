@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,7 +65,7 @@ func hlsEnv(t *testing.T, o hlsSettings) *testEnv {
 
 func createSession(t *testing.T, env *testEnv, user uint, p, quality string, audio int) *hlsSession {
 	t.Helper()
-	se, err := env.svc.CreateSession(context.Background(), user, fmt.Sprint("u", user), p, "/v/"+filepath.Base(p), stat(t, p), quality, audio)
+	se, err := env.svc.CreateSession(context.Background(), user, fmt.Sprint("u", user), p, "/v/"+filepath.Base(p), stat(t, p), TranscodeOptions{Quality: quality, Audio: audio})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,4 +770,95 @@ func TestHLSCacheEviction(t *testing.T) {
 	if running && !exists(active.Dir) {
 		t.Fatal("session with a running ffmpeg was evicted")
 	}
+}
+
+func TestEncoderForCodec(t *testing.T) {
+	cases := []struct{ configured, codec, want string }{
+		{"libx264", CodecH264, "libx264"},
+		{"", CodecH264, "libx264"},
+		{"h264_nvenc", CodecH264, "h264_nvenc"},
+		{"libx264", CodecH265, "libx265"},
+		{"h264_videotoolbox", CodecH265, "hevc_videotoolbox"},
+		{"h264_nvenc", CodecH265, "hevc_nvenc"},
+		{"h264_qsv", CodecH265, "hevc_qsv"},
+		{"h264_vaapi", CodecH265, "hevc_vaapi"},
+	}
+	for _, c := range cases {
+		if got := encoderForCodec(c.configured, c.codec); got != c.want {
+			t.Errorf("encoderForCodec(%q, %q) = %q, want %q", c.configured, c.codec, got, c.want)
+		}
+	}
+	if softwareEncoder(CodecH265) != "libx265" || softwareEncoder(CodecH264) != "libx264" {
+		t.Fatal("software encoders")
+	}
+}
+
+func TestHLSCodecAndBitrate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("long")
+	}
+	env := hlsEnv(t, hlsSettings{})
+	src := movieMKV(t)
+	out := t.TempDir()
+	for _, d := range []string{"low", "high", "hevc"} {
+		os.MkdirAll(filepath.Join(out, d), 0o755)
+	}
+	ctx := context.Background()
+	open := func(o TranscodeOptions) (*hlsSession, error) {
+		return env.svc.CreateSession(ctx, 1, "u1", src, "/v/"+filepath.Base(src), stat(t, src), o)
+	}
+
+	if _, err := open(TranscodeOptions{Quality: "480p", Codec: "vp9"}); !errors.Is(err, ErrUnsupportedCodec) {
+		t.Fatalf("unknown codec: %v", err)
+	}
+	for _, br := range []int{-1, MinBitrate - 1, MaxBitrate + 1} {
+		if _, err := open(TranscodeOptions{Quality: "480p", Bitrate: br}); !errors.Is(err, ErrInvalidBitrate) {
+			t.Fatalf("bitrate %d: %v", br, err)
+		}
+	}
+
+	low, err := open(TranscodeOptions{Quality: "480p", Bitrate: 300})
+	if err != nil {
+		t.Fatal(err)
+	}
+	high, err := open(TranscodeOptions{Quality: "480p", Bitrate: 6000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auto := createSession(t, env, 1, src, "480p", 0)
+	if low.ID == high.ID || low.ID == auto.ID || auto.Codec != CodecH264 {
+		t.Fatal("bitrate must be part of the session id; codec defaults to h264")
+	}
+	pl, _ := fetch(t, env, low, 1, 1, filepath.Join(out, "low"))
+	ph, _ := fetch(t, env, high, 1, 1, filepath.Join(out, "high"))
+	sl, sh := fileSize(t, pl), fileSize(t, ph)
+	if sl*2 > sh {
+		t.Fatalf("300k segment (%d B) should be much smaller than 6000k (%d B)", sl, sh)
+	}
+
+	if !slices.Contains(env.svc.Codecs(), CodecH265) {
+		t.Log("ffmpeg has no HEVC encoder; skipping the h265 part")
+		return
+	}
+	hevc, err := open(TranscodeOptions{Quality: "480p", Codec: CodecH265})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A fresh run and a run restarted by seeking both start with a keyframe.
+	for _, n := range []int{0, 3} {
+		p, _ := fetch(t, env, hevc, 1, n, filepath.Join(out, "hevc"))
+		si := inspectSegment(t, p)
+		if si.vcodec != "hevc" || !si.firstKey || si.height != 480 {
+			t.Fatalf("hevc segment %d: %+v", n, si)
+		}
+	}
+}
+
+func fileSize(t *testing.T, p string) int64 {
+	t.Helper()
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Size()
 }

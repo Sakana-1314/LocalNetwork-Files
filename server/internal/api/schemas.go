@@ -138,6 +138,8 @@ type SearchResponse struct {
 type TranscodeRequest struct {
 	Path       string `json:"path" binding:"required"`                  // 视频文件的虚拟路径
 	Quality    string `json:"quality" enums:"original,1080p,720p,480p"` // 输出画质
+	Bitrate    int    `json:"bitrate"`                                  // 视频码率（kbps），200 至 80000；0 或省略表示按画质自动选择
+	Codec      string `json:"codec" enums:"h264,h265"`                  // 输出视频编码，省略为 h264；可用值见 MediaInfoResponse.transcode_codecs
 	AudioTrack int    `json:"audio_track"`                              // 音轨序号（MediaInfo.audio 下标），0 为第 1 条
 }
 
@@ -149,6 +151,16 @@ type TranscodeResponse struct {
 	Playlist string  `json:"playlist"` // 播放列表路径，如 /api/v1/media/hls/{id}/index.m3u8
 	Duration float64 `json:"duration"` // 视频总时长（秒）
 	Quality  string  `json:"quality"`  // 实际生效的画质
+	Bitrate  int     `json:"bitrate"`  // 请求的视频码率（kbps），0 表示按画质自动选择
+	Codec    string  `json:"codec"`    // 输出视频编码
+}
+
+// MediaInfoResponse 媒体信息及服务器可用的转码编码。
+//
+// @Description 媒体信息及服务器可用的转码编码
+type MediaInfoResponse struct {
+	media.MediaInfo
+	TranscodeCodecs []string `json:"transcode_codecs"` // 服务器可以转码输出的视频编码（h264、h265），取决于 ffmpeg 的编码器
 }
 
 // CreateTokenRequest 创建访问令牌。

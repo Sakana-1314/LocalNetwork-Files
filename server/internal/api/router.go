@@ -198,7 +198,7 @@ func statusOf(err error) int {
 	case errors.Is(err, vfs.ErrExists), errors.Is(err, store.ErrConflict):
 		return http.StatusConflict
 	case errors.Is(err, vfs.ErrInvalid), errors.Is(err, store.ErrInvalid), errors.Is(err, vfs.ErrNotDir), errors.Is(err, vfs.ErrIsDir),
-		errors.Is(err, media.ErrNoVideo):
+		errors.Is(err, media.ErrNoVideo), errors.Is(err, media.ErrUnsupportedCodec), errors.Is(err, media.ErrInvalidBitrate):
 		return http.StatusBadRequest
 	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrUnauthorized):
 		return http.StatusUnauthorized

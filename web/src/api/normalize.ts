@@ -22,7 +22,7 @@ export function normEntry<T extends Entry>(e: T): T {
 }
 
 export function normMediaInfo(m: MediaInfo): MediaInfo {
-  return { ...m, video: m.video ?? null, audio: arr(m.audio), subtitles: arr(m.subtitles) }
+  return { ...m, video: m.video ?? null, audio: arr(m.audio), subtitles: arr(m.subtitles), transcode_codecs: arr(m.transcode_codecs) }
 }
 
 /**

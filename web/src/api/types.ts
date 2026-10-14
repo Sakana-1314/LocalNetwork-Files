@@ -234,6 +234,8 @@ export interface MediaInfo {
   video: VideoStream | null
   audio: AudioStream[]
   subtitles: SubtitleStream[]
+  /** 服务器可以转码输出的视频编码 */
+  transcode_codecs: ('h264' | 'h265')[]
 }
 
 export type Quality = 'original' | '1080p' | '720p' | '480p'
@@ -241,6 +243,10 @@ export type Quality = 'original' | '1080p' | '720p' | '480p'
 export interface TranscodeRequest {
   path: string
   quality?: Quality
+  /** 视频码率（kbps），0 或省略为按画质自动 */
+  bitrate?: number
+  /** 输出视频编码，省略为 h264 */
+  codec?: 'h264' | 'h265'
   audio_track?: number
 }
 

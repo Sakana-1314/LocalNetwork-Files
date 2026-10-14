@@ -613,8 +613,8 @@
         "title": "登录成功后的会话信息",
         "type": "object"
       },
-      "MediaInfo": {
-        "description": "探测到的媒体信息",
+      "MediaInfoResponse": {
+        "description": "媒体信息及服务器可用的转码编码",
         "properties": {
           "audio": {
             "description": "音频轨道列表；index 即请求转码时的 audio_track",
@@ -648,12 +648,20 @@
             "type": "array",
             "uniqueItems": false
           },
+          "transcode_codecs": {
+            "description": "服务器可以转码输出的视频编码（h264、h265），取决于 ffmpeg 的编码器",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": false
+          },
           "video": {
             "$ref": "#/components/schemas/VideoStream",
             "description": "视频轨道；纯音频文件为 null"
           }
         },
-        "title": "探测到的媒体信息",
+        "title": "媒体信息及服务器可用的转码编码",
         "type": "object"
       },
       "MkdirRequest": {
@@ -1149,6 +1157,18 @@
             "description": "音轨序号（MediaInfo.audio 下标），0 为第 1 条",
             "type": "integer"
           },
+          "bitrate": {
+            "description": "视频码率（kbps），200 至 80000；0 或省略表示按画质自动选择",
+            "type": "integer"
+          },
+          "codec": {
+            "description": "输出视频编码，省略为 h264；可用值见 MediaInfoResponse.transcode_codecs",
+            "enum": [
+              "h264",
+              "h265"
+            ],
+            "type": "string"
+          },
           "path": {
             "description": "视频文件的虚拟路径",
             "type": "string"
@@ -1173,6 +1193,14 @@
       "TranscodeResponse": {
         "description": "转码会话信息",
         "properties": {
+          "bitrate": {
+            "description": "请求的视频码率（kbps），0 表示按画质自动选择",
+            "type": "integer"
+          },
+          "codec": {
+            "description": "输出视频编码",
+            "type": "string"
+          },
           "duration": {
             "description": "视频总时长（秒）",
             "type": "number"
@@ -3338,7 +3366,7 @@
     },
     "/media/info": {
       "get": {
-        "description": "用 ffprobe 探测媒体文件，返回时长、码率、视频/音频/字幕轨道，以及浏览器能否直接播放（direct_play）。",
+        "description": "用 ffprobe 探测媒体文件，返回时长、码率、视频/音频/字幕轨道，以及浏览器能否直接播放（direct_play）。\ntranscode_codecs 列出服务器可以转码输出的视频编码。",
         "parameters": [
           {
             "description": "媒体文件的虚拟路径",
@@ -3355,11 +3383,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MediaInfo"
+                  "$ref": "#/components/schemas/MediaInfoResponse"
                 }
               }
             },
-            "description": "探测到的媒体信息（含视频/音频/字幕轨道）"
+            "description": "探测到的媒体信息（含视频/音频/字幕轨道）与可用转码编码"
           },
           "401": {
             "content": {
@@ -3536,18 +3564,18 @@
     },
     "/media/transcode": {
       "post": {
-        "description": "为视频创建 HLS 会话，分片按需转码。\nquality 可选 original、1080p、720p、480p；audio_track 为音轨序号。返回会话 ID 与播放列表地址。",
+        "description": "为视频创建 HLS 会话，分片按需转码。\nquality 可选 original、1080p、720p、480p；bitrate 为视频码率（kbps，0 为自动）；codec 为输出编码 h264 或 h265。\naudio_track 为音轨序号。返回会话 ID 与播放列表地址。",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TranscodeRequest",
-                "description": "源文件、画质与音轨",
+                "description": "源文件、画质、码率、编码与音轨",
                 "summary": "请求体"
               }
             }
           },
-          "description": "源文件、画质与音轨",
+          "description": "源文件、画质、码率、编码与音轨",
           "required": true
         },
         "responses": {
@@ -3560,6 +3588,16 @@
               }
             },
             "description": "会话创建成功，返回播放列表地址"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "码率超出范围、服务器不支持该编码或文件不含视频"
           },
           "401": {
             "content": {

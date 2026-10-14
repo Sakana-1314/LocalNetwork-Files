@@ -8,11 +8,13 @@ import { fsApi } from '@/api/fs'
 import { mediaApi } from '@/api/media'
 import { buildUrl, withToken } from '@/api/http'
 import { getToken } from '@/api/token'
+import { usePrefsStore, type VideoCodec } from '@/stores/prefs'
 import { baseName } from '@/utils/path'
 import { formatBitrate, formatDuration } from '@/utils/format'
 
 const props = defineProps<{ entry: Entry }>()
 const message = useMessage()
+const prefs = usePrefsStore()
 
 type Mode = 'direct' | Quality
 
@@ -50,6 +52,40 @@ const qualityOptions = computed<SelectOption[]>(() => {
   ]
   return opts
 })
+
+// 转码码率（kbps）；0 表示按画质自动选择
+const BITRATES = [0, 20000, 12000, 8000, 6000, 4000, 2000, 1000, 500]
+const bitrateOptions: SelectOption[] = BITRATES.map((k) => ({
+  value: k,
+  label: k === 0 ? '码率自动' : k >= 1000 ? `${k / 1000} Mbps` : `${k} kbps`,
+}))
+
+// 浏览器能否解码 HEVC：转码分片经 hls.js（MSE）播放，因此以 MSE 的支持为准。
+// 只走原生 HLS 的浏览器（如 iOS 早期版本）不支持 MPEG-TS 中的 HEVC。
+function browserPlaysHevc(): boolean {
+  const w = window as Window & { ManagedMediaSource?: typeof MediaSource }
+  const MS = w.ManagedMediaSource ?? window.MediaSource
+  try {
+    return !!MS?.isTypeSupported?.('video/mp4; codecs="hvc1.1.6.L93.B0"')
+  } catch {
+    return false
+  }
+}
+const hevcPlayable = browserPlaysHevc()
+
+const codecOptions = computed<SelectOption[]>(() => {
+  const server = info.value?.transcode_codecs ?? ['h264']
+  const opts: SelectOption[] = [{ value: 'h264', label: 'H.264' }]
+  if (server.includes('h265') && hevcPlayable) opts.push({ value: 'h265', label: 'H.265 / HEVC' })
+  return opts
+})
+
+/** 实际使用的编码：偏好不可用时回退 H.264 */
+const codec = computed<VideoCodec>(() =>
+  codecOptions.value.some((o) => o.value === prefs.videoCodec) ? prefs.videoCodec : 'h264',
+)
+
+const transcoding = computed(() => mode.value !== 'direct' || audioTrack.value !== 0)
 
 const audioOptions = computed<SelectOption[]>(() =>
   (info.value?.audio ?? []).map((a, i) => ({
@@ -139,7 +175,13 @@ async function apply(startAt = 0, recreating = false): Promise<void> {
   loading.value = true
   try {
     const quality: Quality = mode.value === 'direct' ? 'original' : mode.value
-    const r = await mediaApi.transcode({ path: props.entry.path, quality, audio_track: audioTrack.value })
+    const r = await mediaApi.transcode({
+      path: props.entry.path,
+      quality,
+      bitrate: prefs.videoBitrate,
+      codec: codec.value,
+      audio_track: audioTrack.value,
+    })
     if (seq !== applySeq || disposed) {
       stopSession(r.id)
       return
@@ -203,6 +245,16 @@ function currentTime(): number {
 function onModeChange(v: Mode): void {
   mode.value = v
   void apply(currentTime())
+}
+
+function onBitrateChange(k: number): void {
+  prefs.videoBitrate = k
+  if (transcoding.value) void apply(currentTime())
+}
+
+function onCodecChange(c: VideoCodec): void {
+  prefs.videoCodec = c
+  if (transcoding.value) void apply(currentTime())
 }
 
 function onAudioChange(i: number): void {
@@ -378,6 +430,24 @@ onBeforeUnmount(() => {
         :options="qualityOptions"
         :consistent-menu-width="false"
         @update:value="onModeChange"
+      />
+      <n-select
+        v-if="transcoding"
+        class="sel"
+        size="small"
+        :value="prefs.videoBitrate"
+        :options="bitrateOptions"
+        :consistent-menu-width="false"
+        @update:value="onBitrateChange"
+      />
+      <n-select
+        v-if="transcoding && codecOptions.length > 1"
+        class="sel"
+        size="small"
+        :value="codec"
+        :options="codecOptions"
+        :consistent-menu-width="false"
+        @update:value="onCodecChange"
       />
       <n-select
         v-if="audioOptions.length > 1"
