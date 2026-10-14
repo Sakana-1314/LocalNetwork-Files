@@ -39,6 +39,16 @@ VITE_HASH_ROUTER=1 \
 [`.github/workflows/pages.yml`](https://github.com/Sakana-1314/MList/blob/main/.github/workflows/pages.yml)
 在 CI 中执行，Mock 基址在该工作流里以 `APIFOX_MOCK_BASE` 变量集中定义。
 
+::: warning 首次部署需要先启用 Pages
+`GITHUB_TOKEN` 无权创建 Pages 站点，所以工作流里不能加 `configure-pages` 的
+`enablement: true`（加上会让所有 PR 构建直接失败）。首次需要手工开启一次，
+把 Source 设为 **GitHub Actions**：
+
+```bash
+gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow
+```
+:::
+
 ## Mock 基址怎么来的
 
 在 Apifox 项目的「云端 Mock」处可以看到地址，形如

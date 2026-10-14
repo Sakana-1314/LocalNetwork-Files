@@ -5,7 +5,11 @@ name: 文档站与 Demo
 #   https://sakana-1314.github.io/MList/
 #
 # Demo 就是 web/ 的前端，构建时指向 Apifox 云端 Mock，产物放进
-# docs/public/demo/，由 VitePress 一并发布，并在 docs/demo.md 里内嵌。
+# docs/public/app/，由 VitePress 一并发布，并在 docs/demo.md 里内嵌。
+#
+# 前置条件：仓库已启用 Pages，Source = GitHub Actions
+# （gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow）。
+# GITHUB_TOKEN 无权创建 Pages 站点，所以工作流里不带 enablement。
 #
 # Pull Request 只构建不部署。
 
@@ -67,10 +71,11 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
 
+      # Pages 站点已启用（build_type = workflow）。这里**不能**加
+      # enablement: true：GITHUB_TOKEN 没有创建站点的权限，加上它会让所有
+      # PR 构建直接失败（Create Pages site failed: Resource not accessible
+      # by integration）。
       - uses: actions/configure-pages@v5
-        with:
-          # 仓库尚未启用 Pages 时自动开启（source = GitHub Actions）。
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
