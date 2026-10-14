@@ -1638,3 +1638,134 @@ func TestAdminBuckets(t *testing.T) {
 		t.Fatal("bucket deletion removed files")
 	}
 }
+
+func TestShares(t *testing.T) {
+	e := newEnv(t)
+	alice := e.alice()
+	aliceID := uint(1)
+	for _, u := range decode[[]obj](t, e.do("GET", "/api/v1/admin/users", e.admin, nil)) {
+		if u["username"] == "alice" {
+			aliceID = uint(u["id"].(float64))
+		}
+	}
+	writeFile(t, filepath.Join(e.rw, "pub", "a.txt"), "hello")
+	writeFile(t, filepath.Join(e.rw, "pub", "sub", "b.txt"), "nested")
+	writeFile(t, filepath.Join(e.rw, "secret.txt"), "top secret")
+	must(t, os.Symlink(filepath.Join(e.rw, "secret.txt"), filepath.Join(e.rw, "pub", "link.txt")))
+
+	// Only folders, never the root; expiry must lie in the future.
+	expect(t, e.do("POST", "/api/v1/shares", alice, obj{"path": "/可写/pub/a.txt"}), 400)
+	expect(t, e.do("POST", "/api/v1/shares", alice, obj{"path": "/"}), 400)
+	expect(t, e.do("POST", "/api/v1/shares", alice, obj{"path": "/可写/missing"}), 404)
+	past := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	expect(t, e.do("POST", "/api/v1/shares", alice, obj{"path": "/可写/pub", "expires_at": past}), 400)
+	rec := e.do("POST", "/api/v1/tokens", alice, obj{"name": "ro", "scopes": []string{"read"}})
+	expect(t, rec, 201)
+	roTok := decode[obj](t, rec)["token"].(string)
+	expect(t, e.do("POST", "/api/v1/shares", roTok, obj{"path": "/可写/pub"}), 403)
+
+	rec = e.do("POST", "/api/v1/shares", alice, obj{"path": "/可写/pub"})
+	expect(t, rec, 201)
+	sh := decode[obj](t, rec)
+	id, tok := uint(sh["id"].(float64)), sh["token"].(string)
+	if sh["name"] != "pub" || sh["status"] != "active" || sh["expires_at"] != nil || len(tok) < 20 {
+		t.Fatalf("share %v", sh)
+	}
+	pub := "/api/v1/share/" + tok
+
+	// Public, read-only access without a session.
+	rec = e.do("GET", pub, "", nil)
+	expect(t, rec, 200)
+	if info := decode[obj](t, rec); info["name"] != "pub" || info["owner"] != "alice" {
+		t.Fatalf("info %v", info)
+	}
+	rec = e.do("GET", pub+"/list", "", nil)
+	expect(t, rec, 200)
+	body := rec.Body.String()
+	if strings.Contains(body, "可写") || strings.Contains(body, "link.txt") || !strings.Contains(body, `"/a.txt"`) {
+		t.Fatalf("listing must be relative and skip links leaving the folder: %s", body)
+	}
+	for _, en := range decode[obj](t, rec)["entries"].([]any) {
+		if en.(obj)["writable"] != false {
+			t.Fatal("shared entries must be read-only")
+		}
+	}
+	rec = e.do("GET", pub+"/list?path="+q("/sub"), "", nil)
+	expect(t, rec, 200)
+	if !strings.Contains(rec.Body.String(), `"/sub/b.txt"`) {
+		t.Fatalf("sub listing %s", rec.Body.String())
+	}
+	rec = e.do("GET", pub+"/raw?path="+q("/sub/b.txt"), "", nil)
+	expect(t, rec, 200)
+	if rec.Body.String() != "nested" {
+		t.Fatalf("raw %q", rec.Body.String())
+	}
+	expect(t, e.do("GET", pub+"/raw/b.txt?download=1&path="+q("/sub/b.txt"), "", nil), 200)
+	rec = e.do("GET", pub+"/text?path="+q("/a.txt"), "", nil)
+	expect(t, rec, 200)
+	if decode[obj](t, rec)["content"] != "hello" {
+		t.Fatal("text")
+	}
+	// Nothing outside the folder is reachable.
+	for _, p := range []string{"/../secret.txt", "/link.txt", "../../可写/secret.txt"} {
+		rec = e.do("GET", pub+"/raw?path="+q(p), "", nil)
+		if rec.Code == 200 && strings.Contains(rec.Body.String(), "secret") {
+			t.Fatalf("%s escaped the shared folder", p)
+		}
+	}
+	expect(t, e.do("GET", "/api/v1/share/nonexistent-token/list", "", nil), 404)
+	expect(t, e.do("PUT", "/api/v1/fs/file?path="+q("/pub/x.txt"), "", "x"), 401)
+
+	// Expiry: an expired share answers 410 until its owner extends it.
+	future := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	expect(t, e.do("PUT", fmt.Sprintf("/api/v1/shares/%d", id), alice, obj{"expires_at": past}), 400)
+	rec = e.do("PUT", fmt.Sprintf("/api/v1/shares/%d", id), alice, obj{"expires_at": future.Format(time.RFC3339)})
+	expect(t, rec, 200)
+	if decode[obj](t, rec)["expires_at"] != future.Format(time.RFC3339) {
+		t.Fatalf("expiry not saved: %s", rec.Body.String())
+	}
+	gone := time.Now().Add(-time.Minute)
+	must(t, e.a.store.SetShareExpiry(aliceID, id, &gone))
+	expect(t, e.do("GET", pub+"/list", "", nil), 410)
+	if s := decode[[]obj](t, e.do("GET", "/api/v1/shares", alice, nil))[0]; s["status"] != "expired" {
+		t.Fatalf("status %v", s)
+	}
+	expect(t, e.do("PUT", fmt.Sprintf("/api/v1/shares/%d", id), alice, obj{"expires_at": nil}), 200)
+	expect(t, e.do("GET", pub+"/list", "", nil), 200)
+
+	// Permissions follow the owner: revoking the bucket breaks the link.
+	users := "/api/v1/admin/users"
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user",
+		"grants": e.grants(mountIn{Name: "只读", Path: e.ro})}), 200)
+	expect(t, e.do("GET", pub+"/list", "", nil), 404)
+	if s := decode[[]obj](t, e.do("GET", "/api/v1/shares", alice, nil))[0]; s["status"] != "unavailable" {
+		t.Fatalf("status after revoke %v", s)
+	}
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user",
+		"grants": e.grants(mountIn{Name: "只读", Path: e.ro}, mountIn{Name: "可写", Path: e.rw, Writable: true})}), 200)
+	expect(t, e.do("GET", pub+"/list", "", nil), 200)
+	// A read-only grant still allows reading.
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "role": "user",
+		"grants": e.grants(mountIn{Name: "可写", Path: e.rw})}), 200)
+	expect(t, e.do("GET", pub+"/list", "", nil), 200)
+	// Moving the folder away or disabling the owner breaks it too.
+	must(t, os.Rename(filepath.Join(e.rw, "pub"), filepath.Join(e.rw, "pub2")))
+	expect(t, e.do("GET", pub+"/list", "", nil), 404)
+	must(t, os.Rename(filepath.Join(e.rw, "pub2"), filepath.Join(e.rw, "pub")))
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "disabled": true}), 200)
+	expect(t, e.do("GET", pub+"/list", "", nil), 404)
+	expect(t, e.do("PUT", fmt.Sprintf("%s/%d", users, aliceID), e.admin, obj{"username": "alice", "disabled": false}), 200)
+	alice = e.login("alice", "alice-pw")
+	expect(t, e.do("GET", pub+"/list", "", nil), 200)
+
+	// Other users cannot see or change it; deleting revokes it.
+	e.createUser("bob", "bob-pw1", "user")
+	bob := e.login("bob", "bob-pw1")
+	if n := len(decode[[]obj](t, e.do("GET", "/api/v1/shares", bob, nil))); n != 0 {
+		t.Fatalf("bob sees %d shares", n)
+	}
+	expect(t, e.do("PUT", fmt.Sprintf("/api/v1/shares/%d", id), bob, obj{"expires_at": nil}), 404)
+	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/shares/%d", id), bob, nil), 404)
+	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/shares/%d", id), alice, nil), 204)
+	expect(t, e.do("GET", pub, "", nil), 404)
+}

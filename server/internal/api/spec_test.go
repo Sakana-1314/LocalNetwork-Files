@@ -250,6 +250,12 @@ func TestSpecSecurityMatchesAuth(t *testing.T) {
 		"POST /auth/login":  true,
 		"POST /auth/logout": true, // 只清 Cookie，必须在会话过期后仍可用
 		"GET /media/thumb":  true, // 只校验摘要签名
+		// 分享链接：凭随机令牌只读访问被分享的文件夹
+		"GET /share/{token}":            true,
+		"GET /share/{token}/list":       true,
+		"GET /share/{token}/raw":        true,
+		"GET /share/{token}/raw/{name}": true,
+		"GET /share/{token}/text":       true,
 	}
 	for _, o := range operations(t, doc) {
 		key := o.method + " " + o.path
@@ -298,7 +304,7 @@ func TestSpecRoutePathParamsMatchGin(t *testing.T) {
 		for _, param := range regexp.MustCompile(`\{([^}]+)\}`).FindAllStringSubmatch(p, -1) {
 			name := param[1]
 			switch name {
-			case "id", "name", "file":
+			case "id", "name", "file", "token":
 			default:
 				t.Errorf("%s 的路径参数 %q 与 Gin 路由不一致", p, name)
 			}

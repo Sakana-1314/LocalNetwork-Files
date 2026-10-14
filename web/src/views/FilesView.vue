@@ -36,6 +36,7 @@ import {
   TrashOutline,
   CheckmarkDoneOutline,
   SearchOutline,
+  ShareSocialOutline,
 } from '@vicons/ionicons5'
 import type { BatchResult, Entry } from '@/api/types'
 import { ApiError, isAbortError } from '@/api/http'
@@ -46,6 +47,7 @@ import FileGrid from '@/components/files/FileGrid.vue'
 import FolderPickerModal from '@/components/files/FolderPickerModal.vue'
 import InputModal from '@/components/common/InputModal.vue'
 import PreviewOverlay from '@/components/preview/PreviewOverlay.vue'
+import ShareDialog from '@/components/share/ShareDialog.vue'
 import { sortEntries, type SortKey, type SortState } from '@/components/files/sort'
 import { usePrefsStore } from '@/stores/prefs'
 import { useUploadsStore } from '@/stores/uploads'
@@ -468,6 +470,14 @@ function download(targets?: Entry[]): void {
   void downloadMany(files.map((e) => ({ path: e.path, name: e.name })))
 }
 
+// ---------- 分享 ----------
+const shareOpen = ref(false)
+const sharePath = ref('')
+function startShare(path: string): void {
+  sharePath.value = path
+  shareOpen.value = true
+}
+
 // ---------- 右键菜单 ----------
 const ctxShow = ref(false)
 const ctxX = ref(0)
@@ -494,7 +504,12 @@ const ctxOptions = computed<DropdownOption[]>(() => {
   const opts: DropdownOption[] = []
   if (!multi) opts.push({ key: 'open', label: t.is_dir ? '打开' : '预览', icon: icon(t.is_dir ? FolderOpenOutline : OpenOutline) })
   if (targets.some((e) => !e.is_dir)) opts.push({ key: 'download', label: multi ? `下载 ${targets.length} 项` : '下载', icon: icon(DownloadOutline) })
-  if (!multi && t.is_dir) opts.push({ key: 'search-here', label: '在此文件夹中搜索', icon: icon(SearchOutline) })
+  if (!multi && t.is_dir) {
+    opts.push(
+      { key: 'search-here', label: '在此文件夹中搜索', icon: icon(SearchOutline) },
+      { key: 'share', label: '分享…', icon: icon(ShareSocialOutline) },
+    )
+  }
   opts.push({ type: 'divider', key: 'd1' })
   if (!isRoot.value) {
     opts.push(
@@ -550,6 +565,9 @@ function onCtxSelect(key: string): void {
       break
     case 'download':
       download(targets)
+      break
+    case 'share':
+      if (t) startShare(t.path)
       break
     case 'search-here':
       if (t) void router.push({ name: 'search', query: { path: t.path } })
@@ -708,6 +726,10 @@ const emptyText = computed(() => {
           <template #icon><n-icon :component="RefreshOutline" /></template>
           <span class="btn-text">刷新</span>
         </n-button>
+        <n-button v-if="!isRoot && loadedPath" size="small" quaternary @click="startShare(currentPath)">
+          <template #icon><n-icon :component="ShareSocialOutline" /></template>
+          <span class="btn-text">分享此文件夹</span>
+        </n-button>
         <span v-if="!dirWritable && loadedPath && !isRoot" class="ro-hint">只读目录</span>
       </template>
       <template v-else>
@@ -715,6 +737,10 @@ const emptyText = computed(() => {
         <n-button size="small" :disabled="!selectedEntries.some((e) => !e.is_dir)" @click="download()">
           <template #icon><n-icon :component="DownloadOutline" /></template>
           <span class="btn-text">下载</span>
+        </n-button>
+        <n-button v-if="single && selectedEntries[0]?.is_dir" size="small" @click="startShare(selectedEntries[0].path)">
+          <template #icon><n-icon :component="ShareSocialOutline" /></template>
+          <span class="btn-text">分享</span>
         </n-button>
         <template v-if="!isRoot">
           <n-button size="small" @click="startTransfer('copy')">
@@ -843,6 +869,7 @@ const emptyText = computed(() => {
       :exclude="pickerExclude"
       @confirm="doTransfer"
     />
+    <share-dialog v-model:show="shareOpen" :path="sharePath" />
     <preview-overlay
       v-model:show="previewShow"
       v-model:index="previewIndex"

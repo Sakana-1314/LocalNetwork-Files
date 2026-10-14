@@ -43,6 +43,8 @@
 // @tag.description 目录浏览、上传下载、重命名、移动复制、删除与搜索
 // @tag.name        媒体
 // @tag.description 预览图、媒体信息、HLS 实时转码、音频转码与字幕转换
+// @tag.name        分享
+// @tag.description 文件夹分享链接：管理自己的分享，以及无需登录的只读访问
 // @tag.name        访问凭据
 // @tag.description 访问令牌与 S3 访问密钥（仅当前用户自己的凭据）
 // @tag.name        系统

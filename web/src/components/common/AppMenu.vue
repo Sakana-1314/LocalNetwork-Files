@@ -8,6 +8,7 @@ import {
   OptionsOutline,
   PeopleOutline,
   SearchOutline,
+  ShareSocialOutline,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 
@@ -24,6 +25,7 @@ const options = computed<MenuOption[]>(() => {
   const base: MenuOption[] = [
     { label: '文件', key: 'files', icon: icon(FolderOpenOutline) },
     { label: '搜索', key: 'search', icon: icon(SearchOutline) },
+    { label: '我的分享', key: 'shares', icon: icon(ShareSocialOutline) },
     { label: '挂载与服务', key: 'mount', icon: icon(GitNetworkOutline) },
   ]
   if (auth.isAdmin) {

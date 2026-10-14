@@ -21,6 +21,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录', public: true },
   },
   {
+    // 分享链接：无需登录的只读文件夹浏览
+    path: '/s/:token',
+    name: 'share-public',
+    component: () => import('@/views/PublicShareView.vue'),
+    meta: { title: '文件分享', public: true },
+  },
+  {
     path: '/',
     component: MainLayout,
     children: [
@@ -36,6 +43,12 @@ const routes: RouteRecordRaw[] = [
         name: 'search',
         component: () => import('@/views/SearchView.vue'),
         meta: { title: '搜索' },
+      },
+      {
+        path: 'shares',
+        name: 'shares',
+        component: () => import('@/views/SharesView.vue'),
+        meta: { title: '我的分享' },
       },
       {
         path: 'mount',

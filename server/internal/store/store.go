@@ -63,7 +63,7 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&User{}, &Bucket{}, &Grant{}, &AccessToken{}, &S3Key{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Bucket{}, &Grant{}, &AccessToken{}, &S3Key{}, &Share{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	s := &Store{db: db}
@@ -354,7 +354,7 @@ func (s *Store) UpdateUser(u *User, grants []Grant) error {
 
 func (s *Store) DeleteUser(id uint) error {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		for _, m := range []any{&Grant{}, &AccessToken{}, &S3Key{}} {
+		for _, m := range []any{&Grant{}, &AccessToken{}, &S3Key{}, &Share{}} {
 			if err := tx.Where("user_id = ?", id).Delete(m).Error; err != nil {
 				return err
 			}
@@ -669,6 +669,57 @@ func (s *Store) GetS3Key(accessKey string) (*S3Key, error) {
 
 func (s *Store) DeleteS3Key(userID uint, accessKey string) error {
 	res := s.db.Where("user_id = ? AND access_key = ?", userID, accessKey).Delete(&S3Key{})
+	if res.Error == nil && res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return res.Error
+}
+
+// ---------- shares ----------
+
+func (s *Store) CreateShare(sh *Share) error {
+	err := s.db.Create(sh).Error
+	if isUnique(err) {
+		return ErrConflict
+	}
+	return err
+}
+
+func (s *Store) ListShares(userID uint) ([]Share, error) {
+	var out []Share
+	err := s.db.Where("user_id = ?", userID).Order("id desc").Find(&out).Error
+	return out, err
+}
+
+// GetShare loads one share of a user (owner-scoped).
+func (s *Store) GetShare(userID, id uint) (*Share, error) {
+	var sh Share
+	if err := s.db.Where("user_id = ? AND id = ?", userID, id).First(&sh).Error; err != nil {
+		return nil, notFound(err)
+	}
+	return &sh, nil
+}
+
+// GetShareByToken resolves a public share link.
+func (s *Store) GetShareByToken(token string) (*Share, error) {
+	var sh Share
+	if err := s.db.Where("token = ?", token).First(&sh).Error; err != nil {
+		return nil, notFound(err)
+	}
+	return &sh, nil
+}
+
+// SetShareExpiry changes when a share expires (nil = never).
+func (s *Store) SetShareExpiry(userID, id uint, at *time.Time) error {
+	res := s.db.Model(&Share{}).Where("user_id = ? AND id = ?", userID, id).Update("expires_at", at)
+	if res.Error == nil && res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return res.Error
+}
+
+func (s *Store) DeleteShare(userID, id uint) error {
+	res := s.db.Where("user_id = ? AND id = ?", userID, id).Delete(&Share{})
 	if res.Error == nil && res.RowsAffected == 0 {
 		return ErrNotFound
 	}
