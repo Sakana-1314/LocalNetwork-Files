@@ -1,0 +1,94 @@
+name: 文档站与 Demo
+
+# 构建 VitePress 文档站与在线 Demo，发布到 GitHub Pages。
+#
+#   https://sakana-1314.github.io/MList/
+#
+# Demo 就是 web/ 的前端，构建时指向 Apifox 云端 Mock，产物放进
+# docs/public/app/，由 VitePress 一并发布，并在 docs/demo.md 里内嵌。
+#
+# 前置条件：仓库已启用 Pages，Source = GitHub Actions
+# （gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow）。
+# GITHUB_TOKEN 无权创建 Pages 站点，所以工作流里不带 enablement。
+#
+# Pull Request 只构建不部署。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个发布；进行中的发布不取消，避免留下半发布状态。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Apifox 云端 Mock 基址（唯一来源）。项目或分支变化时只改这里，
+  # 并在 docs/dev/demo.md 里同步说明。
+  APIFOX_MOCK_BASE: https://m1.apifoxmock.com/m1/8912512-8712920-default
+
+jobs:
+  build:
+    name: 构建文档站与 Demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 构建 Demo（前端指向 Apifox 云端 Mock）
+        working-directory: web
+        env:
+          # 产物放在 /app/：文档页 /demo 由 docs/demo.md 生成，
+          # 两者路径必须错开，否则 demo/ 目录会与 demo.html 抢同一路由。
+          WEB_BASE: /MList/app/
+          WEB_OUT_DIR: ../docs/public/app
+          # Mock 基址直接作为 API 前缀：规范以相对路径导入
+          # （prependBasePath=false），接口就在 /fs/list 这类根路径下，
+          # 再加 /api/v1 会 404。
+          VITE_API_BASE: ${{ env.APIFOX_MOCK_BASE }}
+          # Pages 没有服务端回退，用 hash 路由才能刷新深层路径。
+          VITE_HASH_ROUTER: '1'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:demo
+
+      - name: 构建文档站
+        working-directory: docs
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      # Pages 站点已启用（build_type = workflow）。这里**不能**加
+      # enablement: true：GITHUB_TOKEN 没有创建站点的权限，加上它会让所有
+      # PR 构建直接失败（Create Pages site failed: Resource not accessible
+      # by integration）。
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: 发布到 GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

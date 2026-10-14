@@ -10,6 +10,13 @@
 /web/dist/
 *.local
 
+# docs（VitePress 站点）
+/docs/node_modules/
+/docs/.vitepress/dist/
+/docs/.vitepress/cache/
+# Demo 产物由 CI 构建（见 .github/workflows/pages.yml），不入库
+/docs/public/app/
+
 # secrets / local env
 .env
 server/scripts/.env
