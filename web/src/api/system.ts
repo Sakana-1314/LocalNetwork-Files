@@ -1,8 +1,6 @@
 import { http } from './http'
-import { arr } from './normalize'
-import type { ServiceStatus, SystemInfo } from './types'
-
-const emptyService: ServiceStatus = { enabled: false, running: false, port: 0 }
+import { arr, normServiceStatus } from './normalize'
+import type { SystemInfo } from './types'
 
 export const systemApi = {
   async info(): Promise<SystemInfo> {
@@ -11,9 +9,9 @@ export const systemApi = {
       ...r,
       addresses: arr(r.addresses),
       services: {
-        webdav: r.services?.webdav ?? emptyService,
-        s3: r.services?.s3 ?? emptyService,
-        smb: r.services?.smb ?? emptyService,
+        webdav: normServiceStatus(r.services?.webdav),
+        s3: normServiceStatus(r.services?.s3),
+        smb: normServiceStatus(r.services?.smb),
       },
     }
   },
