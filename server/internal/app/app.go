@@ -78,6 +78,8 @@ func New(cfg *config.Config, version string) (*App, error) {
 		slog.Warn("ffmpeg/ffprobe not found: video thumbnails and transcoding are disabled")
 	}
 	a.search = search.New(st, cfg.Search)
+	// Directory entries show the total size of their files, taken from the index.
+	vfs.DirSize = a.search.DirSize
 	a.dav = webdav.New(auth.NewBasic(au), a.newFS, func() bool { return cfg.Services.WebDAVEnabled })
 	a.s3 = s3.New(au, a.newFS, cfg.DataDir)
 	a.smb = smb.New(cfg.SMB, cfg.Services, cfg.DataDir, st)
