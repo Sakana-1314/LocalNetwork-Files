@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { NAlert, NButton, NIcon, NInput, NSpace, NSpin, NSwitch, useMessage } from 'naive-ui'
+import { NAlert, NButton, NIcon, NInput, NRadioButton, NRadioGroup, NSpace, NSpin, NSwitch, useMessage } from 'naive-ui'
 import { CreateOutline, SaveOutline } from '@vicons/ionicons5'
 import type { Entry } from '@/api/types'
 import { fsApi } from '@/api/fs'
+import { isMarkdown, renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{ entry: Entry; writable: boolean }>()
 const emit = defineEmits<{ saved: [entry: Entry]; dirty: [dirty: boolean] }>()
@@ -17,6 +18,11 @@ const editing = ref(false)
 const draft = ref('')
 const saving = ref(false)
 const wrap = ref(true)
+
+// Markdown 文件默认显示渲染结果，可切换到源码
+const markdown = computed(() => isMarkdown(props.entry.name))
+const view = ref<'rendered' | 'source'>('rendered')
+const rendered = computed(() => (markdown.value && view.value === 'rendered' ? renderMarkdown(content.value, props.entry.path) : ''))
 
 const dirty = computed(() => editing.value && draft.value !== content.value)
 watch(dirty, (d) => emit('dirty', d))
@@ -89,7 +95,11 @@ onMounted(load)
     <div class="bar">
       <span class="info">{{ lineCount }} 行</span>
       <n-space align="center" :size="10">
-        <span class="wrap-switch"><n-switch v-model:value="wrap" size="small" /> 自动换行</span>
+        <n-radio-group v-if="markdown && !editing" v-model:value="view" size="small">
+          <n-radio-button value="rendered">预览</n-radio-button>
+          <n-radio-button value="source">源码</n-radio-button>
+        </n-radio-group>
+        <span v-if="!markdown || editing || view === 'source'" class="wrap-switch"><n-switch v-model:value="wrap" size="small" /> 自动换行</span>
         <template v-if="canEdit">
           <template v-if="editing">
             <n-button size="small" @click="cancelEdit">取消</n-button>
@@ -121,6 +131,9 @@ onMounted(load)
         placeholder=""
         @keydown="onKeydown"
       />
+      <!-- 渲染结果已禁用原始 HTML，见 utils/markdown.ts -->
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <article v-else-if="rendered" class="markdown-body" v-html="rendered" />
       <pre v-else class="code mono" :class="{ nowrap: !wrap }">{{ content }}</pre>
     </div>
   </div>
@@ -186,6 +199,111 @@ onMounted(load)
 .code.nowrap {
   white-space: pre;
   word-break: normal;
+}
+.markdown-body {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 28px;
+  font-size: 15px;
+  line-height: 1.75;
+  word-wrap: break-word;
+}
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  margin: 1.4em 0 0.6em;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.markdown-body :deep(h1) {
+  font-size: 1.9em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.markdown-body :deep(h2) {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.markdown-body :deep(h3) {
+  font-size: 1.25em;
+}
+.markdown-body :deep(> :first-child) {
+  margin-top: 0;
+}
+.markdown-body :deep(p),
+.markdown-body :deep(ul),
+.markdown-body :deep(ol),
+.markdown-body :deep(blockquote),
+.markdown-body :deep(table),
+.markdown-body :deep(pre) {
+  margin: 0 0 1em;
+}
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 2em;
+}
+.markdown-body :deep(a) {
+  color: #70c0e8;
+  text-decoration: none;
+}
+.markdown-body :deep(a:hover) {
+  text-decoration: underline;
+}
+.markdown-body :deep(code) {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.markdown-body :deep(pre) {
+  padding: 12px 16px;
+  overflow: auto;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  line-height: 1.5;
+}
+.markdown-body :deep(pre code) {
+  padding: 0;
+  background: none;
+  font-size: 13px;
+}
+.markdown-body :deep(blockquote) {
+  padding: 0 1em;
+  border-left: 4px solid rgba(255, 255, 255, 0.2);
+  opacity: 0.8;
+}
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+  max-width: 100%;
+}
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.markdown-body :deep(th) {
+  background: rgba(255, 255, 255, 0.05);
+}
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: 4px;
+}
+.markdown-body :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 1.5em 0;
+}
+@media (max-width: 640px) {
+  .markdown-body {
+    padding: 14px 16px;
+  }
 }
 .editor {
   flex: 1;
