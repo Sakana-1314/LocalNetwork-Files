@@ -30,16 +30,27 @@ var openapiJSONDoc []byte
 
 // ServiceStatus 描述单个协议服务的状态，用于挂载向导与管理界面。
 //
-// 这几个字段的 Mock 都固定下来：Apifox 智能 Mock 会随机取值，演示站里
-// 「挂载与服务」的卡片会随机显示「未启用 / 未运行」或「异常」——
-// 后者是因为 error 被随机填了字符串，所以它固定为空。
+// 演示站用 Apifox 云端 Mock 作后端，而智能 Mock 会随机填这些字段，
+// 卡片会随机显示「未启用 / 未运行 / 异常」。这里把取值固定下来：
+//
+//   - enabled / running 固定 true，否则随机显示「未启用 / 未运行」。
+//   - error 固定为空，否则随机字符串会让卡片显示「异常」。
+//   - path 固定为空，前端会回退到各协议正确的默认前缀（/dav、/s3），
+//     否则挂载命令里会出现随机路径。
+//   - port 固定为 0（等价于不返回，字段带 omitempty）：端口本就因协议而异
+//     （WebDAV / S3 跟随 http_port，SMB 是 445），共用一个字段无法同时正确；
+//     留空后前端分别回退到 http_port 与 445，拼出的挂载命令是对的。
+//
+// 注意：x-apifox-mock 只能可靠地固定标量。把它写成 JSON 对象去固定整个
+// 服务对象会被 Apifox 当成字符串返回（services.webdav 变成字符串），
+// 前端会直接读不到字段——所以这里只做字段级固定。
 //
 // @Description 单个协议服务的状态
 type ServiceStatus struct {
 	Enabled bool              `json:"enabled" extensions:"x-apifox-mock=true"`     // 是否在 config.yaml 中启用
 	Running bool              `json:"running" extensions:"x-apifox-mock=true"`     // 当前是否正在运行
-	Port    int               `json:"port,omitempty"`                              // 监听端口
-	Path    string            `json:"path,omitempty"`                              // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
+	Port    int               `json:"port,omitempty" extensions:"x-apifox-mock=0"` // 监听端口
+	Path    string            `json:"path,omitempty" extensions:"x-apifox-mock="`  // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
 	Error   string            `json:"error,omitempty" extensions:"x-apifox-mock="` // 服务启动错误（仅管理员可见）
 	Shares  map[string]string `json:"shares,omitempty"`                            // 仅 SMB：当前用户的挂载名 → SMB 共享名
 	Account string            `json:"account,omitempty"`                           // 仅 SMB：当前用户的 SMB 登录名
@@ -51,15 +62,11 @@ type ServiceStatus struct {
 // map：map 在规范里只能写成 additionalProperties，文档与 Mock 都无法确定键名。
 // 序列化结果与原来的 map 完全一致。
 //
-// 三个字段各给了完整的 Mock 值：端口与路径因服务而异（WebDAV 走 /dav、S3 走
-// /s3、SMB 是 445），共用一份 ServiceStatus 的字段级固定值无法同时正确，
-// 而演示站的「挂载与服务」会用这些值拼出可直接复制的挂载命令。
-//
 // @Description 各协议服务的状态
 type ServicesStatus struct {
-	WebDAV ServiceStatus `json:"webdav" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/dav\"}"` // WebDAV 服务（挂载在 HTTP 端口的 /dav）
-	S3     ServiceStatus `json:"s3" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/s3\"}"`      // S3 兼容接口
-	SMB    ServiceStatus `json:"smb" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":445}"`                       // 托管的 Samba 服务
+	WebDAV ServiceStatus `json:"webdav"` // WebDAV 服务（挂载在 HTTP 端口的 /dav）
+	S3     ServiceStatus `json:"s3"`     // S3 兼容接口
+	SMB    ServiceStatus `json:"smb"`    // 托管的 Samba 服务
 }
 
 // Services is implemented by the application to expose protocol service state.
