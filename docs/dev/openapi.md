@@ -36,10 +36,26 @@ Mock 规则与响应示例会在下次同步时被清掉。文档与 Mock 的唯
 （Apifox 的属性级 Mock 字段，对应规范里的 `x-apifox-mock` 扩展）：
 
 - `ServiceStatus.enabled` / `running`：固定 `true`，否则「挂载与服务」的卡片随机显示「未启用」。
+- `ServiceStatus.error`：固定为空串，否则随机字符串会让卡片显示「异常」。
+- `ServiceStatus.path` / `port`：固定为空串与 `0`，让前端回退到各协议正确的默认值
+  （`/dav`、`/s3`、`http_port`、`445`）——端口与路径因协议而异，一个字段无法同时正确。
 - `User.role`：固定 `admin`，否则演示里看不到管理菜单。
 - `ListResponse.path` / `writable`、`SystemInfo` 的 `version` / `hostname` / `http_port` / `ffmpeg`。
 
 `Entry` 的 `name` / `path` / `kind` 等**有意不固定**：列目录需要多样化的条目，
 固定后一屏会出现多条完全相同的文件。
+
+::: danger `x-apifox-mock` 只能固定标量值
+Apifox 的「Mock 字段」是**纯文本输入框**：在里面写 JSON 对象（想一次固定整个对象），
+接口返回的会是那个**字符串**而不是对象，前端读不到字段。
+例如给 `ServicesStatus.webdav` 写 `{"enabled":true,...}`，实测返回
+`"services": {"webdav": "{\"enabled\":true,...}"}`，卡片直接不显示状态。
+
+更麻烦的是，**导入一份不含该配置的规范并不会清掉 Apifox 侧已存在的值**，
+必须手工在 Apifox 界面里删掉。所以只固定标量，并在前端对两种形态做兼容
+（见 `web/src/api/normalize.ts` 的 `normServiceStatus`）。
+:::
+
+详见[在线 Demo](/dev/demo)。
 
 详见[在线 Demo](/dev/demo)。
