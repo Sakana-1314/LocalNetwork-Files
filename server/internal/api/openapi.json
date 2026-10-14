@@ -905,7 +905,8 @@
           },
           "error": {
             "description": "服务启动错误（仅管理员可见）",
-            "type": "string"
+            "type": "string",
+            "x-apifox-mock": ""
           },
           "path": {
             "description": "服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）",
@@ -936,15 +937,18 @@
         "properties": {
           "s3": {
             "$ref": "#/components/schemas/ServiceStatus",
-            "description": "S3 兼容接口"
+            "description": "S3 兼容接口",
+            "x-apifox-mock": "{\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/s3\"}"
           },
           "smb": {
             "$ref": "#/components/schemas/ServiceStatus",
-            "description": "托管的 Samba 服务"
+            "description": "托管的 Samba 服务",
+            "x-apifox-mock": "{\"enabled\":true,\"running\":true,\"port\":445}"
           },
           "webdav": {
             "$ref": "#/components/schemas/ServiceStatus",
-            "description": "WebDAV 服务（挂载在 HTTP 端口的 /dav）"
+            "description": "WebDAV 服务（挂载在 HTTP 端口的 /dav）",
+            "x-apifox-mock": "{\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/dav\"}"
           }
         },
         "title": "各协议服务的状态",
