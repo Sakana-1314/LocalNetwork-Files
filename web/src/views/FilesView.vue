@@ -168,8 +168,10 @@ const stats = computed(() => {
   let files = 0
   let bytes = 0
   for (const e of entries.value) {
-    if (e.is_dir) dirs++
-    else {
+    if (e.is_dir) {
+      dirs++
+      if (e.size > 0) bytes += e.size
+    } else {
       files++
       bytes += e.size
     }
@@ -816,7 +818,7 @@ const emptyText = computed(() => {
     </div>
 
     <div class="status-bar">
-      <span>{{ stats.dirs }} 个文件夹，{{ stats.files }} 个文件<template v-if="stats.files">，共 {{ formatSize(stats.bytes) }}</template></span>
+      <span>{{ stats.dirs }} 个文件夹，{{ stats.files }} 个文件<template v-if="stats.bytes">，共 {{ formatSize(stats.bytes) }}</template></span>
       <span class="spacer" />
     </div>
 

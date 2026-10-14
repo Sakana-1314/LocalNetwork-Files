@@ -1769,3 +1769,39 @@ func TestShares(t *testing.T) {
 	expect(t, e.do("DELETE", fmt.Sprintf("/api/v1/shares/%d", id), alice, nil), 204)
 	expect(t, e.do("GET", pub, "", nil), 404)
 }
+
+func TestDirSizesInListings(t *testing.T) {
+	e := newEnv(t)
+	alice := e.alice()
+	writeFile(t, filepath.Join(e.rw, "sub", "a.txt"), "12345")
+	writeFile(t, filepath.Join(e.rw, "sub", "deep", "b.txt"), "123")
+	writeFile(t, filepath.Join(e.rw, "c.txt"), "1")
+
+	sizes := func(p string) map[string]float64 {
+		rec := e.do("GET", "/api/v1/fs/list?path="+q(p), alice, nil)
+		expect(t, rec, 200)
+		out := map[string]float64{}
+		for _, x := range decode[obj](t, rec)["entries"].([]any) {
+			m := x.(obj)
+			out[m["name"].(string)] = m["size"].(float64)
+		}
+		return out
+	}
+	// Before the index is built the size is unknown.
+	if got := sizes("/可写")["sub"]; got != -1 {
+		t.Fatalf("unindexed dir size = %v, want -1", got)
+	}
+	e.a.search.Rebuild()
+	if got := sizes("/可写")["sub"]; got != 8 {
+		t.Fatalf("sub = %v, want 8", got)
+	}
+	if got := sizes("/")["可写"]; got != 9 {
+		t.Fatalf("bucket root = %v, want 9", got)
+	}
+	// New files count once the index has them.
+	expect(t, e.do("PUT", "/api/v1/fs/file?path="+q("/可写/sub/new.txt"), alice, "abcdefghij"), 201)
+	e.a.search.Rebuild()
+	if got := sizes("/可写")["sub"]; got != 18 {
+		t.Fatalf("sub after upload = %v, want 18", got)
+	}
+}

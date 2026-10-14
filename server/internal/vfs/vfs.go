@@ -49,6 +49,20 @@ var Fingerprint func(real string, size int64, mtime time.Time) (string, error)
 // be requested by digest without putting paths in URLs.
 var OnDigest func(digest, real string, size int64, mtime time.Time)
 
+// DirSize, when set, returns the total size of the files below a local
+// directory (the search index provides it). Directory entries carry that
+// total; when it is not known yet their size is -1.
+var DirSize func(real string) (int64, bool)
+
+func dirSizeOf(real string) int64 {
+	if DirSize != nil && real != "" {
+		if n, ok := DirSize(real); ok {
+			return n
+		}
+	}
+	return -1
+}
+
 // Notifier is told about local paths changed through the VFS (e.g. the search index).
 type Notifier interface {
 	Changed(realPath string)
@@ -258,7 +272,7 @@ type Entry struct {
 	Name     string    `json:"name"`                                                      // 文件或目录名
 	Path     string    `json:"path"`                                                      // 虚拟路径
 	IsDir    bool      `json:"is_dir"`                                                    // 是否为目录
-	Size     int64     `json:"size"`                                                      // 文件大小（字节）；目录为 0
+	Size     int64     `json:"size"`                                                      // 大小（字节）；目录为其下所有文件的总大小，尚未统计（索引构建中）时为 -1
 	ModTime  time.Time `json:"mod_time"`                                                  // 最后修改时间
 	Mime     string    `json:"mime"`                                                      // 由扩展名推断的 MIME 类型
 	Kind     string    `json:"kind" enums:"dir,image,video,audio,text,pdf,archive,other"` // 文件类型，用于选择预览方式
@@ -280,6 +294,8 @@ func NewEntry(vpath, real string, fi fs.FileInfo, writable bool) Entry {
 	if !isDir {
 		e.Size = fi.Size()
 		e.Thumb = thumbDigest(real, fi, name)
+	} else {
+		e.Size = dirSizeOf(real)
 	}
 	return e
 }
@@ -308,7 +324,8 @@ func DigestFor(real, name string, size int64, mtime time.Time) string {
 }
 
 func (f *FS) rootEntry(r *Root) Entry {
-	e := Entry{Name: r.Name, Path: "/" + r.Name, IsDir: true, Mime: "inode/directory", Kind: KindDir, Writable: r.Writable}
+	e := Entry{Name: r.Name, Path: "/" + r.Name, IsDir: true, Mime: "inode/directory", Kind: KindDir, Writable: r.Writable,
+		Size: dirSizeOf(r.Path)}
 	if fi, err := os.Stat(r.Path); err == nil {
 		e.ModTime = fi.ModTime()
 	}

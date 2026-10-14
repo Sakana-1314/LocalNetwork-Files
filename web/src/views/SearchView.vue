@@ -11,7 +11,7 @@ import HighlightName from '@/components/common/HighlightName.vue'
 import FolderPickerModal from '@/components/files/FolderPickerModal.vue'
 import { useDebounceFn } from '@/composables/useDebounce'
 import { filesRoute, normalizePath, parentPath } from '@/utils/path'
-import { formatRelative, formatSize } from '@/utils/format'
+import { formatEntrySize, formatRelative, formatSize } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -174,7 +174,7 @@ function openParent(r: SearchResult, e: MouseEvent): void {
           <a class="parent" :title="'打开所在文件夹 ' + parentPath(r.path)" @click="openParent(r, $event)">{{ parentPath(r.path) }}</a>
         </div>
         <div class="meta">
-          <div>{{ r.is_dir ? '文件夹' : formatSize(r.size) }}</div>
+          <div>{{ r.is_dir ? `文件夹 · ${formatEntrySize(r)}` : formatSize(r.size) }}</div>
           <div class="time">{{ formatRelative(r.mod_time) }}</div>
         </div>
       </div>
