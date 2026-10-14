@@ -30,18 +30,19 @@ var openapiJSONDoc []byte
 
 // ServiceStatus 描述单个协议服务的状态，用于挂载向导与管理界面。
 //
-// enabled / running 的 Mock 固定为 true：Apifox 智能 Mock 对布尔字段本会随机
-// 取值，演示站里「挂载与服务」的卡片会随机显示「未启用 / 未运行」。
+// 这几个字段的 Mock 都固定下来：Apifox 智能 Mock 会随机取值，演示站里
+// 「挂载与服务」的卡片会随机显示「未启用 / 未运行」或「异常」——
+// 后者是因为 error 被随机填了字符串，所以它固定为空。
 //
 // @Description 单个协议服务的状态
 type ServiceStatus struct {
-	Enabled bool              `json:"enabled" extensions:"x-apifox-mock=true"` // 是否在 config.yaml 中启用
-	Running bool              `json:"running" extensions:"x-apifox-mock=true"` // 当前是否正在运行
-	Port    int               `json:"port,omitempty"`                          // 监听端口
-	Path    string            `json:"path,omitempty"`                          // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
-	Error   string            `json:"error,omitempty"`                         // 服务启动错误（仅管理员可见）
-	Shares  map[string]string `json:"shares,omitempty"`                        // 仅 SMB：当前用户的挂载名 → SMB 共享名
-	Account string            `json:"account,omitempty"`                       // 仅 SMB：当前用户的 SMB 登录名
+	Enabled bool              `json:"enabled" extensions:"x-apifox-mock=true"`     // 是否在 config.yaml 中启用
+	Running bool              `json:"running" extensions:"x-apifox-mock=true"`     // 当前是否正在运行
+	Port    int               `json:"port,omitempty"`                              // 监听端口
+	Path    string            `json:"path,omitempty"`                              // 服务在 HTTP 端口上的路径前缀（WebDAV 为 /dav，S3 为 /s3）
+	Error   string            `json:"error,omitempty" extensions:"x-apifox-mock="` // 服务启动错误（仅管理员可见）
+	Shares  map[string]string `json:"shares,omitempty"`                            // 仅 SMB：当前用户的挂载名 → SMB 共享名
+	Account string            `json:"account,omitempty"`                           // 仅 SMB：当前用户的 SMB 登录名
 }
 
 // ServicesStatus 是各协议服务的状态集合。
@@ -50,11 +51,15 @@ type ServiceStatus struct {
 // map：map 在规范里只能写成 additionalProperties，文档与 Mock 都无法确定键名。
 // 序列化结果与原来的 map 完全一致。
 //
+// 三个字段各给了完整的 Mock 值：端口与路径因服务而异（WebDAV 走 /dav、S3 走
+// /s3、SMB 是 445），共用一份 ServiceStatus 的字段级固定值无法同时正确，
+// 而演示站的「挂载与服务」会用这些值拼出可直接复制的挂载命令。
+//
 // @Description 各协议服务的状态
 type ServicesStatus struct {
-	WebDAV ServiceStatus `json:"webdav"` // WebDAV 服务（挂载在 HTTP 端口的 /dav）
-	S3     ServiceStatus `json:"s3"`     // S3 兼容接口
-	SMB    ServiceStatus `json:"smb"`    // 托管的 Samba 服务
+	WebDAV ServiceStatus `json:"webdav" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/dav\"}"` // WebDAV 服务（挂载在 HTTP 端口的 /dav）
+	S3     ServiceStatus `json:"s3" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":8080,\"path\":\"/s3\"}"`      // S3 兼容接口
+	SMB    ServiceStatus `json:"smb" extensions:"x-apifox-mock={\"enabled\":true,\"running\":true,\"port\":445}"`                       // 托管的 Samba 服务
 }
 
 // Services is implemented by the application to expose protocol service state.
