@@ -344,3 +344,36 @@ type CacheStats struct {
 //
 // @Description 搜索索引状态
 type IndexStatus = search.Status
+
+// CreateShareRequest 创建分享。
+//
+// @Description 创建分享的请求体
+type CreateShareRequest struct {
+	Path      string     `json:"path" binding:"required"` // 要分享的文件夹的虚拟路径
+	ExpiresAt *time.Time `json:"expires_at"`              // 过期时间（RFC 3339）；null 或省略表示永不过期
+}
+
+// UpdateShareRequest 修改分享有效期。
+//
+// @Description 修改分享有效期的请求体
+type UpdateShareRequest struct {
+	ExpiresAt *time.Time `json:"expires_at"` // 新的过期时间（RFC 3339）；null 表示永不过期
+}
+
+// ShareView 分享记录。
+//
+// @Description 分享记录
+type ShareView struct {
+	store.Share
+	Name   string `json:"name"`                                      // 被分享文件夹的名称
+	Status string `json:"status" enums:"active,expired,unavailable"` // active 可访问；expired 已过期；unavailable 分享者已无权限或文件夹已不存在
+}
+
+// PublicShareInfo 公开的分享信息。
+//
+// @Description 公开的分享信息
+type PublicShareInfo struct {
+	Name      string     `json:"name"`       // 被分享文件夹的名称
+	Owner     string     `json:"owner"`      // 分享者用户名
+	ExpiresAt *time.Time `json:"expires_at"` // 过期时间；null 表示永不过期
+}

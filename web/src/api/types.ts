@@ -336,3 +336,27 @@ export interface BrowseResponse {
 export interface ErrorBody {
   error: string
 }
+
+export type ShareStatus = 'active' | 'expired' | 'unavailable'
+
+/** 自己的分享记录 */
+export interface Share {
+  id: number
+  token: string
+  /** 被分享文件夹的虚拟路径 */
+  path: string
+  /** 文件夹名称 */
+  name: string
+  /** null 表示永不过期 */
+  expires_at: string | null
+  created_at: string
+  /** active 可访问；expired 已过期；unavailable 分享者已无权限或文件夹已不存在 */
+  status: ShareStatus
+}
+
+/** 公开的分享信息 */
+export interface PublicShareInfo {
+  name: string
+  owner: string
+  expires_at: string | null
+}

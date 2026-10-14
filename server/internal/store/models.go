@@ -160,3 +160,17 @@ type S3Key struct {
 	ReadOnly  bool      `gorm:"not null;default:false" json:"read_only"` // 是否只读
 	CreatedAt time.Time `json:"created_at"`                              // 创建时间
 }
+
+// Share 是一个文件夹分享链接。分享保存的是文件夹的虚拟路径而不是文件本身：
+// 访问时以分享者当前的权限只读打开该路径，分享者失去权限、被禁用或文件夹被移走后链接随即失效。
+type Share struct {
+	ID        uint       `gorm:"primaryKey" json:"id"`                      // 分享 ID
+	Token     string     `gorm:"uniqueIndex;size:32;not null" json:"token"` // 分享链接中的随机令牌
+	UserID    uint       `gorm:"index;not null" json:"-"`
+	Path      string     `gorm:"not null" json:"path"` // 被分享文件夹在分享者虚拟文件系统中的路径
+	ExpiresAt *time.Time `json:"expires_at"`           // 过期时间；null 表示永不过期
+	CreatedAt time.Time  `json:"created_at"`           // 创建时间
+}
+
+// Expired reports whether the share has passed its expiry time.
+func (s *Share) Expired(now time.Time) bool { return s.ExpiresAt != nil && !now.Before(*s.ExpiresAt) }

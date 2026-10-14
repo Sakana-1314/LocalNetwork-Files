@@ -113,6 +113,14 @@ func Register(r *gin.Engine, d Deps) {
 	// Previews are identified by content digest plus a non-expiring signature,
 	// so they load in <img> without a session or an access_token in the URL.
 	v1.GET("/media/thumb", a.mediaThumb)
+	// Public share links: read-only access to a shared folder, no login.
+	v1.GET("/share/:token", a.publicShareInfo)
+	v1.GET("/share/:token/list", a.publicShareList)
+	v1.GET("/share/:token/raw", a.publicShareRaw)
+	v1.HEAD("/share/:token/raw", a.publicShareRaw)
+	v1.GET("/share/:token/raw/:name", a.publicShareRawNamed)
+	v1.HEAD("/share/:token/raw/:name", a.publicShareRawNamed)
+	v1.GET("/share/:token/text", a.publicShareText)
 
 	g := v1.Group("", a.authenticate)
 	g.GET("/auth/me", a.me)
@@ -141,6 +149,11 @@ func Register(r *gin.Engine, d Deps) {
 	g.DELETE("/media/hls/:id", a.mediaHLSStop)
 	g.GET("/media/audio", a.mediaAudio)
 	g.GET("/media/subtitle", a.mediaSubtitle)
+
+	g.GET("/shares", a.listShares)
+	g.POST("/shares", a.requireWrite, a.createShare)
+	g.PUT("/shares/:id", a.requireWrite, a.updateShare)
+	g.DELETE("/shares/:id", a.requireWrite, a.deleteShare)
 
 	g.GET("/tokens", a.listTokens)
 	g.POST("/tokens", a.requireWrite, a.createToken)

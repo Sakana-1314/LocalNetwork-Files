@@ -366,6 +366,24 @@
         "title": "创建 S3 密钥的请求体",
         "type": "object"
       },
+      "CreateShareRequest": {
+        "description": "创建分享的请求体",
+        "properties": {
+          "expires_at": {
+            "description": "过期时间（RFC 3339）；null 或省略表示永不过期",
+            "type": "string"
+          },
+          "path": {
+            "description": "要分享的文件夹的虚拟路径",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "创建分享的请求体",
+        "type": "object"
+      },
       "CreateTokenRequest": {
         "description": "创建访问令牌的请求体",
         "properties": {
@@ -712,6 +730,25 @@
         "title": "修改密码后签发的新会话",
         "type": "object"
       },
+      "PublicShareInfo": {
+        "description": "公开的分享信息",
+        "properties": {
+          "expires_at": {
+            "description": "过期时间；null 表示永不过期",
+            "type": "string"
+          },
+          "name": {
+            "description": "被分享文件夹的名称",
+            "type": "string"
+          },
+          "owner": {
+            "description": "分享者用户名",
+            "type": "string"
+          }
+        },
+        "title": "公开的分享信息",
+        "type": "object"
+      },
       "ReindexResponse": {
         "description": "重建搜索索引的受理结果",
         "properties": {
@@ -992,6 +1029,46 @@
         "title": "转码会话信息",
         "type": "object"
       },
+      "ShareView": {
+        "description": "分享记录",
+        "properties": {
+          "created_at": {
+            "description": "创建时间",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "过期时间；null 表示永不过期",
+            "type": "string"
+          },
+          "id": {
+            "description": "分享 ID",
+            "type": "integer"
+          },
+          "name": {
+            "description": "被分享文件夹的名称",
+            "type": "string"
+          },
+          "path": {
+            "description": "被分享文件夹在分享者虚拟文件系统中的路径",
+            "type": "string"
+          },
+          "status": {
+            "description": "active 可访问；expired 已过期；unavailable 分享者已无权限或文件夹已不存在",
+            "enum": [
+              "active",
+              "expired",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "token": {
+            "description": "分享链接中的随机令牌",
+            "type": "string"
+          }
+        },
+        "title": "分享记录",
+        "type": "object"
+      },
       "SubtitleStream": {
         "description": "字幕轨道信息",
         "properties": {
@@ -1246,6 +1323,17 @@
           "sources"
         ],
         "title": "移动或复制的请求体",
+        "type": "object"
+      },
+      "UpdateShareRequest": {
+        "description": "修改分享有效期的请求体",
+        "properties": {
+          "expires_at": {
+            "description": "新的过期时间（RFC 3339）；null 表示永不过期",
+            "type": "string"
+          }
+        },
+        "title": "修改分享有效期的请求体",
         "type": "object"
       },
       "User": {
@@ -3824,6 +3912,610 @@
         ]
       }
     },
+    "/share/{token}": {
+      "get": {
+        "description": "公开接口，无需登录。返回分享的文件夹名称、分享者与过期时间。\n分享不存在、分享者已无权限或文件夹已不存在时返回 404，已过期返回 410。",
+        "parameters": [
+          {
+            "description": "分享令牌",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicShareInfo"
+                }
+              }
+            },
+            "description": "分享信息"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享不存在或已失效"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享已过期"
+          }
+        },
+        "summary": "查看分享",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/share/{token}/list": {
+      "get": {
+        "description": "公开接口，无需登录。列出分享文件夹内某个子目录的内容，path 相对于分享的文件夹（/ 为其本身）。\n返回的条目路径同样相对于分享的文件夹，且全部只读。",
+        "parameters": [
+          {
+            "description": "分享令牌",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "相对于分享文件夹的路径，省略为 /",
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse"
+                }
+              }
+            },
+            "description": "目录内容"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享或目录不存在"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享已过期"
+          }
+        },
+        "summary": "列出分享内容",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/share/{token}/raw": {
+      "get": {
+        "description": "公开接口，无需登录。以流的形式返回分享文件夹内的文件，支持 Range；download 为 true 时作为附件下载。",
+        "parameters": [
+          {
+            "description": "分享令牌",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "相对于分享文件夹的文件路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "为 true 时以附件形式下载",
+            "in": "query",
+            "name": "download",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "完整文件内容"
+          },
+          "206": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Range 请求命中的部分内容"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享或文件不存在"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享已过期"
+          }
+        },
+        "summary": "读取分享中的文件",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/share/{token}/raw/{name}": {
+      "get": {
+        "description": "与读取分享中的文件接口相同，URL 末尾带上文件名，便于浏览器下载时显示真实文件名；末尾名称由服务端忽略。",
+        "parameters": [
+          {
+            "description": "分享令牌",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "文件名，仅用于显示，服务端忽略",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "相对于分享文件夹的文件路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "为 true 时以附件形式下载",
+            "in": "query",
+            "name": "download",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "完整文件内容"
+          },
+          "206": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Range 请求命中的部分内容"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享或文件不存在"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享已过期"
+          }
+        },
+        "summary": "按文件名读取分享文件",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/share/{token}/text": {
+      "get": {
+        "description": "公开接口，无需登录。按 UTF-8 返回分享文件夹内文本文件的内容，最大 4 MiB，超出部分截断。",
+        "parameters": [
+          {
+            "description": "分享令牌",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "相对于分享文件夹的文件路径",
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextResponse"
+                }
+              }
+            },
+            "description": "文本内容"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享或文件不存在"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享已过期"
+          }
+        },
+        "summary": "读取分享中的文本",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/shares": {
+      "get": {
+        "description": "返回当前用户创建的全部分享（含已过期与已失效的），按创建时间倒序。\nstatus 为 active（可访问）、expired（已过期）或 unavailable（分享者已无权限或文件夹已不存在）。",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ShareView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "分享记录"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "列出我的分享",
+        "tags": [
+          "分享"
+        ]
+      },
+      "post": {
+        "description": "把一个文件夹分享为公开链接（只允许分享文件夹，不能分享根目录）。\n分享的是文件夹路径：访问者只读，权限随分享者当前权限变化，分享者失去权限后链接随即失效。\nexpires_at 为空表示永不过期，否则必须晚于当前时间。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShareRequest",
+                "description": "文件夹路径与过期时间",
+                "summary": "请求体"
+              }
+            }
+          },
+          "description": "文件夹路径与过期时间",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareView"
+                }
+              }
+            },
+            "description": "分享已创建"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "不是文件夹、是根目录，或过期时间无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "文件夹不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "创建分享",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
+    "/shares/{id}": {
+      "delete": {
+        "description": "删除自己的一个分享，链接立即失效。文件不受影响。",
+        "parameters": [
+          {
+            "description": "分享 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除，无响应体"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "取消分享",
+        "tags": [
+          "分享"
+        ]
+      },
+      "put": {
+        "description": "修改自己某个分享的过期时间；expires_at 为空表示永不过期，否则必须晚于当前时间。\n已过期的分享延长有效期后即可重新访问，链接不变。",
+        "parameters": [
+          {
+            "description": "分享 ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShareRequest",
+                "description": "新的过期时间",
+                "summary": "请求体"
+              }
+            }
+          },
+          "description": "新的过期时间",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareView"
+                }
+              }
+            },
+            "description": "已更新"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "过期时间无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "未登录或会话已失效"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "该访问令牌没有 write 权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "分享不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "修改分享有效期",
+        "tags": [
+          "分享"
+        ]
+      }
+    },
     "/system/info": {
       "get": {
         "description": "返回版本、主机名、服务器探测到的局域网地址与监听端口。\n同时返回 WebDAV、S3、SMB 各服务的运行状态，供挂载向导与客户端配置使用。",
@@ -4081,6 +4773,10 @@
     {
       "description": "预览图、媒体信息、HLS 实时转码、音频转码与字幕转换",
       "name": "媒体"
+    },
+    {
+      "description": "文件夹分享链接：管理自己的分享，以及无需登录的只读访问",
+      "name": "分享"
     },
     {
       "description": "访问令牌与 S3 访问密钥（仅当前用户自己的凭据）",

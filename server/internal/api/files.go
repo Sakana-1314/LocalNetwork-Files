@@ -76,8 +76,12 @@ var activeTypes = map[string]bool{
 // @Failure  404 {object} ErrorResponse "文件不存在"
 // @Security bearerAuth
 // @Router   /fs/raw [get]
-func (a *API) fsRaw(c *gin.Context) {
-	f, fi, err := a.fs(c).Open(c.Query("path"))
+func (a *API) fsRaw(c *gin.Context) { serveRaw(c, a.fs(c), c.Query("path")) }
+
+// serveRaw streams the file at vpath of fsys (Range, download, sandboxing of
+// active content).
+func serveRaw(c *gin.Context, fsys *vfs.FS, vpath string) {
+	f, fi, err := fsys.Open(vpath)
 	if err != nil {
 		fail(c, err)
 		return
@@ -128,8 +132,12 @@ const maxTextSize = 4 << 20
 // @Failure  404 {object} ErrorResponse "文件不存在"
 // @Security bearerAuth
 // @Router   /fs/text [get]
-func (a *API) fsText(c *gin.Context) {
-	f, fi, err := a.fs(c).Open(c.Query("path"))
+func (a *API) fsText(c *gin.Context) { serveText(c, a.fs(c), c.Query("path")) }
+
+// serveText returns the text of the file at vpath of fsys, decoding GB18030
+// when it is not UTF-8.
+func serveText(c *gin.Context, fsys *vfs.FS, vpath string) {
+	f, fi, err := fsys.Open(vpath)
 	if err != nil {
 		fail(c, err)
 		return

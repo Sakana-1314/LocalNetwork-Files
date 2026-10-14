@@ -590,3 +590,53 @@ func TestDatabaseRenameIsIdempotentAndKeepsNewest(t *testing.T) {
 		t.Fatalf("second migration run: %v", err)
 	}
 }
+
+func TestShares(t *testing.T) {
+	st, _ := openTest(t)
+	u := &User{Username: "u", PasswordHash: "h"}
+	o := &User{Username: "o", PasswordHash: "h"}
+	st.CreateUser(u)
+	st.CreateUser(o)
+	sh := &Share{Token: "tok1", UserID: u.ID, Path: "/b/dir"}
+	if err := st.CreateShare(sh); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateShare(&Share{Token: "tok1", UserID: o.ID, Path: "/x"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate token: %v", err)
+	}
+	st.CreateShare(&Share{Token: "tok2", UserID: o.ID, Path: "/x"})
+	if g, err := st.GetShareByToken("tok1"); err != nil || g.ID != sh.ID || g.Expired(time.Now()) {
+		t.Fatalf("by token %v %+v", err, g)
+	}
+	at := time.Now().Add(-time.Second)
+	if err := st.SetShareExpiry(u.ID, sh.ID, &at); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := st.GetShare(u.ID, sh.ID); g.ExpiresAt == nil || !g.Expired(time.Now()) {
+		t.Fatalf("expiry %+v", g)
+	}
+	if err := st.SetShareExpiry(u.ID, sh.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := st.GetShare(u.ID, sh.ID); g.ExpiresAt != nil {
+		t.Fatal("expiry not cleared")
+	}
+	if err := st.SetShareExpiry(o.ID, sh.ID, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign update: %v", err)
+	}
+	if ls, _ := st.ListShares(u.ID); len(ls) != 1 {
+		t.Fatalf("list %v", ls)
+	}
+	if err := st.DeleteUser(u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetShareByToken("tok1"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("share not cascaded")
+	}
+	if _, err := st.GetShareByToken("tok2"); err != nil {
+		t.Fatal("other share deleted")
+	}
+	if err := st.DeleteShare(o.ID, 999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("delete missing: %v", err)
+	}
+}
