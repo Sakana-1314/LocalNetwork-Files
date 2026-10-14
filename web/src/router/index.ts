@@ -1,9 +1,17 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { feedback } from '@/composables/feedback'
 import MainLayout from '@/layouts/MainLayout.vue'
 
 const APP_NAME = 'MList'
+
+/**
+ * 静态托管（如 GitHub Pages 上的演示站）没有服务端回退：
+ * 直接访问或刷新深层路径会 404。此时用 hash 路由（VITE_HASH_ROUTER=1），
+ * 路径写在 # 后面，任何路径都由同一个 index.html 处理。
+ * 默认仍是 History 路由，后端会为非 /api、/dav 的路径回退到 index.html。
+ */
+const useHashRouter = import.meta.env.VITE_HASH_ROUTER === '1'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -64,8 +72,10 @@ const routes: RouteRecordRaw[] = [
 ]
 
 export const router = createRouter({
-  // 部署到子路径时（Vite base）History 路由也必须带上同样的前缀。
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // 部署到子路径时（Vite base）路由也必须带上同样的前缀。
+  history: useHashRouter
+    ? createWebHashHistory(import.meta.env.BASE_URL)
+    : createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 }),
 })

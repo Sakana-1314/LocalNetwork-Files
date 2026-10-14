@@ -21,16 +21,17 @@ pnpm build       # 类型检查 + 构建到 ../server/internal/webui/dist（构�
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `MLIST_BACKEND` | `http://127.0.0.1:8080` | 仅开发服务器：`/api`、`/dav` 的代理目标 |
-| `WEB_BASE` | `/` | Vite `base`，部署到子路径时设置（如 `/MList/demo/`） |
+| `WEB_BASE` | `/` | Vite `base`，部署到子路径时设置（如 `/MList/app/`） |
 | `WEB_OUT_DIR` | `../server/internal/webui/dist` | 产物目录（相对路径按 `web/` 解析） |
-| `VITE_API_BASE` | `/api/v1` | API 前缀；指向 Apifox 云端 Mock 时填完整前缀 |
+| `VITE_API_BASE` | `/api/v1` | API 前缀；指向 Apifox 云端 Mock 时填 Mock 基址（**不含 `/api/v1`**，规范是相对路径导入的） |
+| `VITE_HASH_ROUTER` | 未设置 | 为 `1` 时改用 hash 路由，用于没有服务端回退的静态托管 |
 | `VITE_APIFOX_DOC_URL` | `https://mlist.apifox.cn/` | 「API 文档」页内嵌的在线文档地址 |
 
 `pnpm build:demo` 与 `pnpm build` 相同，供演示站构建调用；示例：
 
 ```bash
-WEB_BASE=/MList/demo/ WEB_OUT_DIR=../docs/public/demo \
-  VITE_API_BASE=https://m1.apifoxmock.com/m1/<项目>-<版本>-<服务>/api/v1 \
+WEB_BASE=/MList/app/ WEB_OUT_DIR=../docs/public/app VITE_HASH_ROUTER=1 \
+  VITE_API_BASE=https://m1.apifoxmock.com/m1/<项目>-<分支>-<服务> \
   pnpm build:demo
 ```
 
