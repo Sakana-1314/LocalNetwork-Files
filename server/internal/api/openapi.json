@@ -563,11 +563,13 @@
           },
           "path": {
             "description": "规范化后的目录虚拟路径",
-            "type": "string"
+            "type": "string",
+            "x-apifox-mock": "/"
           },
           "writable": {
             "description": "当前目录是否可写",
-            "type": "boolean"
+            "type": "boolean",
+            "x-apifox-mock": "true"
           }
         },
         "title": "目录列表",
@@ -898,7 +900,8 @@
           },
           "enabled": {
             "description": "是否在 config.yaml 中启用",
-            "type": "boolean"
+            "type": "boolean",
+            "x-apifox-mock": "true"
           },
           "error": {
             "description": "服务启动错误（仅管理员可见）",
@@ -914,7 +917,8 @@
           },
           "running": {
             "description": "当前是否正在运行",
-            "type": "boolean"
+            "type": "boolean",
+            "x-apifox-mock": "true"
           },
           "shares": {
             "additionalProperties": {
@@ -925,6 +929,25 @@
           }
         },
         "title": "单个协议服务的状态",
+        "type": "object"
+      },
+      "ServicesStatus": {
+        "description": "各协议服务的状态",
+        "properties": {
+          "s3": {
+            "$ref": "#/components/schemas/ServiceStatus",
+            "description": "S3 兼容接口"
+          },
+          "smb": {
+            "$ref": "#/components/schemas/ServiceStatus",
+            "description": "托管的 Samba 服务"
+          },
+          "webdav": {
+            "$ref": "#/components/schemas/ServiceStatus",
+            "description": "WebDAV 服务（挂载在 HTTP 端口的 /dav）"
+          }
+        },
+        "title": "各协议服务的状态",
         "type": "object"
       },
       "SessionInfo": {
@@ -1021,26 +1044,27 @@
           },
           "ffmpeg": {
             "description": "是否检测到 ffmpeg（决定转码与部分预览是否可用）",
-            "type": "boolean"
+            "type": "boolean",
+            "x-apifox-mock": "true"
           },
           "hostname": {
             "description": "服务器主机名",
-            "type": "string"
+            "type": "string",
+            "x-apifox-mock": "mlist-server"
           },
           "http_port": {
             "description": "Web / API / WebDAV / S3 的监听端口",
-            "type": "integer"
+            "type": "integer",
+            "x-apifox-mock": "8080"
           },
           "services": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ServiceStatus"
-            },
-            "description": "各协议服务的状态",
-            "type": "object"
+            "$ref": "#/components/schemas/ServicesStatus",
+            "description": "各协议服务的状态"
           },
           "version": {
             "description": "服务器版本",
-            "type": "string"
+            "type": "string",
+            "x-apifox-mock": "1.2.3"
           }
         },
         "title": "系统与协议服务信息，用于挂载向导",
@@ -1202,7 +1226,8 @@
           },
           "disabled": {
             "description": "是否已禁用（禁用后无法登录，令牌也失效）",
-            "type": "boolean"
+            "type": "boolean",
+            "x-apifox-mock": "false"
           },
           "grants": {
             "description": "该用户被授权的桶",
@@ -1222,7 +1247,8 @@
               "admin",
               "user"
             ],
-            "type": "string"
+            "type": "string",
+            "x-apifox-mock": "admin"
           },
           "username": {
             "description": "用户名",

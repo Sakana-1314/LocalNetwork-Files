@@ -23,8 +23,8 @@ type User struct {
 	// 供管理员在用户管理里查看当前密码。登录校验始终用 PasswordHash。
 	// 升级前创建的用户没有这一列，取值为空串，接口会提示无法查看。
 	PasswordEnc string `gorm:"size:512" json:"-"`
-	Role        string `gorm:"size:16;not null;default:user" json:"role" enums:"admin,user"` // 角色，admin 为管理员
-	Disabled    bool   `gorm:"not null;default:false" json:"disabled"`                       // 是否已禁用（禁用后无法登录，令牌也失效）
+	Role        string `gorm:"size:16;not null;default:user" json:"role" enums:"admin,user" extensions:"x-apifox-mock=admin"` // 角色，admin 为管理员
+	Disabled    bool   `gorm:"not null;default:false" json:"disabled" extensions:"x-apifox-mock=false"`                       // 是否已禁用（禁用后无法登录，令牌也失效）
 	// TokenVersion 递增即可让该用户的所有登录会话失效。
 	TokenVersion uint      `gorm:"not null;default:0" json:"-"`
 	Grants       []Grant   `gorm:"constraint:OnDelete:CASCADE" json:"grants"` // 该用户被授权的桶
