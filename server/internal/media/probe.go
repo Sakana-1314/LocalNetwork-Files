@@ -38,6 +38,9 @@ type Service struct {
 	fpMemo *fingerprintMemo
 
 	hls *hlsManager
+
+	encodersOnce sync.Once
+	encoders     map[string]bool
 }
 
 func New(ffmpegBin, ffprobeBin string, c *cache.Manager, ts config.TranscodeSettings) *Service {

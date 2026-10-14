@@ -2,7 +2,7 @@
 
 Vite + Vue 3（`<script setup lang="ts">`）+ TypeScript（strict）+ Vue Router + Pinia + Naive UI。
 接口契约见 `../server/internal/api/openapi.json`（由 Go 注解生成，Base URL `/api/v1`）。
-「API 文档」页以 iframe 内嵌 Apifox 在线文档（默认 `https://mlist.apifox.cn/`，可用 `VITE_APIFOX_DOC_URL` 覆盖）；
+在线 API 文档见 <https://mlist.apifox.cn/>（文档站的「API 文档」页也内嵌了它）；
 规范变更后由 `.github/workflows/apifox-sync.yml` 自动同步（本地可用 `../server/scripts/sync-apifox.sh`）。
 
 ## 命令
@@ -25,7 +25,6 @@ pnpm build       # 类型检查 + 构建到 ../server/internal/webui/dist（构�
 | `WEB_OUT_DIR` | `../server/internal/webui/dist` | 产物目录（相对路径按 `web/` 解析） |
 | `VITE_API_BASE` | `/api/v1` | API 前缀；指向 Apifox 云端 Mock 时填 Mock 基址（**不含 `/api/v1`**，规范是相对路径导入的） |
 | `VITE_HASH_ROUTER` | 未设置 | 为 `1` 时改用 hash 路由，用于没有服务端回退的静态托管 |
-| `VITE_APIFOX_DOC_URL` | `https://mlist.apifox.cn/` | 「API 文档」页内嵌的在线文档地址 |
 
 `pnpm build:demo` 与 `pnpm build` 相同，供演示站构建调用；示例：
 

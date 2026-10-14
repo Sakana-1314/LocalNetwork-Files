@@ -44,12 +44,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '挂载与服务' },
       },
       {
-        path: 'api-docs',
-        name: 'api-docs',
-        component: () => import('@/views/ApiDocsView.vue'),
-        meta: { title: 'API 文档', fullHeight: true },
-      },
-      {
         path: 'admin/users',
         name: 'admin-users',
         component: () => import('@/views/admin/UsersView.vue'),

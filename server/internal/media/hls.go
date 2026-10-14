@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,6 +48,9 @@ import (
 var (
 	ErrSessionNotFound = errors.New("转码会话不存在或已过期")
 	ErrNoVideo         = errors.New("文件不包含视频流")
+	// ErrUnsupportedCodec: the codec is unknown or the server has no encoder for it.
+	ErrUnsupportedCodec = errors.New("服务器不支持该视频编码")
+	ErrInvalidBitrate   = errors.New("码率超出范围")
 )
 
 var Qualities = map[string]struct {
@@ -57,6 +61,51 @@ var Qualities = map[string]struct {
 	"1080p":    {1080, 6000},
 	"720p":     {720, 3000},
 	"480p":     {480, 1200},
+}
+
+// Output codecs. Only codecs that browsers can play from MPEG-TS segments
+// (directly or through hls.js) are offered: H.264 everywhere, HEVC where the
+// browser decodes it.
+const (
+	CodecH264 = "h264"
+	CodecH265 = "h265"
+)
+
+// Bitrate bounds (kbit/s) accepted for an explicitly requested bitrate.
+const (
+	MinBitrate = 200
+	MaxBitrate = 80000
+)
+
+// TranscodeOptions selects what a transcode session produces.
+type TranscodeOptions struct {
+	Quality string // key of Qualities; unknown values fall back to 720p
+	Bitrate int    // target video bitrate in kbit/s; 0 picks one from the quality
+	Codec   string // CodecH264 (default) or CodecH265
+	Audio   int    // audio track index
+}
+
+// softwareEncoder is the always-available fallback encoder for a codec.
+func softwareEncoder(codec string) string {
+	if codec == CodecH265 {
+		return "libx265"
+	}
+	return "libx264"
+}
+
+// encoderForCodec maps the configured (H.264) encoder to the one producing codec.
+func encoderForCodec(configured, codec string) string {
+	if codec != CodecH265 {
+		if configured == "" {
+			return "libx264"
+		}
+		return configured
+	}
+	switch configured {
+	case "h264_videotoolbox", "h264_nvenc", "h264_qsv", "h264_vaapi":
+		return "hevc_" + strings.TrimPrefix(configured, "h264_")
+	}
+	return "libx265"
 }
 
 const (
@@ -107,6 +156,8 @@ type hlsSession struct {
 	Real     string
 	VPath    string
 	Quality  string
+	Bitrate  int    // requested video bitrate (kbit/s); 0 = derived from Quality
+	Codec    string // output codec
 	Audio    int
 	Duration float64
 	SegDur   int
@@ -198,12 +249,24 @@ func segmentCount(duration float64, segDur int) int {
 }
 
 // CreateSession registers (or reuses) a transcode session for a user.
-func (s *Service) CreateSession(ctx context.Context, userID uint, username, real, vpath string, fi os.FileInfo, quality string, audio int) (*hlsSession, error) {
+func (s *Service) CreateSession(ctx context.Context, userID uint, username, real, vpath string, fi os.FileInfo, opts TranscodeOptions) (*hlsSession, error) {
 	if !s.hasFFmpeg {
 		return nil, ErrNoFFmpeg
 	}
+	quality, audio := opts.Quality, opts.Audio
 	if _, ok := Qualities[quality]; !ok {
 		quality = "720p"
+	}
+	codec := opts.Codec
+	if codec == "" {
+		codec = CodecH264
+	}
+	if !slices.Contains(s.Codecs(), codec) {
+		return nil, ErrUnsupportedCodec
+	}
+	bitrate := opts.Bitrate
+	if bitrate != 0 && (bitrate < MinBitrate || bitrate > MaxBitrate) {
+		return nil, ErrInvalidBitrate
 	}
 	mi, err := s.Probe(ctx, real, fi.ModTime(), fi.Size())
 	if err != nil {
@@ -221,7 +284,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uint, username, real
 	}
 	ts := s.transcode
 	// The encoder is part of the key: segments of different encoders are not mixed.
-	id := cacheKey("hls", fp, quality, audio, ts.SegmentSeconds, ts.Encoder)[:24]
+	id := cacheKey("hls", fp, quality, audio, ts.SegmentSeconds, ts.Encoder, bitrate, codec)[:24]
 
 	m := s.hls
 	m.mu.Lock()
@@ -229,7 +292,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uint, username, real
 	se := m.sessions[id]
 	if se == nil {
 		se = &hlsSession{
-			ID: id, Real: real, VPath: vpath, Quality: quality, Audio: audio, Duration: mi.Duration,
+			ID: id, Real: real, VPath: vpath, Quality: quality, Bitrate: bitrate, Codec: codec, Audio: audio, Duration: mi.Duration,
 			SegDur: ts.SegmentSeconds, Dir: s.cache.TranscodeDir(id), info: mi, encoder: ts.Encoder,
 			users: map[uint]string{},
 		}
@@ -577,14 +640,15 @@ func (m *hlsManager) runningJobs() []*hlsJob {
 }
 
 func (m *hlsManager) encoderFor(se *hlsSession) string {
-	enc := se.encoder
-	if enc == "" || enc == "libx264" {
-		return "libx264"
+	enc := encoderForCodec(se.encoder, se.Codec)
+	sw := softwareEncoder(se.Codec)
+	if enc == sw {
+		return sw
 	}
 	m.encMu.Lock()
 	defer m.encMu.Unlock()
 	if due, ok := m.brokenEncDue[enc]; ok && time.Now().Before(due) {
-		return "libx264"
+		return sw
 	}
 	return enc
 }
@@ -660,9 +724,9 @@ func (m *hlsManager) wait(job *hlsJob) {
 	defer m.jobMu.Unlock()
 	killed := job.killed
 	m.finalize(job)
-	if err != nil && !killed && job.encoder != "libx264" && job.next == job.start {
-		// The hardware encoder failed before producing anything: use libx264 for a while.
-		slog.Warn("hardware encoder failed, falling back to libx264", "encoder", job.encoder, "err", job.errText())
+	if sw := softwareEncoder(job.se.Codec); err != nil && !killed && job.encoder != sw && job.next == job.start {
+		// The hardware encoder failed before producing anything: use the software encoder for a while.
+		slog.Warn("hardware encoder failed, falling back to software", "encoder", job.encoder, "fallback", sw, "err", job.errText())
 		m.encMu.Lock()
 		m.brokenEncDue[job.encoder] = time.Now().Add(encoderBackoff)
 		m.encMu.Unlock()
@@ -754,9 +818,14 @@ func (s *Service) hlsArgs(se *hlsSession, n int, encoder, preset, dir string) []
 	} else {
 		filters = append(filters, "scale=trunc(iw/2)*2:trunc(ih/2)*2")
 	}
-	bitrate := q.Bitrate
-	if se.info.BitRate > 0 && int(se.info.BitRate/1000) < bitrate {
-		bitrate = max(int(se.info.BitRate/1000), 500)
+	// An explicit bitrate is honoured as is; the quality's default is capped
+	// at the source bitrate, re-encoding never needs more than that.
+	bitrate := se.Bitrate
+	if bitrate == 0 {
+		bitrate = q.Bitrate
+		if se.info.BitRate > 0 && int(se.info.BitRate/1000) < bitrate {
+			bitrate = max(int(se.info.BitRate/1000), 500)
+		}
 	}
 	br := strconv.Itoa(bitrate) + "k"
 	buf := strconv.Itoa(bitrate*2) + "k"
@@ -767,25 +836,47 @@ func (s *Service) hlsArgs(se *hlsSession, n int, encoder, preset, dir string) []
 		fps = 30
 	}
 	gop := strconv.Itoa(int(math.Ceil(fps * float64(se.SegDur) * 2)))
+	profile := "high"
+	if se.Codec == CodecH265 {
+		profile = "main"
+	}
+	// Software encoders use constant quality capped at the bitrate, unless a
+	// bitrate was chosen explicitly: then they target it like hardware ones.
+	rate := []string{"-crf", "23", "-maxrate", br, "-bufsize", buf}
+	if se.Bitrate > 0 {
+		rate = []string{"-b:v", br, "-maxrate", br, "-bufsize", buf}
+	}
 	switch encoder {
-	case "h264_videotoolbox":
+	case "h264_videotoolbox", "hevc_videotoolbox":
 		filters = append(filters, "format=yuv420p")
 		args = append(args, "-c:v", encoder, "-b:v", br, "-maxrate", br, "-bufsize", buf, "-allow_sw", "1",
-			"-profile:v", "high", "-g", gop)
-	case "h264_nvenc":
+			"-profile:v", profile, "-g", gop)
+	case "h264_nvenc", "hevc_nvenc":
 		filters = append(filters, "format=yuv420p")
 		args = append(args, "-c:v", encoder, "-preset", "p4", "-b:v", br, "-maxrate", br, "-bufsize", buf,
-			"-profile:v", "high", "-g", gop, "-no-scenecut", "1", "-forced-idr", "1")
-	case "h264_qsv":
+			"-profile:v", profile, "-g", gop, "-no-scenecut", "1", "-forced-idr", "1")
+	case "h264_qsv", "hevc_qsv":
 		filters = append(filters, "format=nv12")
 		args = append(args, "-c:v", encoder, "-preset", "veryfast", "-b:v", br, "-maxrate", br, "-bufsize", buf, "-g", gop)
-	case "h264_vaapi":
+	case "h264_vaapi", "hevc_vaapi":
 		filters = append(filters, "format=nv12", "hwupload")
 		args = append(args, "-c:v", encoder, "-b:v", br, "-maxrate", br, "-bufsize", buf, "-g", gop)
+	case "libx265":
+		filters = append(filters, "format=yuv420p")
+		if se.Bitrate == 0 {
+			rate[1] = "28" // x265's CRF scale: 28 is about x264's 23
+		}
+		args = append(args, "-c:v", "libx265", "-preset", preset)
+		args = append(args, rate...)
+		// Closed GOPs and no scene cuts: forced keyframes must be IDR frames
+		// so every segment starts decodable.
+		args = append(args, "-profile:v", "main", "-g", gop,
+			"-x265-params", "log-level=error:open-gop=0:scenecut=0:keyint="+gop+":min-keyint="+gop)
 	default:
 		filters = append(filters, "format=yuv420p")
-		args = append(args, "-c:v", "libx264", "-preset", preset, "-crf", "23", "-maxrate", br, "-bufsize", buf,
-			"-profile:v", "high", "-sc_threshold", "0", "-g", gop)
+		args = append(args, "-c:v", "libx264", "-preset", preset)
+		args = append(args, rate...)
+		args = append(args, "-profile:v", "high", "-sc_threshold", "0", "-g", gop)
 	}
 	// Keyframes at every boundary from n on (absolute source times thanks to
 	// -copyts), except boundaries beyond the last announced segment (merged

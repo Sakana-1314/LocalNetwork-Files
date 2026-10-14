@@ -10,7 +10,7 @@ CI 会重新生成并与仓库中的文件逐字节比对，不一致即失败�
 
 ## 同步到 Apifox
 
-界面「API 文档」以 iframe 内嵌 Apifox 在线文档 <https://mlist.apifox.cn>。同步方式：
+文档站的「API 文档」页以 iframe 内嵌 Apifox 在线文档 <https://mlist.apifox.cn>。同步方式：
 
 ```bash
 APIFOX_TOKEN=afxp_xxxxxxxx ./server/scripts/sync-apifox.sh   # 项目 ID 默认 8912512，可用 APIFOX_PROJECT_ID 覆盖

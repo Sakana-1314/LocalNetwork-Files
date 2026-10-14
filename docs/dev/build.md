@@ -45,7 +45,6 @@ cd web && pnpm install && pnpm dev
 | `WEB_BASE` | `/` | Vite `base`，部署到子路径时设置 |
 | `WEB_OUT_DIR` | `../server/internal/webui/dist` | 产物目录（相对路径按 `web/` 解析） |
 | `VITE_API_BASE` | `/api/v1` | API 前缀 |
-| `VITE_APIFOX_DOC_URL` | `https://mlist.apifox.cn/` | 「API 文档」页内嵌的在线文档地址 |
 
 ## 仓库门禁
 
