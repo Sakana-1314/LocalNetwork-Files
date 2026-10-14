@@ -33,6 +33,7 @@
 ## 转码
 
 - `transcode.encoder`：`libx264` / `h264_videotoolbox` / `h264_nvenc` / `h264_qsv` / `h264_vaapi`。
+  用户选择 H.265 输出时使用同一硬件的 HEVC 编码器（软件编码为 libx265）。
 - `transcode.preset`：越快画质越低（`ultrafast` … `medium`）。
 - `transcode.max_sessions`：同时运行的 ffmpeg 进程上限。
 - `transcode.segment_seconds`：HLS 分片时长（2–20 秒）。

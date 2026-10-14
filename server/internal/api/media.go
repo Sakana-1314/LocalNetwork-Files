@@ -72,10 +72,11 @@ func probeError(c *gin.Context, err error) error {
 
 // @Summary     获取媒体信息
 // @Description 用 ffprobe 探测媒体文件，返回时长、码率、视频/音频/字幕轨道，以及浏览器能否直接播放（direct_play）。
+// @Description transcode_codecs 列出服务器可以转码输出的视频编码。
 // @Tags     媒体
 // @Produce  json
 // @Param    path query string true "媒体文件的虚拟路径"
-// @Success  200 {object} media.MediaInfo "探测到的媒体信息（含视频/音频/字幕轨道）"
+// @Success  200 {object} MediaInfoResponse "探测到的媒体信息（含视频/音频/字幕轨道）与可用转码编码"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
 // @Failure  404 {object} ErrorResponse "文件不存在"
 // @Security bearerAuth
@@ -101,18 +102,20 @@ func (a *API) mediaInfo(c *gin.Context) {
 			})
 		}
 	}
-	c.JSON(http.StatusOK, out)
+	c.JSON(http.StatusOK, MediaInfoResponse{MediaInfo: out, TranscodeCodecs: a.Media.Codecs()})
 }
 
 // @Summary     创建转码会话
 // @Description 为视频创建 HLS 会话，分片按需转码。
-// @Description quality 可选 original、1080p、720p、480p；audio_track 为音轨序号。返回会话 ID 与播放列表地址。
+// @Description quality 可选 original、1080p、720p、480p；bitrate 为视频码率（kbps，0 为自动）；codec 为输出编码 h264 或 h265。
+// @Description audio_track 为音轨序号。返回会话 ID 与播放列表地址。
 // @Tags     媒体
 // @Accept   json
 // @Produce  json
-// @Param    请求体 body TranscodeRequest true "源文件、画质与音轨"
+// @Param    请求体 body TranscodeRequest true "源文件、画质、码率、编码与音轨"
 // @Success  200 {object} TranscodeResponse "会话创建成功，返回播放列表地址"
 // @Failure  401 {object} ErrorResponse "未登录或会话已失效"
+// @Failure  400 {object} ErrorResponse "码率超出范围、服务器不支持该编码或文件不含视频"
 // @Failure  404 {object} ErrorResponse "文件不存在"
 // @Security bearerAuth
 // @Router   /media/transcode [post]
@@ -128,14 +131,16 @@ func (a *API) mediaTranscode(c *gin.Context) {
 		return
 	}
 	u := principal(c).User
-	se, err := a.Media.CreateSession(c.Request.Context(), u.ID, u.Username, loc.Real, vp, fi, req.Quality, req.AudioTrack)
+	se, err := a.Media.CreateSession(c.Request.Context(), u.ID, u.Username, loc.Real, vp, fi, media.TranscodeOptions{
+		Quality: req.Quality, Bitrate: req.Bitrate, Codec: req.Codec, Audio: req.AudioTrack,
+	})
 	if err != nil {
 		fail(c, probeError(c, err))
 		return
 	}
 	c.JSON(http.StatusOK, TranscodeResponse{
 		ID: se.ID, Playlist: "/api/v1/media/hls/" + se.ID + "/index.m3u8",
-		Duration: se.Duration, Quality: se.Quality,
+		Duration: se.Duration, Quality: se.Quality, Bitrate: se.Bitrate, Codec: se.Codec,
 	})
 }
 
